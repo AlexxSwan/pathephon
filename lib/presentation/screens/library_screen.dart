@@ -1,20 +1,14 @@
-// ============================================================================
-//  library_screen.dart вЂ” main "Browse music" screen
-//  Tabs: All tracks / Albums / Artists / Playlists
-//  FAB: Scan (calls LibraryNotifier.scan)
-// ============================================================================
-import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
 
-import '../../core/l10n/generated/app_localizations.dart';
-import '../../core/theme/tube_colors.dart';
-import '../../domain/models/album.dart';
-import '../providers/providers.dart';
-import '../widgets/track_list_tile.dart';
+import "../../core/l10n/generated/app_localizations.dart";
+import "../../core/theme/tube_colors.dart";
+import "../../domain/models/album.dart";
+import "../providers/providers.dart";
+import "../widgets/track_list_tile.dart";
 
 class LibraryScreen extends ConsumerStatefulWidget {
   const LibraryScreen({super.key});
-
   @override
   ConsumerState<LibraryScreen> createState() => _LibraryScreenState();
 }
@@ -36,10 +30,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final state = ref.watch(libraryStateProvider);
     final playback = ref.watch(playbackServiceProvider);
 
-    // Auto-scan once on first build (when state is still loading).
     if (!_autoScanTriggered && state.isLoading) {
       _autoScanTriggered = true;
-      // Defer to next frame to avoid build-phase side effects.
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(libraryStateProvider.notifier).scan();
       });
@@ -64,22 +56,31 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             icon: const Icon(Icons.folder_open),
             onPressed: () async {
               final mediaStore = ref.read(mediaStoreSourceProvider);
-              final tracks = await mediaStore.pickAudioFiles();
+              final tracks = await mediaStore.pickDirectory();
               if (tracks.isEmpty) return;
-              // Replace library with picked files
               ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
             },
-            tooltip: 'Р’С‹Р±СЂР°С‚СЊ С„Р°Р№Р»С‹',
+            tooltip: "Выбрать папку",
+          ),
+          IconButton(
+            icon: const Icon(Icons.audio_file),
+            onPressed: () async {
+              final mediaStore = ref.read(mediaStoreSourceProvider);
+              final tracks = await mediaStore.pickAudioFiles();
+              if (tracks.isEmpty) return;
+              ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
+            },
+            tooltip: "Выбрать файлы",
           ),
           IconButton(
             icon: const Icon(Icons.search),
-            onPressed: () {/* TODO: search filter */},
+            onPressed: () {},
           ),
         ],
       ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => Center(child: Text('${l.commonError}: $e')),
+        error: (e, _) => Center(child: Text("${l.commonError}: $e")),
         data: (tracks) {
           if (tracks.isEmpty) {
             return Center(
@@ -96,7 +97,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           return TabBarView(
             controller: _tab,
             children: [
-              // All tracks
               ListView.builder(
                 itemCount: tracks.length,
                 itemBuilder: (_, i) {
@@ -106,17 +106,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     index: i,
                     onTap: () {
                       playback.playQueue(tracks: tracks, startIndex: i);
-                      Navigator.of(context).pushNamed('/now-playing');
+                      Navigator.of(context).pushNamed("/now-playing");
                     },
                   );
                 },
               ),
-              // Albums
               _AlbumGrid(),
-              // Artists
               _ArtistsList(),
-              // Playlists
-              _PlaylistsList(),
+              const Center(child: Text("No playlists yet")),
             ],
           );
         },
@@ -136,6 +133,8 @@ class _AlbumGrid extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final albums = ref.watch(albumsProvider);
+    final playback = ref.watch(playbackServiceProvider);
+
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
@@ -148,37 +147,34 @@ class _AlbumGrid extends ConsumerWidget {
       itemBuilder: (_, i) {
         final a = albums[i];
         return Card(
-          child: Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                AspectRatio(
-                  aspectRatio: 1,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: TubeColors.surfaceVariant,
-                      border: Border.all(color: TubeColors.brass),
+          child: InkWell(
+            onTap: () {
+              if (a.tracks.isEmpty) return;
+              playback.playQueue(tracks: a.tracks, startIndex: 0);
+              Navigator.of(context).pushNamed("/now-playing");
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: TubeColors.surfaceVariant,
+                        border: Border.all(color: TubeColors.brass),
+                      ),
+                      child: a.artUri.isEmpty
+                          ? const Icon(Icons.album, size: 56, color: TubeColors.brass)
+                          : Image.network(a.artUri, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const Icon(Icons.album, size: 56, color: TubeColors.brass)),
                     ),
-                    child: a.artUri.isEmpty
-                        ? const Icon(Icons.album, size: 56, color: TubeColors.brass)
-                        : Image.network(a.artUri, fit: BoxFit.cover),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  a.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall,
-                ),
-                Text(
-                  a.albumArtist,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
+                  const SizedBox(height: 8),
+                  Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
+                  Text(a.albumArtist, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+                ],
+              ),
             ),
           ),
         );
@@ -199,18 +195,11 @@ class _ArtistsList extends ConsumerWidget {
       children: artists.entries.map((e) {
         return ListTile(
           title: Text(e.key),
-          subtitle: Text('${e.value.length} albums'),
+          subtitle: Text("${e.value.length} albums"),
           leading: const Icon(Icons.person, color: TubeColors.brass),
-          onTap: () {/* TODO: drill in */},
+          onTap: () {},
         );
       }).toList(),
     );
-  }
-}
-
-class _PlaylistsList extends ConsumerWidget {
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return const Center(child: Text('No playlists yet'));
   }
 }

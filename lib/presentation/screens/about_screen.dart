@@ -8,18 +8,18 @@ class AboutScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text("О программе")),
+      appBar: AppBar(title: const Text("Рћ РїСЂРѕРіСЂР°РјРјРµ")),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.graphic_eq, size: 80, color: TubeColors.amber),
             const SizedBox(height: 24),
-            Text("Патефон", style: Theme.of(context).textTheme.displaySmall),
+            Text("РџР°С‚РµС„РѕРЅ", style: Theme.of(context).textTheme.displaySmall),
             const SizedBox(height: 8),
-            Text("Версия: 0.1.1 (2)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: TubeColors.textSecondary)),
+            Text("Р’РµСЂСЃРёСЏ: 0.1.1 (2)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: TubeColors.textSecondary)),
             const SizedBox(height: 24),
-            Text("Автор: SwanLab", style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.brass)),
+            Text("РђРІС‚РѕСЂ: SwanLab", style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.brass)),
             const SizedBox(height: 8),
             Text("github.com/AlexxSwan/pathephon", style: Theme.of(context).textTheme.bodySmall?.copyWith(color: TubeColors.textMuted)),
             const SizedBox(height: 32),

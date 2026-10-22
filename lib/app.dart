@@ -1,14 +1,15 @@
 import "package:flutter/material.dart";
-import "package:flutter_localizations/flutter_localizations.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
 import "package:shared_preferences/shared_preferences.dart";
+import "package:flutter_localizations/flutter_localizations.dart";
 
 import "core/l10n/generated/app_localizations.dart";
 import "core/theme/retro_theme.dart";
 import "presentation/screens/audiobooks_screen.dart";
 import "presentation/screens/equalizer_screen.dart";
 import "presentation/screens/library_screen.dart";
+import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
 
 final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
@@ -20,7 +21,7 @@ class AudioPlayerX64App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     return MaterialApp(
-      title: "РџР°С‚РµС„РѕРЅ / Pathephon",
+      title: "Патефон",
       debugShowCheckedModeBanner: false,
       theme: RetroTheme.dark,
       locale: locale,
@@ -32,6 +33,9 @@ class AudioPlayerX64App extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: const _Shell(),
+      routes: {
+        "/now-playing": (_) => const NowPlayingScreen(),
+      },
     );
   }
 }
@@ -55,7 +59,7 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _index = 0;
 
-  static const _screens = <Widget>[
+  final _screens = const <Widget>[
     LibraryScreen(),
     AudiobooksScreen(),
     EqualizerScreen(),
@@ -86,10 +90,10 @@ class _ShellState extends State<_Shell> {
             selectedIcon: const Icon(Icons.equalizer),
             label: l.navEqualizer,
           ),
-          const NavigationDestination(
-            icon: Icon(Icons.info_outline),
-            selectedIcon: Icon(Icons.info),
-            label: "Рћ РїСЂРѕРіСЂР°РјРјРµ",
+          NavigationDestination(
+            icon: const Icon(Icons.info_outline),
+            selectedIcon: const Icon(Icons.info),
+            label: l.navTags,
           ),
         ],
       ),

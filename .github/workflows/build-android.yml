@@ -33,19 +33,40 @@ jobs:
       - name: Generate l10n
         run: flutter gen-l10n
 
+      # Build с continue-on-error — Flutter ругается "APK не найден"
+      # но APK реально создан в android/app/build/outputs/
       - name: Build debug APK
+        continue-on-error: true
         run: flutter build apk --debug --no-tree-shake-icons
 
+      # Найти APK и скопировать куда ждёт Flutter
       - name: Find and copy APK
+        if: always()
         run: |
-          find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null
+          echo "=== Ищем APK ==="
+          find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(нет)"
           mkdir -p build/app/outputs/flutter-apk/
           APK=$(find . -name "app-debug.apk" 2>/dev/null | head -1)
           if [ -n "$APK" ]; then
             cp "$APK" build/app/outputs/flutter-apk/app-debug.apk
+            echo "✓ Скопирован: $APK"
+          else
+            echo "✗ APK не найден"
           fi
 
+      # Проверка — если APK нет, шаг упадёт → красный крест
+      - name: Verify APK exists
+        if: always()
+        run: |
+          if [ ! -f build/app/outputs/flutter-apk/app-debug.apk ]; then
+            echo "ERROR: APK не найден!"
+            exit 1
+          fi
+          echo "✓ APK готов"
+          ls -lh build/app/outputs/flutter-apk/app-debug.apk
+
       - name: Upload APK
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Pathephon-debug

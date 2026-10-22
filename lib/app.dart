@@ -1,23 +1,16 @@
-// ============================================================================
-//  app.dart — root widget, router, locale wiring
-// ============================================================================
-import 'dart:ui' show PlatformDispatcher;
+import "package:flutter/material.dart";
+import "package:flutter_riverpod/flutter_riverpod.dart";
+import "dart:ui" show PlatformDispatcher;
+import "package:shared_preferences/shared_preferences.dart";
 
-import 'package:flutter/material.dart';
-import 'package:flutter_localizations/flutter_localizations.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import "core/l10n/generated/app_localizations.dart";
+import "core/theme/retro_theme.dart";
+import "presentation/screens/audiobooks_screen.dart";
+import "presentation/screens/equalizer_screen.dart";
+import "presentation/screens/library_screen.dart";
+import "presentation/screens/about_screen.dart";
 
-import 'core/l10n/generated/app_localizations.dart';
-import 'core/theme/retro_theme.dart';
-import 'presentation/screens/audiobooks_screen.dart';
-import 'presentation/screens/equalizer_screen.dart';
-import 'presentation/screens/library_screen.dart';
-import 'presentation/screens/now_playing_screen.dart';
-import 'presentation/screens/tag_editor_screen.dart';
-
-/// Active UI locale. Initial value is set in main() from prefs.
-final localeProvider = StateProvider<Locale>((ref) => const Locale('ru'));
+final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 
 class AudioPlayerX64App extends ConsumerWidget {
   const AudioPlayerX64App({super.key});
@@ -26,7 +19,7 @@ class AudioPlayerX64App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     return MaterialApp(
-      title: 'Патефон / Pathephon',
+      title: "Патефон / Pathephon",
       debugShowCheckedModeBanner: false,
       theme: RetroTheme.dark,
       locale: locale,
@@ -38,18 +31,22 @@ class AudioPlayerX64App extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: const _Shell(),
-      routes: {
-        '/now-playing': (_) => const NowPlayingScreen(),
-        '/equalizer': (_) => const EqualizerScreen(),
-        '/tags': (_) => const TagEditorScreen(),
-      },
     );
   }
 }
 
+Locale readInitialLocale(SharedPreferences prefs) {
+  final saved = prefs.getString("ui_locale");
+  if (saved == null || saved == "system") {
+    final sys = PlatformDispatcher.instance.locale.languageCode;
+    if (sys == "ru" || sys == "en") return Locale(sys);
+    return const Locale("ru");
+  }
+  return Locale(saved);
+}
+
 class _Shell extends StatefulWidget {
   const _Shell();
-
   @override
   State<_Shell> createState() => _ShellState();
 }
@@ -61,7 +58,7 @@ class _ShellState extends State<_Shell> {
     LibraryScreen(),
     AudiobooksScreen(),
     EqualizerScreen(),
-    TagEditorScreen(),
+    AboutScreen(),
   ];
 
   @override
@@ -88,25 +85,13 @@ class _ShellState extends State<_Shell> {
             selectedIcon: const Icon(Icons.equalizer),
             label: l.navEqualizer,
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.edit_outlined),
-            selectedIcon: const Icon(Icons.edit),
-            label: l.navTags,
+          const NavigationDestination(
+            icon: Icon(Icons.info_outline),
+            selectedIcon: Icon(Icons.info),
+            label: "О программе",
           ),
         ],
       ),
     );
   }
-}
-
-/// Read saved UI locale from prefs (called from main.dart before runApp).
-Locale readInitialLocale(SharedPreferences prefs) {
-  final saved = prefs.getString('ui_locale');
-  if (saved == null || saved == 'system') {
-    // Default to system locale if it's one of our supported locales.
-    final sys = PlatformDispatcher.instance.locale.languageCode;
-    if (sys == 'ru' || sys == 'en') return Locale(sys);
-    return const Locale('ru');
-  }
-  return Locale(saved);
 }

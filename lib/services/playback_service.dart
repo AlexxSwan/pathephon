@@ -42,7 +42,7 @@ class PlaybackSnapshot {
 }
 
 class JustAudioPlaybackService implements PlaybackService {
-  JustAudioPlaybackService() { _initCompleter.future.then((_) {}); _init(); }
+  JustAudioPlaybackService() { _init(); }
   final _player = AudioPlayer();
   AudioHandler? _handler;
   final _initCompleter = Completer<void>();

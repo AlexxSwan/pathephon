@@ -22,7 +22,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final playback = ref.watch(playbackServiceProvider);
     final track = snap?.current;
     final duration = snap?.duration ?? Duration.zero;
-    final isPlaying = snap?.isPlaying ?? false;
 
     return PopScope(
       canPop: true,
@@ -77,7 +76,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
-                PlaybackControls(),
+                const PlaybackControls(),
               ],
             ),
           ),

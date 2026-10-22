@@ -10,7 +10,7 @@ plugins {
 android {
     namespace = "com.swanlab.audiox64"
     compileSdk = 36
-    ndkVersion = "28.2.13676358"
+    ndkVersion = flutter.ndkVersion
 
     defaultConfig {
         applicationId = "com.swanlab.audiox64"

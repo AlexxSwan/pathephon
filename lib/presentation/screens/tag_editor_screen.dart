@@ -1,10 +1,10 @@
 // ============================================================================
-//  tag_editor_screen.dart — audio file metadata viewer / editor (MVP)
+//  tag_editor_screen.dart вЂ” audio file metadata viewer / editor (MVP)
 //
 //  MVP scope: read track metadata from on_audio_query (already loaded by the
 //  library scan) and let the user edit the in-memory Track fields. Writing
 //  tags back to the file system requires a native MethodChannel bridge
-//  (audiotags-style) — that's a post-MVP TODO.
+//  (audiotags-style) вЂ” that's a post-MVP TODO.
 //
 //  For the MVP the user picks a file via file_picker, sees its filename and
 //  path, and can edit the in-memory title/artist/album fields. The "Save"
@@ -63,7 +63,7 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
     if (tracks.isEmpty) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Library is empty — scan first.')),
+        const SnackBar(content: Text('Library is empty вЂ” scan first.')),
       );
       return;
     }
@@ -75,7 +75,7 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
           final t = tracks[i];
           return ListTile(
             title: Text(t.title),
-            subtitle: Text([if (t.artist.isNotEmpty) t.artist, if (t.album.isNotEmpty) t.album].join(' · ')),
+            subtitle: Text([if (t.artist.isNotEmpty) t.artist, if (t.album.isNotEmpty) t.album].join(' В· ')),
             onTap: () => Navigator.of(context).pop(t),
           );
         },
@@ -86,7 +86,7 @@ class _TagEditorScreenState extends ConsumerState<TagEditorScreen> {
   }
 
   Future<void> _pickFromFilesystem() async {
-    final res = await FilePicker.platform.pickFiles(type: FileType.audio);
+    final res = await FilePicker.pickFiles(type: FileType.audio);
     if (res == null || res.files.single.path == null) return;
     final f = res.files.single;
     final path = f.path!;

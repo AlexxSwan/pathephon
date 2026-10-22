@@ -1,16 +1,16 @@
 // ============================================================================
-//  playback_service.dart вЂ” REAL playback via just_audio + audio_service
+//  playback_service.dart — REAL playback via just_audio + audio_service
 // ============================================================================
-import 'dart:async';
-import 'dart:math' as math;
+import "dart:async";
+import "dart:math" as math;
 
-import 'package:audio_service/audio_service.dart';
-import 'package:audio_session/audio_session.dart';
-import 'package:just_audio/just_audio.dart';
+import "package:audio_service/audio_service.dart";
+import "package:audio_session/audio_session.dart";
+import "package:just_audio/just_audio.dart";
 
-import '../core/utils/replaygain.dart';
-import '../domain/enums/repeat_mode.dart';
-import '../domain/models/track.dart';
+import "../core/utils/replaygain.dart";
+import "../domain/enums/repeat_mode.dart";
+import "../domain/models/track.dart";
 
 abstract class PlaybackService {
   Stream<PlaybackSnapshot> get state;
@@ -89,6 +89,7 @@ class JustAudioPlaybackService implements PlaybackService {
   final _ampController = StreamController<double>.broadcast();
 
   Timer? _ampTimer;
+  Timer? _positionTimer;
   double _ampPhase = 0;
 
   @override
@@ -105,31 +106,23 @@ class JustAudioPlaybackService implements PlaybackService {
     _handler = await AudioService.init(
       builder: () => _PathephonAudioHandler(_player),
       config: const AudioServiceConfig(
-        androidNotificationChannelId: 'pathephon_playback',
-        androidNotificationChannelName: 'Playback',
+        androidNotificationChannelId: "pathephon_playback",
+        androidNotificationChannelName: "Playback",
         androidNotificationOngoing: true,
         androidStopForegroundOnPause: true,
       ),
     );
 
-    // Emit initial empty state
+    // Emit initial state
     _stateController.add(PlaybackSnapshot.empty);
 
-    // Listen to player state вЂ” emit snapshot on every change
+    // Listen to player state — emit snapshot on every change
     _player.playerStateStream.listen((st) {
       _emitState(st);
       _startAmplitudeLoopIfPlaying(st.playing);
     });
 
-    // Log playback errors for debugging
-    _player.playbackEventStream.listen(
-      (event) {},
-      onError: (Object e, StackTrace st) {
-        print("[pathephon] Playback error: $e");
-      },
-    );
-
-    // Listen to sequence state вЂ” update _index when track changes
+    // Listen to sequence state — update index when track changes
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
         _index = seqState.currentIndex;
@@ -138,11 +131,19 @@ class JustAudioPlaybackService implements PlaybackService {
     });
 
     // Emit position-based state updates every 500ms
-    Timer.periodic(const Duration(milliseconds: 500), (_) {
+    _positionTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
       if (_queue.isNotEmpty) {
         _emitState(_player.playerState);
       }
     });
+
+    // Log playback errors
+    _player.playbackEventStream.listen(
+      (event) {},
+      onError: (Object e, StackTrace st) {
+        print("[pathephon] Playback error: $e");
+      },
+    );
   }
 
   void _emitState(PlayerState st) {
@@ -200,9 +201,8 @@ class JustAudioPlaybackService implements PlaybackService {
     );
 
     await _player.seek(Duration.zero, index: initial);
-    // Use audio_service handler play() so notification + MediaSession get state
+    // Use audio_service handler play() + direct player.play() as fallback
     await _handler?.play();
-    // Also call player.play() directly as fallback
     await _player.play();
   }
 
@@ -224,16 +224,19 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> play() async {
     await _handler?.play();
+    await _player.play();
   }
 
   @override
   Future<void> pause() async {
     await _handler?.pause();
+    await _player.pause();
   }
 
   @override
   Future<void> stop() async {
     await _handler?.stop();
+    await _player.stop();
     _queue = const [];
     _index = 0;
   }
@@ -245,12 +248,14 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> skipToNext() async {
     if (_queue.isEmpty) return;
     await _handler?.skipToNext();
+    await _player.seekToNext();
   }
 
   @override
   Future<void> skipToPrevious() async {
     if (_queue.isEmpty) return;
     await _handler?.skipToPrevious();
+    await _player.seekToPrevious();
   }
 
   @override
@@ -294,6 +299,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
   void dispose() {
     _ampTimer?.cancel();
+    _positionTimer?.cancel();
     _stateController.close();
     _ampController.close();
     _player.dispose();

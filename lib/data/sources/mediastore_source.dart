@@ -51,7 +51,6 @@ class MediaStoreSource {
     return result.map((f) {
       final path = f.path ?? "";
       final ext = path.toLowerCase().split(".").last;
-      // Use Uri.file() for proper file:// URI encoding
       final uri = Uri.file(path).toString();
       return Track(
         id: uri,
@@ -65,14 +64,30 @@ class MediaStoreSource {
 
   /// Pick a directory and scan for audio files.
   Future<List<Track>> pickDirectory() async {
-    final dirPath = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ["mp3", "flac", "wav", "ogg", "m4a", "aac"],
-    );
-    // file_picker 13.x doesn't support directory picking directly.
-    // We use getDirectoryPath from file_picker if available.
-    // For now, fall back to pickAudioFiles.
-    return pickAudioFiles();
+    final dirPath = await FilePicker.getDirectoryPath();
+    if (dirPath == null) return const <Track>[];
+
+    final dir = Directory(dirPath);
+    final files = dir.listSync(recursive: false).whereType<File>().toList();
+
+    final audioFiles = files.where((f) {
+      final ext = f.path.toLowerCase().split(".").last;
+      return _supportedExtensions.contains(ext);
+    }).toList();
+
+    return audioFiles.map((f) {
+      final path = f.path;
+      final ext = path.toLowerCase().split(".").last;
+      final uri = Uri.file(path).toString();
+      final name = path.split("/").last.split("\\").last;
+      return Track(
+        id: uri,
+        uri: uri,
+        title: name,
+        fileExtension: ext,
+        filePath: path,
+      );
+    }).toList(growable: false);
   }
 
   static const _supportedExtensions = {

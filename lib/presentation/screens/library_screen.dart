@@ -1,5 +1,5 @@
 // ============================================================================
-//  library_screen.dart — main "Browse music" screen
+//  library_screen.dart вЂ” main "Browse music" screen
 //  Tabs: All tracks / Albums / Artists / Playlists
 //  FAB: Scan (calls LibraryNotifier.scan)
 // ============================================================================
@@ -69,7 +69,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               // Replace library with picked files
               ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
             },
-            tooltip: 'Выбрать файлы',
+            tooltip: 'Р’С‹Р±СЂР°С‚СЊ С„Р°Р№Р»С‹',
           ),
           IconButton(
             icon: const Icon(Icons.search),

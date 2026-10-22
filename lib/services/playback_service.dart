@@ -1,5 +1,5 @@
 // ============================================================================
-//  playback_service.dart — REAL playback via just_audio + audio_service
+//  playback_service.dart вЂ” REAL playback via just_audio + audio_service
 // ============================================================================
 import 'dart:async';
 import 'dart:math' as math;
@@ -115,13 +115,21 @@ class JustAudioPlaybackService implements PlaybackService {
     // Emit initial empty state
     _stateController.add(PlaybackSnapshot.empty);
 
-    // Listen to player state — emit snapshot on every change
+    // Listen to player state вЂ” emit snapshot on every change
     _player.playerStateStream.listen((st) {
       _emitState(st);
       _startAmplitudeLoopIfPlaying(st.playing);
     });
 
-    // Listen to sequence state — update _index when track changes
+    // Log playback errors for debugging
+    _player.playbackEventStream.listen(
+      (event) {},
+      onError: (Object e, StackTrace st) {
+        print("[pathephon] Playback error: $e");
+      },
+    );
+
+    // Listen to sequence state вЂ” update _index when track changes
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
         _index = seqState.currentIndex;
@@ -194,6 +202,8 @@ class JustAudioPlaybackService implements PlaybackService {
     await _player.seek(Duration.zero, index: initial);
     // Use audio_service handler play() so notification + MediaSession get state
     await _handler?.play();
+    // Also call player.play() directly as fallback
+    await _player.play();
   }
 
   AudioSource _toSource(Track t) {

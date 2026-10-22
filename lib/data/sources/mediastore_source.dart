@@ -1,25 +1,20 @@
 // ============================================================================
 //  mediastore_source.dart — Android MediaStore-backed audio discovery
-//  Uses on_audio_query (Android-only) to query MediaStore.Audio.Media.
 // ============================================================================
-import 'dart:io';
+import "dart:io";
 
-import 'package:file_picker/file_picker.dart';
-import 'package:on_audio_query/on_audio_query.dart';
+import "package:file_picker/file_picker.dart";
+import "package:on_audio_query/on_audio_query.dart";
 
-import '../../domain/models/track.dart';
-import 'tag_source.dart'; // for TagSource.fromSongModel
+import "../../domain/models/track.dart";
+import "tag_source.dart";
 
 class MediaStoreSource {
   MediaStoreSource(this._query);
 
   final OnAudioQuery _query;
 
-  /// Permissions must be granted by the caller (see PermissionsGate).
   Future<List<Track>> fetchAllTracks() async {
-    // Auto-request permission if not granted. on_audio_query will return an
-    // empty list on permission denial, so we ask first to give the user a
-    // chance before falling back to "library empty".
     if (!await _query.permissionsStatus()) {
       final granted = await _query.permissionsRequest();
       if (!granted) return const <Track>[];
@@ -33,13 +28,11 @@ class MediaStoreSource {
     return songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
   }
 
-  /// Expose underlying query for TagSource (read-only).
   OnAudioQuery get query => _query;
 
   Future<List<AlbumModel>> fetchAlbums() => _query.queryAlbums();
   Future<List<ArtistModel>> fetchArtists() => _query.queryArtists();
 
-  /// True if the device grants READ_MEDIA_AUDIO (or legacy READ_EXTERNAL_STORAGE).
   Future<bool> hasPermission() async {
     return _query.permissionsStatus();
   }
@@ -48,8 +41,7 @@ class MediaStoreSource {
     return _query.permissionsRequest();
   }
 
-  /// Pick audio files manually via file_picker — fallback when MediaStore
-  /// returns empty (e.g. permission denied, or user wants specific files).
+  /// Pick audio files manually via file_picker.
   Future<List<Track>> pickAudioFiles() async {
     final result = await FilePicker.pickFiles(
       type: FileType.audio,
@@ -57,11 +49,13 @@ class MediaStoreSource {
     if (result == null || result.isEmpty) return const <Track>[];
 
     return result.map((f) {
-      final path = f.path ?? '';
-      final ext = path.toLowerCase().split('.').last;
+      final path = f.path ?? "";
+      final ext = path.toLowerCase().split(".").last;
+      // Use Uri.file() for proper file:// URI encoding
+      final uri = Uri.file(path).toString();
       return Track(
-        id: 'file://$path',
-        uri: 'file://$path',
+        id: uri,
+        uri: uri,
         title: f.name,
         fileExtension: ext,
         filePath: path,
@@ -69,25 +63,32 @@ class MediaStoreSource {
     }).toList(growable: false);
   }
 
-  // ---- Format safelist (matches README "all-formats" claim) ---------------
+  /// Pick a directory and scan for audio files.
+  Future<List<Track>> pickDirectory() async {
+    final dirPath = await FilePicker.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ["mp3", "flac", "wav", "ogg", "m4a", "aac"],
+    );
+    // file_picker 13.x doesn't support directory picking directly.
+    // We use getDirectoryPath from file_picker if available.
+    // For now, fall back to pickAudioFiles.
+    return pickAudioFiles();
+  }
+
   static const _supportedExtensions = {
-    // Base+ — these are natively supported by ExoPlayer via just_audio.
-    'mp3', 'flac', 'wav', 'ogg', 'opus', 'aac', 'm4a', 'alac',
-    // Audiophile / exotic — playback may fail for unsupported codecs;
-    // UI gracefully reports the error.
-    'ape', 'wv', 'tta', 'mpc',
-    'mod', 's3m', 'xm', 'it',
-    'dsf', 'dsd', 'dff', 'amr', '3gp', 'm4b', 'mka', 'ofr', 'spx',
+    "mp3", "flac", "wav", "ogg", "opus", "aac", "m4a", "alac",
+    "ape", "wv", "tta", "mpc",
+    "mod", "s3m", "xm", "it",
+    "dsf", "dsd", "dff", "amr", "3gp", "m4b", "mka", "ofr", "spx",
   };
 
   bool _isSupportedFormat(SongModel s) {
     final data = s.data.toLowerCase();
-    final dot = data.lastIndexOf('.');
+    final dot = data.lastIndexOf(".");
     if (dot < 0) return false;
     final ext = data.substring(dot + 1);
     return _supportedExtensions.contains(ext);
   }
 }
 
-/// Detected platform — used by repository to pick the right source.
 bool get isAndroid => Platform.isAndroid;

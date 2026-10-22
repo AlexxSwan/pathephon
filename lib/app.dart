@@ -1,4 +1,5 @@
 import "package:flutter/material.dart";
+import "package:flutter_localizations/flutter_localizations.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
 import "package:shared_preferences/shared_preferences.dart";
@@ -19,7 +20,7 @@ class AudioPlayerX64App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     return MaterialApp(
-      title: "Патефон / Pathephon",
+      title: "РџР°С‚РµС„РѕРЅ / Pathephon",
       debugShowCheckedModeBanner: false,
       theme: RetroTheme.dark,
       locale: locale,
@@ -88,7 +89,7 @@ class _ShellState extends State<_Shell> {
           const NavigationDestination(
             icon: Icon(Icons.info_outline),
             selectedIcon: Icon(Icons.info),
-            label: "О программе",
+            label: "Рћ РїСЂРѕРіСЂР°РјРјРµ",
           ),
         ],
       ),

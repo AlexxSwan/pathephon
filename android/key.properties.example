@@ -1,0 +1,16 @@
+# ============================================================================
+#  key.properties.example — copy to android/key.properties and fill in real values.
+#
+#  Mirrors the audio-converter convention:
+#    - This file lives at:    android/key.properties        (rootProject)
+#    - Keystore file lives at: android/app/upload-keystore.jks
+#    - storeFile is the bare name (resolved relative to android/app/)
+#
+#  Use the SAME keystore you already use for github.com/AlexxSwan/audio-converter.
+#  NEVER commit the real key.properties or *.jks to git — both are .gitignored.
+# ============================================================================
+
+storePassword=PUT_REAL_STORE_PASSWORD_HERE
+keyPassword=PUT_REAL_KEY_PASSWORD_HERE
+keyAlias=upload
+storeFile=upload-keystore.jks

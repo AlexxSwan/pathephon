@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Pathephon</string>
+    <string name="notification_channel_id">audiox64_playback</string>
+    <string name="notification_channel_name">Playback</string>
+    <string name="notification_channel_desc">Playback control and player notification</string>
+</resources>

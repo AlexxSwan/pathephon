@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App name (RU) — actual app strings live in Flutter arb files. -->
+    <string name="app_name">Патефон</string>
+
+    <!-- Notification channel for Media3 foreground service -->
+    <string name="notification_channel_id">audiox64_playback</string>
+    <string name="notification_channel_name">Воспроизведение</string>
+    <string name="notification_channel_desc">Управление воспроизведением и уведомление плеера</string>
+</resources>

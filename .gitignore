@@ -1,0 +1,39 @@
+# === Secrets / signing ===
+# Mirrors audio-converter convention: key.properties in android/, keystore in android/app/
+android/key.properties
+android/app/upload-keystore.jks
+android/app/*.jks
+android/app/*.keystore
+*.keystore
+*.jks
+
+# === Build output ===
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+android/.gradle/
+android/local.properties
+android/app/release/
+android/app/debug/
+android/app/profile/
+**/GeneratedPluginRegistrant.*
+
+# === IDE ===
+.idea/
+.vscode/
+*.iml
+.DS_Store
+*.swp
+
+# === Generated code ===
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.mocks.dart
+
+# === Logs ===
+*.log

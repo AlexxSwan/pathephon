@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!--
+      Theme.AudioPlayerX64 — base theme.
+      Inherits from Theme.Material3 for edge-to-edge + predictive back (Android 14).
+      Window background = deep retro charcoal (matches Flutter retro_theme).
+      App icon background uses a separate sunset gradient drawable
+      (drawable/tube_icon_background.xml) shared with the audio-converter app
+      for visual continuity across the SwanLab product line.
+    -->
+    <style name="Theme.AudioPlayerX64" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@color/retro_background</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="o_mr1">shortEdges</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
+        <item name="android:windowTranslucentStatus">false</item>
+    </style>
+
+    <color name="retro_background">#FF0E0B08</color>
+    <color name="retro_bronze">#FFB08D57</color>
+    <color name="retro_amber">#FFFFB347</color>
+    <color name="retro_glow">#FFFF7A00</color>
+</resources>

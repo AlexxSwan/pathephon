@@ -33,43 +33,75 @@ jobs:
       - name: Generate l10n
         run: flutter gen-l10n
 
-      # Build с continue-on-error — Flutter ругается "APK не найден"
-      # но APK реально создан в android/app/build/outputs/
-      - name: Build debug APK
-        continue-on-error: true
-        run: flutter build apk --debug --no-tree-shake-icons
+      - name: Check keystore
+        id: check_keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "has_keystore=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_keystore=false" >> $GITHUB_OUTPUT
+          fi
 
-      # Найти APK и скопировать куда ждёт Flutter
+      - name: Decode keystore
+        if: steps.check_keystore.outputs.has_keystore == 'true'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
+
+      - name: Create key.properties
+        if: steps.check_keystore.outputs.has_keystore == 'true'
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          cat > android/key.properties << PROP
+          storePassword=$KEYSTORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          keyAlias=$KEY_ALIAS
+          storeFile=upload-keystore.jks
+          PROP
+
+      # SIGNED RELEASE для arm64 (одно ABI, меньше APK)
+      - name: Build release APK (arm64)
+        if: steps.check_keystore.outputs.has_keystore == 'true'
+        continue-on-error: true
+        run: flutter build apk --release --no-tree-shake-icons --target-platform android-arm64
+
+      # Fallback: debug если нет keystore
+      - name: Build debug APK (fallback)
+        if: steps.check_keystore.outputs.has_keystore == 'false'
+        continue-on-error: true
+        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64
+
+      # Найти APK и скопировать
       - name: Find and copy APK
         if: always()
         run: |
           echo "=== Ищем APK ==="
           find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(нет)"
           mkdir -p build/app/outputs/flutter-apk/
-          APK=$(find . -name "app-debug.apk" 2>/dev/null | head -1)
+          APK=$(find . -name "*.apk" 2>/dev/null | head -1)
           if [ -n "$APK" ]; then
-            cp "$APK" build/app/outputs/flutter-apk/app-debug.apk
+            cp "$APK" build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             echo "✓ Скопирован: $APK"
-          else
-            echo "✗ APK не найден"
           fi
 
-      # Проверка — если APK нет, шаг упадёт → красный крест
-      - name: Verify APK exists
+      - name: Verify APK
         if: always()
         run: |
-          if [ ! -f build/app/outputs/flutter-apk/app-debug.apk ]; then
+          if [ ! -f build/app/outputs/flutter-apk/app-arm64-v8a-release.apk ]; then
             echo "ERROR: APK не найден!"
             exit 1
           fi
-          echo "✓ APK готов"
-          ls -lh build/app/outputs/flutter-apk/app-debug.apk
+          ls -lh build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
 
       - name: Upload APK
-        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Pathephon-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: Pathephon-arm64-release
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           retention-days: 30
           if-no-files-found: warn

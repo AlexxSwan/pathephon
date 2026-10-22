@@ -8,18 +8,18 @@ class AboutScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Рћ РїСЂРѕРіСЂР°РјРјРµ")),
+      appBar: AppBar(title: const Text("Р С› Р С—РЎР‚Р С•Р С–РЎР‚Р В°Р СР СР Вµ")),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.graphic_eq, size: 80, color: TubeColors.amber),
             const SizedBox(height: 24),
-            Text("РџР°С‚РµС„РѕРЅ", style: Theme.of(context).textTheme.displaySmall),
+            Text("Р СџР В°РЎвЂљР ВµРЎвЂћР С•Р Р…", style: Theme.of(context).textTheme.displaySmall),
             const SizedBox(height: 8),
-            Text("Р’РµСЂСЃРёСЏ: 0.1.1 (2)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: TubeColors.textSecondary)),
+            Text("Р вЂ™Р ВµРЎР‚РЎРѓР С‘РЎРЏ: 0.1.1 (2)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: TubeColors.textSecondary)),
             const SizedBox(height: 24),
-            Text("РђРІС‚РѕСЂ: SwanLab", style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.brass)),
+            Text("Р С’Р Р†РЎвЂљР С•РЎР‚: SwanLab", style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.brass)),
             const SizedBox(height: 8),
             Text("github.com/AlexxSwan/pathephon", style: Theme.of(context).textTheme.bodySmall?.copyWith(color: TubeColors.textMuted)),
             const SizedBox(height: 32),

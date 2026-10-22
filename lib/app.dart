@@ -90,10 +90,10 @@ class _ShellState extends State<_Shell> {
             selectedIcon: const Icon(Icons.equalizer),
             label: l.navEqualizer,
           ),
-          NavigationDestination(
-            icon: const Icon(Icons.info_outline),
-            selectedIcon: const Icon(Icons.info),
-            label: l.navTags,
+          const NavigationDestination(
+            icon: Icon(Icons.info_outline),
+            selectedIcon: Icon(Icons.info),
+            label: "О программе",
           ),
         ],
       ),

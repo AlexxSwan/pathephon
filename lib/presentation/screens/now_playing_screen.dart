@@ -1,13 +1,11 @@
 // ============================================================================
 //  now_playing_screen.dart - full-screen now-playing with stereo VU meter
 //
-//  Layout (top to bottom):
-//    1. Top bar: exit | title | queue
-//    2. Album art (flex 4)
-//    3. Stereo VU meter (L | R) - moved UP, right under the art
-//    4. Track title + artist - BELOW the VU meter (not overlapping)
-//    5. Seek bar
-//    6. Playback controls
+//  Artwork resolution priority:
+//    1. Track's own artUri
+//    2. Album artwork fallback (another track in same album with artUri)
+//    3. Embedded art via on_audio_query (mediaStoreId)
+//    4. App icon (gramophone PNG) as last-resort fallback
 // ============================================================================
 import 'dart:typed_data';
 
@@ -66,7 +64,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             children: [
-              // ---- Top bar ----
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -89,7 +86,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
               const SizedBox(height: 8),
 
-              // ---- Album art (large) ----
               Expanded(
                 flex: 4,
                 child: Center(
@@ -112,7 +108,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ),
               ),
 
-              // ---- Stereo VU meter (RAISED HIGHER, right under the art) ----
               const SizedBox(height: 8),
               CustomPaint(
                 size: Size(MediaQuery.of(context).size.width - 40, 120),
@@ -123,7 +118,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ),
               ),
 
-              // ---- Track title + artist (BELOW the VU meter) ----
               const SizedBox(height: 12),
               Text(
                 track?.title ?? '\u2014',
@@ -154,7 +148,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
               const SizedBox(height: 12),
 
-              // ---- Seek bar ----
               Row(
                 children: [
                   Text(formatDuration(pos), style: Theme.of(context).textTheme.labelSmall),
@@ -175,7 +168,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
               const SizedBox(height: 8),
 
-              // ---- Controls ----
               const PlaybackControls(),
             ],
           ),
@@ -349,6 +341,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
+/// Resolves artwork for a track.
+/// Priority: track.artUri -> album art fallback -> embedded art -> app icon.
 class _ArtworkImage extends ConsumerStatefulWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
@@ -359,24 +353,44 @@ class _ArtworkImage extends ConsumerStatefulWidget {
 
 class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
   Uint8List? _bytes;
-  int? _loadingId;
+  int? _loadingMediaStoreId;
 
   @override
   void didUpdateWidget(_ArtworkImage oldWidget) {
     super.didUpdateWidget(oldWidget);
+    _maybeFetch();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFetch());
+  }
+
+  void _maybeFetch() {
     final t = widget.track;
     if (t == null) {
       _bytes = null;
-      _loadingId = null;
+      _loadingMediaStoreId = null;
       return;
     }
-    if (t.mediaStoreId != null && t.mediaStoreId != _loadingId) {
-      _loadingId = t.mediaStoreId;
+    // If the track has its own artUri OR an album artUri fallback, we don't
+    // need to fetch from MediaStore. Only fetch embedded art if no URI at all.
+    final albumArtUri = ref.read(albumArtIndexProvider)[
+        '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
+    final hasAnyUri = t.artUri.isNotEmpty || (albumArtUri != null && albumArtUri.isNotEmpty);
+    if (hasAnyUri) {
+      _bytes = null;
+      _loadingMediaStoreId = null;
+      return;
+    }
+    if (t.mediaStoreId != null && t.mediaStoreId != _loadingMediaStoreId) {
+      _loadingMediaStoreId = t.mediaStoreId;
       _bytes = null;
       _fetchArt(t.mediaStoreId!);
     } else if (t.mediaStoreId == null) {
       _bytes = null;
-      _loadingId = null;
+      _loadingMediaStoreId = null;
     }
   }
 
@@ -384,7 +398,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
     try {
       final ms = ref.read(mediaStoreSourceProvider);
       final bytes = await ms.query.queryArtwork(id, ArtworkType.AUDIO, size: 600);
-      if (mounted && _loadingId == id) {
+      if (mounted && _loadingMediaStoreId == id) {
         setState(() => _bytes = bytes);
       }
     } catch (_) {}
@@ -394,23 +408,69 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
   Widget build(BuildContext context) {
     final t = widget.track;
     if (t == null) {
-      return const Icon(Icons.album, size: 120, color: TubeColors.brass);
+      return _appIconFallback();
     }
+
+    // 1. Track's own artUri
     if (t.artUri.isNotEmpty) {
-      return Image.network(t.artUri, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-          const Icon(Icons.album, size: 120, color: TubeColors.brass));
+      return Image.network(
+        t.artUri,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _appIconFallback(),
+      );
     }
+
+    // 2. Album artwork fallback (another track in same album)
+    final albumArt = ref.watch(albumArtIndexProvider)[
+        '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
+    if (albumArt != null && albumArt.isNotEmpty) {
+      return Image.network(
+        albumArt,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _appIconFallback(),
+      );
+    }
+
+    // 3. Embedded art from MediaStore
     if (_bytes != null) {
-      return Image.memory(_bytes!, fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) =>
-          const Icon(Icons.album, size: 120, color: TubeColors.brass));
+      return Image.memory(
+        _bytes!,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _appIconFallback(),
+      );
     }
+
+    // 4. Loading state
     if (t.mediaStoreId != null) {
       return const Center(
-        child: SizedBox(width: 24, height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2, color: TubeColors.brass)));
+        child: SizedBox(
+          width: 24,
+          height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2, color: TubeColors.brass),
+        ),
+      );
     }
-    return const Icon(Icons.album, size: 120, color: TubeColors.brass);
+
+    // 5. Last-resort: app icon (gramophone)
+    return _appIconFallback();
+  }
+
+  Widget _appIconFallback() {
+    return Container(
+      color: TubeColors.surfaceVariant,
+      child: Center(
+        child: Image.asset(
+          'assets/app_icon.png',
+          fit: BoxFit.contain,
+          width: 120,
+          height: 120,
+          errorBuilder: (_, __, ___) => const Icon(
+            Icons.album,
+            size: 120,
+            color: TubeColors.brass,
+          )),
+        ),
+      ),
+    );
   }
 }

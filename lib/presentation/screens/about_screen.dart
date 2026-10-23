@@ -23,7 +23,7 @@ class AboutScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              "\u0412\u0435\u0440\u0441\u0438\u044F: 0.3.8 (38)",
+              "\u0412\u0435\u0440\u0441\u0438\u044F: 0.3.9 (39)",
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: TubeColors.textSecondary,
                   ),

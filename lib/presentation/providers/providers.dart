@@ -53,8 +53,6 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   final svc = JustAudioPlaybackService(prefs);
   ref.onDispose(svc.dispose);
-  // Auto-restore saved queue on first construction.
-  // Fire-and-forget — the service's _initCompleter handles ordering.
   Future.microtask(() => svc.restoreSavedQueue());
   return svc;
 });
@@ -113,6 +111,20 @@ class LibraryNotifier extends StateNotifier<AsyncValue<List<Track>>> {
 final albumsProvider = Provider<List<Album>>((ref) {
   final tracks = ref.watch(libraryStateProvider).valueOrNull ?? const <Track>[];
   return ref.watch(libraryRepositoryProvider).groupAlbums(tracks);
+});
+
+/// Index: (albumArtist || album) -> first track's artUri we found.
+/// Used by the Now Playing artwork widget: if the current track has no own
+/// artwork, fall back to another track's artwork from the same album.
+final albumArtIndexProvider = Provider<Map<String, String>>((ref) {
+  final tracks = ref.watch(libraryStateProvider).valueOrNull ?? const <Track>[];
+  final index = <String, String>{};
+  for (final t in tracks) {
+    if (t.artUri.isEmpty) continue;
+    final key = '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}';
+    index.putIfAbsent(key, () => t.artUri);
+  }
+  return index;
 });
 
 final playbackSnapshotProvider = StreamProvider<PlaybackSnapshot>((ref) {

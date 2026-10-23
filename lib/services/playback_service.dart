@@ -79,6 +79,13 @@ class JustAudioPlaybackService implements PlaybackService {
   final _player = AudioPlayer();
   AudioHandler? _handler;
 
+  /// Completer that resolves once _init() finishes. Every public method
+  /// MUST await _initCompleter.future before touching _player — otherwise
+  /// AudioSession isn't configured yet and playerStateStream listeners aren't
+  /// attached, so setAudioSource succeeds but _emitState never fires and the
+  /// UI shows null/empty snapshot forever ("track title doesn't show" bug).
+  final _initCompleter = Completer<void>();
+
   List<Track> _queue = const [];
   int _index = 0;
   bool _shuffle = false;
@@ -99,42 +106,50 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<double> get amplitudeStream => _ampController.stream;
 
   Future<void> _init() async {
-    final session = await AudioSession.instance;
-    await session.configure(const AudioSessionConfiguration.music());
+    try {
+      final session = await AudioSession.instance;
+      await session.configure(const AudioSessionConfiguration.music());
 
-    _handler = await AudioService.init(
-      builder: () => _PathephonAudioHandler(_player),
-      config: const AudioServiceConfig(
-        androidNotificationChannelId: 'pathephon_playback',
-        androidNotificationChannelName: 'Playback',
-        androidNotificationOngoing: true,
-        androidStopForegroundOnPause: true,
-      ),
-    );
+      _handler = await AudioService.init(
+        builder: () => _PathephonAudioHandler(_player),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'pathephon_playback',
+          androidNotificationChannelName: 'Playback',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: true,
+        ),
+      );
 
-    // Emit initial empty state
-    _stateController.add(PlaybackSnapshot.empty);
+      // Emit initial empty state
+      _stateController.add(PlaybackSnapshot.empty);
 
-    // Listen to player state — emit snapshot on every change
-    _player.playerStateStream.listen((st) {
-      _emitState(st);
-      _startAmplitudeLoopIfPlaying(st.playing);
-    });
+      // Listen to player state — emit snapshot on every change
+      _player.playerStateStream.listen((st) {
+        _emitState(st);
+        _startAmplitudeLoopIfPlaying(st.playing);
+      });
 
-    // Listen to sequence state — update _index when track changes
-    _player.sequenceStateStream.listen((seqState) {
-      if (seqState != null && seqState.currentIndex >= 0) {
-        _index = seqState.currentIndex;
-        _emitState(_player.playerState);
-      }
-    });
+      // Listen to sequence state — update _index when track changes
+      _player.sequenceStateStream.listen((seqState) {
+        if (seqState != null && seqState.currentIndex >= 0) {
+          _index = seqState.currentIndex;
+          _emitState(_player.playerState);
+        }
+      });
 
-    // Emit position-based state updates every 500ms
-    Timer.periodic(const Duration(milliseconds: 500), (_) {
-      if (_queue.isNotEmpty) {
-        _emitState(_player.playerState);
-      }
-    });
+      // Emit position-based state updates every 500ms
+      Timer.periodic(const Duration(milliseconds: 500), (_) {
+        if (_queue.isNotEmpty) {
+          _emitState(_player.playerState);
+        }
+      });
+    } catch (e, st) {
+      // Resolve completer with error so callers see the failure instead of
+      // hanging forever.
+      _initCompleter.completeError(e, st);
+      return;
+    }
+    _initCompleter.complete();
   }
 
   void _emitState(PlayerState st) {
@@ -175,6 +190,11 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> playQueue({required List<Track> tracks, required int startIndex}) async {
+    // Wait for _init() to finish so AudioSession + listeners are ready.
+    // Without this, setAudioSource succeeds but _emitState never fires
+    // (listeners attached too late) and the UI shows empty snapshot.
+    await _initCompleter.future;
+
     if (tracks.isEmpty) return;
     _queue = List.unmodifiable(tracks);
     _index = startIndex.clamp(0, tracks.length - 1);
@@ -215,6 +235,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> play() async {
+    await _initCompleter.future;
     // Direct _player.play() — see comment in playQueue().
     // _handler.play() is reserved for MediaSession-driven playback (e.g. when
     // the user taps the lock-screen play button).
@@ -223,39 +244,62 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> pause() async {
+    await _initCompleter.future;
     await _player.pause();
   }
 
   @override
   Future<void> stop() async {
+    await _initCompleter.future;
+    // Stop BOTH the player (audio output) and the handler (notification).
+    // _handler.stop() alone is not enough — BaseAudioHandler.stop() default
+    // doesn't actually stop the underlying player.
+    await _player.stop();
     await _handler?.stop();
     _queue = const [];
     _index = 0;
+    // Emit empty state so UI clears.
+    _stateController.add(PlaybackSnapshot.empty);
   }
 
   @override
-  Future<void> seekTo(Duration position) => _player.seek(position);
+  Future<void> seekTo(Duration position) async {
+    await _initCompleter.future;
+    await _player.seek(position);
+  }
 
   @override
   Future<void> skipToNext() async {
+    await _initCompleter.future;
     if (_queue.isEmpty) return;
-    await _handler?.skipToNext();
+    // Use _player.seekToNext() directly — BaseAudioHandler.skipToNext() is a
+    // no-op by default, so going through _handler does literally nothing.
+    // We also check hasNext to avoid just_audio throwing at end of queue.
+    if (_player.hasNext) {
+      await _player.seekToNext();
+    }
   }
 
   @override
   Future<void> skipToPrevious() async {
+    await _initCompleter.future;
     if (_queue.isEmpty) return;
-    await _handler?.skipToPrevious();
+    // See comment in skipToNext — same issue with _handler.skipToPrevious().
+    if (_player.hasPrevious) {
+      await _player.seekToPrevious();
+    }
   }
 
   @override
   Future<void> setShuffle(bool enabled) async {
+    await _initCompleter.future;
     _shuffle = enabled;
     await _player.setShuffleModeEnabled(enabled);
   }
 
   @override
   Future<void> setRepeatMode(RepeatMode mode) async {
+    await _initCompleter.future;
     _repeat = mode;
     final am = switch (mode) {
       RepeatMode.off => LoopMode.off,

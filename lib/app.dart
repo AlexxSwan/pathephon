@@ -1,4 +1,4 @@
-import "package:flutter/material.dart";
+﻿import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
 import "package:shared_preferences/shared_preferences.dart";
@@ -16,12 +16,11 @@ final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 
 class AudioPlayerX64App extends ConsumerWidget {
   const AudioPlayerX64App({super.key});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     return MaterialApp(
-      title: "Патефон",
+      title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D",
       debugShowCheckedModeBanner: false,
       theme: RetroTheme.dark,
       locale: locale,
@@ -58,14 +57,12 @@ class _Shell extends StatefulWidget {
 
 class _ShellState extends State<_Shell> {
   int _index = 0;
-
   final _screens = const <Widget>[
     LibraryScreen(),
     AudiobooksScreen(),
     EqualizerScreen(),
     AboutScreen(),
   ];
-
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -75,26 +72,10 @@ class _ShellState extends State<_Shell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.library_music_outlined),
-            selectedIcon: const Icon(Icons.library_music),
-            label: l.navLibrary,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.menu_book_outlined),
-            selectedIcon: const Icon(Icons.menu_book),
-            label: l.navAudiobooks,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.equalizer_outlined),
-            selectedIcon: const Icon(Icons.equalizer),
-            label: l.navEqualizer,
-          ),
-          const NavigationDestination(
-            icon: Icon(Icons.info_outline),
-            selectedIcon: Icon(Icons.info),
-            label: "О программе",
-          ),
+          NavigationDestination(icon: const Icon(Icons.library_music_outlined), selectedIcon: const Icon(Icons.library_music), label: l.navLibrary),
+          NavigationDestination(icon: const Icon(Icons.menu_book_outlined), selectedIcon: const Icon(Icons.menu_book), label: l.navAudiobooks),
+          NavigationDestination(icon: const Icon(Icons.equalizer_outlined), selectedIcon: const Icon(Icons.equalizer), label: l.navEqualizer),
+          NavigationDestination(icon: const Icon(Icons.info_outline), selectedIcon: const Icon(Icons.info), label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435"),
         ],
       ),
     );

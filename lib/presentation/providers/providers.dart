@@ -1,5 +1,5 @@
-// ============================================================================
-//  providers.dart — central Riverpod wiring (single file for MVP clarity)
+﻿// ============================================================================
+//  providers.dart вЂ” central Riverpod wiring (single file for MVP clarity)
 // ============================================================================
 import 'dart:io' show Directory;
 
@@ -176,3 +176,6 @@ class AudiobooksNotifier extends StateNotifier<AsyncValue<List<Audiobook>>> {
 final sleepRemainingProvider = StreamProvider<Duration?>((ref) {
   return ref.watch(audioBookServiceProvider).sleepRemaining;
 });
+
+// Manual play/pause state (bypasses stream timing issues)
+final isPlayingProvider = StateProvider<bool>((ref) => false);

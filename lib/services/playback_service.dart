@@ -93,6 +93,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
   Timer? _ampTimer;
   double _ampPhase = 0;
+  double _ampSmoothed = 0;
 
   @override
   Stream<PlaybackSnapshot> get state => _stateController.stream;
@@ -164,28 +165,38 @@ class JustAudioPlaybackService implements PlaybackService {
     ));
   }
 
-  /// Fake amplitude loop — simulates a vintage VU needle.
-  /// Range: 0.0..0.55 (kept OUT of the red zone, which starts ~0.85).
-  /// Two slow sine waves + a touch of noise = natural-looking swing.
-  /// Real Visualizer integration is a post-MVP TODO.
+  /// Simulated VU needle amplitude.
+  ///
+  /// Output range: 0.05..0.55 (LINEAR, mapped directly by VUPainter).
+  /// With VUPainter using linear mapping:
+  ///   0.55 -> ~55% of the arc -> stays in the yellow zone (BEFORE red)
+  ///   0.30 -> ~30% of the arc -> middle green
+  ///
+  /// Exponential smoothing makes the needle swing naturally without jitter.
   void _startAmplitudeLoopIfPlaying(bool playing) {
     if (playing) {
       _ampTimer ??= Timer.periodic(const Duration(milliseconds: 50), (_) {
-        _ampPhase += 0.12;
-        // Base around 0.28, swing +/- 0.22 → range ~0.06..0.50
-        final base = 0.28 + 0.22 * _sinSum(_ampPhase);
-        final noise = 0.04 * (DateTime.now().microsecondsSinceEpoch % 100) / 100;
-        _ampController.add((base + noise).clamp(0.0, 0.6));
+        _ampPhase += 0.10;
+        // Two slow sine waves around 0.30 with swing +/- 0.20
+        final target = 0.30 + 0.20 * _sinSum(_ampPhase);
+        // Exponential smoothing toward target (slow attack, slow release)
+        _ampSmoothed += (target - _ampSmoothed) * 0.15;
+        // Small noise for organic feel
+        final noise = 0.02 * (DateTime.now().microsecondsSinceEpoch % 100) / 100;
+        final amp = (_ampSmoothed + noise).clamp(0.05, 0.55);
+        _ampController.add(amp);
       });
     } else {
       _ampTimer?.cancel();
       _ampTimer = null;
+      // Smoothly return to 0
+      _ampSmoothed = 0;
       _ampController.add(0);
     }
   }
 
   double _sinSum(double t) =>
-      0.5 * (1 + math.sin(t * 0.7) + 0.6 * math.sin(t * 2.3)) / 2;
+      0.5 * (1 + math.sin(t * 0.6) + 0.5 * math.sin(t * 1.7)) / 2;
 
   @override
   Future<void> playQueue({required List<Track> tracks, required int startIndex}) async {

@@ -46,7 +46,8 @@ class NowPlayingScreen extends ConsumerWidget {
                   ),
                   IconButton(
                     icon: const Icon(Icons.queue_music),
-                    onPressed: () {},
+                    tooltip: '\u041E\u0447\u0435\u0440\u0435\u0434\u044C',
+                    onPressed: () => _showQueueSheet(context, ref),
                   ),
                 ],
               ),
@@ -134,6 +135,85 @@ class NowPlayingScreen extends ConsumerWidget {
           ),
         ),
       ),
+    );
+  }
+
+  void _showQueueSheet(BuildContext context, WidgetRef ref) {
+    final snap = ref.read(playbackSnapshotProvider).valueOrNull;
+    final queue = snap?.queue ?? const <Track>[];
+    final currentIndex = snap?.index ?? 0;
+    final playback = ref.read(playbackServiceProvider);
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: TubeColors.surface,
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      '\u041E\u0447\u0435\u0440\u0435\u0434\u044C (${queue.length})',
+                      style: Theme.of(sheetCtx).textTheme.titleMedium,
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              if (queue.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(24),
+                  child: Text('\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u043F\u0443\u0441\u0442\u0430'),
+                )
+              else
+                Flexible(
+                  child: ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: queue.length,
+                    itemBuilder: (_, i) {
+                      final t = queue[i];
+                      final isCurrent = i == currentIndex;
+                      return ListTile(
+                        leading: Icon(
+                          isCurrent ? Icons.play_arrow : Icons.music_note,
+                          color: isCurrent ? TubeColors.amberHot : TubeColors.brass,
+                        ),
+                        title: Text(
+                          t.title,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: isCurrent ? TubeColors.amberHot : null,
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
+                          ),
+                        ),
+                        subtitle: Text(
+                          t.artist,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(color: TubeColors.textSecondary),
+                        ),
+                        onTap: () {
+                          playback.playQueue(tracks: queue, startIndex: i);
+                          Navigator.of(sheetCtx).pop();
+                        },
+                      );
+                    },
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

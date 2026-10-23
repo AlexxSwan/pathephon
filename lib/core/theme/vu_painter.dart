@@ -1,13 +1,15 @@
 // ============================================================================
-//  vu_painter.dart — CustomPainter for the vintage VU-meter needle
+//  vu_painter.dart - CustomPainter for the vintage VU-meter needle
 //
-//  Renders a circular VU meter face with:
-//   - brass bezel
-//   - cream dial face with phosphor-green arc ticks (-20dB..+3dB)
-//   - amber needle pivoting from bottom-centre
-//   - subtle glow halo on the needle tip
+//  amplitude (0..1) maps LINEARLY to the needle angle:
+//    0.0  -> far left  (-20 dB tick)
+//    0.5  -> middle    (around 0 dB)
+//    0.85 -> start of red zone
+//    1.0  -> far right (+3 dB)
 //
-//  Used by the `VUMeter` widget on the Now Playing screen.
+//  This is intentional: we do NOT use 20*log10 because that pushes typical
+//  fake-amplitude values (0.3..0.5) into the red zone. Linear mapping
+//  keeps the needle in the green/yellow area where it looks natural.
 // ============================================================================
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -16,13 +18,11 @@ import 'tube_colors.dart';
 
 class VUPainter extends CustomPainter {
   VUPainter({
-    required this.amplitude, // 0.0..1.0 (linear); internally mapped to dB arc
+    required this.amplitude,
     required this.brightness,
   });
 
-  /// Linear amplitude, 0..1. Map to log scale for the needle.
   final double amplitude;
-  /// Overall brightness of the tube glow (0..1). Driven by playback state.
   final double brightness;
 
   @override
@@ -30,7 +30,7 @@ class VUPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final cx = w / 2;
-    final cy = h * 0.92; // pivot near the bottom
+    final cy = h * 0.92;
     final r = math.min(w / 2, h * 0.95);
 
     // ---- Bezel (brass ring) ---------------------------------------------
@@ -56,8 +56,8 @@ class VUPainter extends CustomPainter {
     canvas.drawCircle(Offset(cx, cy), r - 4, face);
 
     // ---- Arc ticks (-20 dB .. +3 dB) ------------------------------------
-    const startAngle = -math.pi * 0.85; // 7 o'clock-ish
-    const sweepAngle = math.pi * 0.70;  // up to 5 o'clock
+    const startAngle = -math.pi * 0.85;
+    const sweepAngle = math.pi * 0.70;
     final tickArea = Rect.fromCircle(center: Offset(cx, cy), radius: r - 10);
 
     final greenArc = Paint()
@@ -69,9 +69,7 @@ class VUPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3;
 
-    // Green zone: -20..0 dB → 80% of arc
     canvas.drawArc(tickArea, startAngle, sweepAngle * 0.8, false, greenArc);
-    // Red zone: 0..+3 dB → 20%
     canvas.drawArc(tickArea, startAngle + sweepAngle * 0.8, sweepAngle * 0.2, false, redArc);
 
     // ---- Minor tick marks -----------------------------------------------
@@ -88,12 +86,9 @@ class VUPainter extends CustomPainter {
     }
 
     // ---- Needle ----------------------------------------------------------
-    // Map amplitude (0..1) to angle. Use log scale so quiet audio still moves needle.
-    final db = amplitude <= 0
-        ? -60.0
-        : (20.0 * math.log(amplitude) / math.ln10);
-    // Map -60 dB → startAngle ; +3 dB → startAngle + sweepAngle
-    final normalized = ((db + 60) / 63).clamp(0.0, 1.0);
+    // LINEAR mapping: amplitude 0..1 -> angle 0..1 across the sweep.
+    // No log scale. This keeps typical values in the green zone.
+    final normalized = amplitude.clamp(0.0, 1.0);
     final needleAngle = startAngle + sweepAngle * normalized;
 
     final needleLen = r - 14;
@@ -102,7 +97,6 @@ class VUPainter extends CustomPainter {
       cy + math.sin(needleAngle) * needleLen,
     );
 
-    // Needle glow halo (only when brightness > 0)
     if (brightness > 0.05) {
       final halo = Paint()
         ..color = TubeColors.amberHot.withOpacity(0.35 * brightness)

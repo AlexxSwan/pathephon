@@ -246,7 +246,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     shrinkWrap: true,
                     padding: EdgeInsets.zero,
                     itemCount: queue.length,
-                    itemExtent: 52,
+                    // Slightly smaller row height for compact layout,
+                    // but bigger font for readability.
+                    itemExtent: 48,
                     itemBuilder: (_, i) {
                       final t = queue[i];
                       final isCurrent = i == currentIndex;
@@ -256,24 +258,24 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           Navigator.of(sheetCtx).pop();
                         },
                         child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                           child: Row(
                             children: [
                               SizedBox(
-                                width: 28,
+                                width: 32,
                                 child: isCurrent
-                                    ? const Icon(Icons.play_arrow, size: 18,
+                                    ? const Icon(Icons.play_arrow, size: 22,
                                         color: TubeColors.amberHot)
                                     : Text(
                                         '${i + 1}',
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           color: TubeColors.textMuted,
-                                          fontSize: 12,
+                                          fontSize: 14,
                                         ),
                                         textAlign: TextAlign.center,
                                       ),
                               ),
-                              const SizedBox(width: 8),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -291,8 +293,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                         fontWeight: isCurrent
                                             ? FontWeight.bold
                                             : FontWeight.normal,
-                                        fontSize: 13,
-                                        height: 1.2,
+                                        // Bumped from 13 -> 15 for readability.
+                                        fontSize: 15,
+                                        height: 1.15,
                                       ),
                                     ),
                                     if (t.artist.isNotEmpty)
@@ -300,10 +303,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                         t.artist,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: TextStyle(
+                                        style: const TextStyle(
                                           color: TubeColors.textSecondary,
-                                          fontSize: 11,
-                                          height: 1.2,
+                                          // Bumped from 11 -> 12.
+                                          fontSize: 12,
+                                          height: 1.15,
                                         ),
                                       ),
                                   ],
@@ -313,9 +317,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                               if (t.durationMs > 0)
                                 Text(
                                   formatDuration(Duration(milliseconds: t.durationMs)),
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     color: TubeColors.textMuted,
-                                    fontSize: 11,
+                                    fontSize: 12,
                                   ),
                                 ),
                             ],

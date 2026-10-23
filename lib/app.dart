@@ -57,7 +57,6 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _index = 0;
 
-  // 5 tabs: NowPlaying, Library, Equalizer, Audiobooks, About.
   final _screens = const <Widget>[
     NowPlayingScreen(),
     LibraryScreen(),
@@ -108,6 +107,10 @@ class _ShellState extends State<_Shell> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    // Custom compact navigation bar:
+    // - Icon-only by default (saves vertical space)
+    // - Label shown ONLY for the selected item (appears when you tap)
+    // - Selected icon larger + glowing amber
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -118,34 +121,133 @@ class _ShellState extends State<_Shell> {
           index: _index,
           children: _screens,
         ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _index,
-          onDestinationSelected: (i) => setState(() => _index = i),
-          destinations: [
-            NavigationDestination(
-              icon: const Icon(Icons.graphic_eq_outlined),
-              selectedIcon: const Icon(Icons.graphic_eq),
-              label: l.navNowPlaying,
+        bottomNavigationBar: Container(
+          decoration: BoxDecoration(
+            color: const Color(0xFF1A1410),
+            border: Border(
+              top: BorderSide(color: const Color(0xFFB89968).withOpacity(0.3), width: 1),
             ),
-            NavigationDestination(
-              icon: const Icon(Icons.library_music_outlined),
-              selectedIcon: const Icon(Icons.library_music),
-              label: l.navLibrary,
+          ),
+          child: SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  _NavButton(
+                    icon: Icons.graphic_eq_outlined,
+                    activeIcon: Icons.graphic_eq,
+                    label: l.navNowPlaying,
+                    selected: _index == 0,
+                    onTap: () => setState(() => _index = 0),
+                  ),
+                  _NavButton(
+                    icon: Icons.library_music_outlined,
+                    activeIcon: Icons.library_music,
+                    label: l.navLibrary,
+                    selected: _index == 1,
+                    onTap: () => setState(() => _index = 1),
+                  ),
+                  _NavButton(
+                    icon: Icons.equalizer_outlined,
+                    activeIcon: Icons.equalizer,
+                    label: l.navEqualizer,
+                    selected: _index == 2,
+                    onTap: () => setState(() => _index = 2),
+                  ),
+                  _NavButton(
+                    icon: Icons.menu_book_outlined,
+                    activeIcon: Icons.menu_book,
+                    label: l.navAudiobooks,
+                    selected: _index == 3,
+                    onTap: () => setState(() => _index = 3),
+                  ),
+                  _NavButton(
+                    icon: Icons.info_outline,
+                    activeIcon: Icons.info,
+                    label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
+                    selected: _index == 4,
+                    onTap: () => setState(() => _index = 4),
+                  ),
+                ],
+              ),
             ),
-            NavigationDestination(
-              icon: const Icon(Icons.equalizer_outlined),
-              selectedIcon: const Icon(Icons.equalizer),
-              label: l.navEqualizer,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Compact navigation button: icon always, label only when selected.
+class _NavButton extends StatelessWidget {
+  const _NavButton({
+    required this.icon,
+    required this.activeIcon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final IconData activeIcon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = selected ? const Color(0xFFFF6B1A) : const Color(0xFFB89968);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: EdgeInsets.symmetric(
+          horizontal: selected ? 12 : 8,
+          vertical: 6,
+        ),
+        decoration: BoxDecoration(
+          color: selected
+              ? const Color(0xFFFF6B1A).withOpacity(0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: const Color(0xFFFF6B1A).withOpacity(0.3),
+                    blurRadius: 8,
+                    spreadRadius: 1,
+                  ),
+                ]
+              : [],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? activeIcon : icon,
+              color: color,
+              size: selected ? 26 : 22,
             ),
-            NavigationDestination(
-              icon: const Icon(Icons.menu_book_outlined),
-              selectedIcon: const Icon(Icons.menu_book),
-              label: l.navAudiobooks,
-            ),
-            NavigationDestination(
-              icon: const Icon(Icons.info_outline),
-              selectedIcon: const Icon(Icons.info),
-              label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
+            // Label slides in only for the selected tab.
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOut,
+              child: selected
+                  ? Padding(
+                      padding: const EdgeInsets.only(left: 6),
+                      child: Text(
+                        label,
+                        style: TextStyle(
+                          color: color,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
             ),
           ],
         ),

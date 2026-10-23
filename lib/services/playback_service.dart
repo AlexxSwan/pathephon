@@ -1,9 +1,10 @@
 // ============================================================================
 //  playback_service.dart - playback with persistent queue + REAL EQ
+//  Uses just_audio's AndroidEqualizer (correct API: androidAudioEffects,
+//  await parameters, setBandGain on band objects, setEnabled method).
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
-import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
@@ -35,10 +36,9 @@ abstract class PlaybackService {
   Future<void> setSpeed(double speed);
   Future<void> setReplayGain(ReplayGainMode mode);
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled});
-  // NEW: real EQ control via just_audio's AndroidEqualizer
-  int get eqBandCount;
   Future<void> setEqBandGain(int band, double gainDb);
   Future<void> setEqEnabled(bool enabled);
+  int get eqBandCount;
   Future<void> restoreSavedQueue();
 }
 
@@ -95,8 +95,12 @@ class JustAudioPlaybackService implements PlaybackService {
   final AndroidEqualizer _androidEq = AndroidEqualizer();
 
   // AudioPlayer created with the EQ pipeline so all audio goes through it.
+  // Note: just_audio 0.9.x uses `androidAudioEffects` (not `audioEffects`)
+  // for Android-specific effects.
   late final AudioPlayer _player = AudioPlayer(
-    audioPipeline: AudioPipeline(audioEffects: [_androidEq]),
+    audioPipeline: AudioPipeline(
+      androidAudioEffects: [_androidEq],
+    ),
   );
   AudioHandler? _handler;
 
@@ -124,11 +128,9 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   int get eqBandCount {
-    try {
-      return _androidEq.parameters.bandCount;
-    } catch (_) {
-      return 0;
-    }
+    // parameters is a Future<AndroidEqualizerParameters>; we can't await
+    // in a sync getter, so return 0 (UI uses fixed kEqBandCount=5 anyway).
+    return 0;
   }
 
   Future<void> _init() async {
@@ -433,14 +435,14 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 
-  // NEW: real EQ via AndroidEqualizer
+  // Real EQ: await parameters, then setBandGain on band object.
   @override
   Future<void> setEqBandGain(int band, double gainDb) async {
     await _initCompleter.future;
     try {
-      final count = _androidEq.parameters.bandCount;
-      if (band < 0 || band >= count) return;
-      _androidEq.setBandGain(band, gainDb.clamp(-15.0, 15.0));
+      final params = await _androidEq.parameters;
+      if (band < 0 || band >= params.bands.length) return;
+      await params.bands[band].setGain(gainDb.clamp(-15.0, 15.0));
     } catch (e) {
       debugPrint('[pathephon] setEqBandGain failed: $e');
     }
@@ -450,7 +452,7 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> setEqEnabled(bool enabled) async {
     await _initCompleter.future;
     try {
-      _androidEq.enabled = enabled;
+      await _androidEq.setEnabled(enabled);
     } catch (e) {
       debugPrint('[pathephon] setEqEnabled failed: $e');
     }

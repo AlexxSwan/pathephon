@@ -1,8 +1,9 @@
 // ============================================================================
 //  visualizer_service.dart - bridge to native Android Visualizer AudioEffect
 //
-//  Requests RECORD_AUDIO permission (required on Android 14+) before
-//  attaching to the audio session. Streams stereo RMS amplitudes.
+//  Requests microphone permission (required on Android 14+ for Visualizer,
+//  even though we don't actually record anything - it's a side effect of
+//  audio capture API). Streams stereo RMS amplitudes.
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -35,9 +36,11 @@ class VisualizerService {
     if (!_permissionRequested) {
       _permissionRequested = true;
       try {
-        final status = await Permission.recordAudio.request();
+        // Permission.microphone maps to RECORD_AUDIO on Android.
+        // (permission_handler 11.x does not have a recordAudio alias.)
+        final status = await Permission.microphone.request();
         _permissionGranted = status.isGranted;
-        debugPrint('[pathephon] RECORD_AUDIO permission: $status');
+        debugPrint('[pathephon] microphone permission: $status');
       } catch (e) {
         debugPrint('[pathephon] permission request failed: $e');
         _permissionGranted = false;
@@ -55,7 +58,7 @@ class VisualizerService {
 
     final granted = await _ensurePermission();
     if (!granted) {
-      debugPrint('[pathephon] visualizer: RECORD_AUDIO denied, cannot capture audio');
+      debugPrint('[pathephon] visualizer: microphone permission denied, no VU data');
       return;
     }
 

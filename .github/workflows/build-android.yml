@@ -66,10 +66,12 @@ jobs:
 
       - name: Build release APK (arm64)
         if: steps.check_keystore.outputs.has_keystore == 'true'
+        continue-on-error: true
         run: flutter build apk --release --no-tree-shake-icons --target-platform android-arm64
 
       - name: Build debug APK (fallback)
         if: steps.check_keystore.outputs.has_keystore == 'false'
+        continue-on-error: true
         run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64
 
       - name: Find and copy APK

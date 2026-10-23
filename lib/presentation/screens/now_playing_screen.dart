@@ -188,9 +188,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(
+            child: const Text(
               '\u041E\u0442\u043C\u0435\u043D\u0430',
-              style: const TextStyle(color: Color(0xFFB89968)),
+              style: TextStyle(color: Color(0xFFB89968)),
             ),
           ),
           TextButton(
@@ -198,9 +198,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               Navigator.of(ctx).pop();
               SystemNavigator.pop();
             },
-            child: Text(
+            child: const Text(
               '\u0412\u044B\u0439\u0442\u0438',
-              style: const TextStyle(color: Color(0xFFFF6B1A)),
+              style: TextStyle(color: Color(0xFFFF6B1A)),
             ),
           ),
         ],
@@ -270,14 +270,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                               SizedBox(
                                 width: 32,
                                 child: isCurrent
-                                    ? const Icon(Icons.play_arrow, size: 22,
-                                        color: TubeColors.amberHot)
+                                    ? const Icon(Icons.play_arrow, size: 22, color: TubeColors.amberHot)
                                     : Text(
                                         '${i + 1}',
-                                        style: const TextStyle(
-                                          color: TubeColors.textMuted,
-                                          fontSize: 14,
-                                        ),
+                                        style: const TextStyle(color: TubeColors.textMuted, fontSize: 14),
                                         textAlign: TextAlign.center,
                                       ),
                               ),
@@ -293,12 +289,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                       maxLines: 1,
                                       overflow: TextOverflow.ellipsis,
                                       style: TextStyle(
-                                        color: isCurrent
-                                            ? TubeColors.amberHot
-                                            : TubeColors.textPrimary,
-                                        fontWeight: isCurrent
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
+                                        color: isCurrent ? TubeColors.amberHot : TubeColors.textPrimary,
+                                        fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
                                         fontSize: 15,
                                         height: 1.15,
                                       ),
@@ -308,11 +300,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                         t.artist,
                                         maxLines: 1,
                                         overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(
-                                          color: TubeColors.textSecondary,
-                                          fontSize: 12,
-                                          height: 1.15,
-                                        ),
+                                        style: const TextStyle(color: TubeColors.textSecondary, fontSize: 12, height: 1.15),
                                       ),
                                   ],
                                 ),
@@ -321,10 +309,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                               if (t.durationMs > 0)
                                 Text(
                                   formatDuration(Duration(milliseconds: t.durationMs)),
-                                  style: const TextStyle(
-                                    color: TubeColors.textMuted,
-                                    fontSize: 12,
-                                  ),
+                                  style: const TextStyle(color: TubeColors.textMuted, fontSize: 12),
                                 ),
                             ],
                           ),
@@ -341,8 +326,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Resolves artwork for a track.
-/// Priority: track.artUri -> album art fallback -> embedded art -> app icon.
+/// Resolves artwork for a track with multiple fallbacks.
 class _ArtworkImage extends ConsumerStatefulWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
@@ -374,12 +358,10 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       _loadingMediaStoreId = null;
       return;
     }
-    // If the track has its own artUri OR an album artUri fallback, we don't
-    // need to fetch from MediaStore. Only fetch embedded art if no URI at all.
-    final albumArtUri = ref.read(albumArtIndexProvider)[
+    final albumArt = ref.read(albumArtIndexProvider)[
         '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
-    final hasAnyUri = t.artUri.isNotEmpty || (albumArtUri != null && albumArtUri.isNotEmpty);
-    if (hasAnyUri) {
+    final hasUri = t.artUri.isNotEmpty || (albumArt != null && albumArt.isNotEmpty);
+    if (hasUri) {
       _bytes = null;
       _loadingMediaStoreId = null;
       return;
@@ -416,18 +398,18 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       return Image.network(
         t.artUri,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _appIconFallback(),
+        errorBuilder: (context, error, stackTrace) => _appIconFallback(),
       );
     }
 
-    // 2. Album artwork fallback (another track in same album)
+    // 2. Album artwork fallback
     final albumArt = ref.watch(albumArtIndexProvider)[
         '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
     if (albumArt != null && albumArt.isNotEmpty) {
       return Image.network(
         albumArt,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _appIconFallback(),
+        errorBuilder: (context, error, stackTrace) => _appIconFallback(),
       );
     }
 
@@ -436,7 +418,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       return Image.memory(
         _bytes!,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _appIconFallback(),
+        errorBuilder: (context, error, stackTrace) => _appIconFallback(),
       );
     }
 
@@ -451,24 +433,23 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       );
     }
 
-    // 5. Last-resort: app icon (gramophone)
+    // 5. Last-resort: app icon
     return _appIconFallback();
   }
 
   Widget _appIconFallback() {
     return Container(
       color: TubeColors.surfaceVariant,
-      child: Center(
-        child: Image.asset(
-          'assets/app_icon.png',
-          fit: BoxFit.contain,
-          width: 120,
-          height: 120,
-          errorBuilder: (_, __, ___) => const Icon(
-            Icons.album,
-            size: 120,
-            color: TubeColors.brass,
-          )),
+      alignment: Alignment.center,
+      child: Image.asset(
+        'assets/app_icon.png',
+        fit: BoxFit.contain,
+        width: 120,
+        height: 120,
+        errorBuilder: (context, error, stackTrace) => const Icon(
+          Icons.album,
+          size: 120,
+          color: TubeColors.brass,
         ),
       ),
     );

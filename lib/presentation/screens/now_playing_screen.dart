@@ -1,5 +1,13 @@
 // ============================================================================
 //  now_playing_screen.dart - full-screen now-playing with stereo VU meter
+//
+//  Layout (top to bottom):
+//    1. Top bar: exit | title | queue
+//    2. Album art (flex 4)
+//    3. Stereo VU meter (L | R) - moved UP, right under the art
+//    4. Track title + artist - BELOW the VU meter (not overlapping)
+//    5. Seek bar
+//    6. Playback controls
 // ============================================================================
 import 'dart:typed_data';
 
@@ -55,9 +63,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     return Scaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
           child: Column(
             children: [
+              // ---- Top bar ----
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -78,8 +87,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ],
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
 
+              // ---- Album art (large) ----
               Expanded(
                 flex: 4,
                 child: Center(
@@ -102,10 +112,10 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ),
               ),
 
-              const SizedBox(height: 16),
-
+              // ---- Stereo VU meter (RAISED HIGHER, right under the art) ----
+              const SizedBox(height: 8),
               CustomPaint(
-                size: Size(MediaQuery.of(context).size.width - 40, 130),
+                size: Size(MediaQuery.of(context).size.width - 40, 120),
                 painter: VUPainter(
                   leftAmplitude: leftAmp,
                   rightAmplitude: rightAmp,
@@ -113,12 +123,14 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ),
               ),
 
-              const SizedBox(height: 8),
-
+              // ---- Track title + artist (BELOW the VU meter) ----
+              const SizedBox(height: 12),
               Text(
                 track?.title ?? '\u2014',
                 style: Theme.of(context).textTheme.displaySmall,
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
               Text(
@@ -127,6 +139,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                       color: TubeColors.textSecondary,
                     ),
                 textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
               if (track != null && track.isHiRes) ...[
                 const SizedBox(height: 4),
@@ -138,8 +152,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ),
               ],
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
 
+              // ---- Seek bar ----
               Row(
                 children: [
                   Text(formatDuration(pos), style: Theme.of(context).textTheme.labelSmall),
@@ -158,8 +173,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 ],
               ),
 
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
 
+              // ---- Controls ----
               const PlaybackControls(),
             ],
           ),
@@ -246,8 +262,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     shrinkWrap: true,
                     padding: EdgeInsets.zero,
                     itemCount: queue.length,
-                    // Slightly smaller row height for compact layout,
-                    // but bigger font for readability.
                     itemExtent: 48,
                     itemBuilder: (_, i) {
                       final t = queue[i];
@@ -293,7 +307,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                         fontWeight: isCurrent
                                             ? FontWeight.bold
                                             : FontWeight.normal,
-                                        // Bumped from 13 -> 15 for readability.
                                         fontSize: 15,
                                         height: 1.15,
                                       ),
@@ -305,7 +318,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                         overflow: TextOverflow.ellipsis,
                                         style: const TextStyle(
                                           color: TubeColors.textSecondary,
-                                          // Bumped from 11 -> 12.
                                           fontSize: 12,
                                           height: 1.15,
                                         ),

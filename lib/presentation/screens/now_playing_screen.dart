@@ -2,6 +2,7 @@
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/l10n/generated/app_localizations.dart";
 import "../../core/theme/tube_colors.dart";
+import "../../core/theme/vu_painter.dart";
 import "../../core/utils/duration_format.dart";
 import "../providers/providers.dart";
 import "../widgets/playback_controls.dart";

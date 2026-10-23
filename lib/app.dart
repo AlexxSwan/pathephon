@@ -8,6 +8,7 @@ import "package:flutter/services.dart";
 import "core/l10n/generated/app_localizations.dart";
 import "core/theme/retro_theme.dart";
 import "presentation/screens/audiobooks_screen.dart";
+import "presentation/screens/equalizer_screen.dart";
 import "presentation/screens/library_screen.dart";
 import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
@@ -56,9 +57,11 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _index = 0;
 
+  // 5 tabs: NowPlaying, Library, Equalizer, Audiobooks, About.
   final _screens = const <Widget>[
     NowPlayingScreen(),
     LibraryScreen(),
+    EqualizerScreen(),
     AudiobooksScreen(),
     AboutScreen(),
   ];
@@ -128,6 +131,11 @@ class _ShellState extends State<_Shell> {
               icon: const Icon(Icons.library_music_outlined),
               selectedIcon: const Icon(Icons.library_music),
               label: l.navLibrary,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.equalizer_outlined),
+              selectedIcon: const Icon(Icons.equalizer),
+              label: l.navEqualizer,
             ),
             NavigationDestination(
               icon: const Icon(Icons.menu_book_outlined),

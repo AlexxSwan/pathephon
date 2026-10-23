@@ -1,5 +1,5 @@
 // ============================================================================
-//  library_repository.dart — orchestrates MediaStore scan, grouping into
+//  library_repository.dart - orchestrates MediaStore scan, grouping into
 //  Albums, and persistence of user playlists (shared_preferences JSON).
 // ============================================================================
 import 'dart:async';
@@ -13,7 +13,6 @@ import '../../domain/models/track.dart';
 import '../sources/mediastore_source.dart';
 import '../sources/tag_source.dart';
 
-/// Simple stable hash for album IDs (avoids extra crypto package dependency).
 String _stableHash(String input) {
   var h = 0xcbf29ce484222325;
   for (final c in input.codeUnits) {
@@ -36,11 +35,9 @@ class LibraryRepository {
   final TagSource _tagSource;
   final SharedPreferences _prefs;
 
-  /// Stream of scan progress (0..1) and current count.
   final _scanController = StreamController<ScanProgress>.broadcast();
   Stream<ScanProgress> get scanProgress => _scanController.stream;
 
-  /// Full library scan.
   Future<List<Track>> scanLibrary() async {
     final tracks = await _mediaStore.fetchAllTracks();
     _scanController.add(ScanProgress(1.0, tracks.length));
@@ -48,6 +45,9 @@ class LibraryRepository {
   }
 
   /// Group tracks into albums by (albumArtist, album).
+  /// Tracks within each album are sorted by (discNumber, trackNumber) so
+  /// they appear in the correct playback order — no more random shuffling
+  /// when the user taps an album.
   List<Album> groupAlbums(List<Track> tracks) {
     final map = <String, Album>{};
     for (final t in tracks) {
@@ -67,11 +67,22 @@ class LibraryRepository {
       );
       map[id] = album.copyWith(tracks: [...album.tracks, t]);
     }
+    // Sort tracks within each album by disc, then track number.
+    // Tracks without trackNumber stay at the end (sorted by title).
+    for (final album in map.values) {
+      album.tracks.sort((a, b) {
+        final discCmp = a.discNumber.compareTo(b.discNumber);
+        if (discCmp != 0) return discCmp;
+        if (a.trackNumber != 0 || b.trackNumber != 0) {
+          return a.trackNumber.compareTo(b.trackNumber);
+        }
+        return a.title.toLowerCase().compareTo(b.title.toLowerCase());
+      });
+    }
     return map.values.toList(growable: false)
       ..sort((a, b) => a.albumArtist.toLowerCase().compareTo(b.albumArtist.toLowerCase()));
   }
 
-  // ---- Playlists (persisted in shared_preferences as JSON) ----------------
   static const _playlistsKey = 'pathephon.playlists.v1';
 
   Future<List<Playlist>> allPlaylists() async {

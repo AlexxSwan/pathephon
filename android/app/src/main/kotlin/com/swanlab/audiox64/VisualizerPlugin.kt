@@ -12,6 +12,7 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/visualizer/events")
     private var visualizer: Visualizer? = null
     private var eventSink: EventSink? = null
+    private var eventCount: Int = 0
 
     init {
         methodChannel.setMethodCallHandler { call, result ->
@@ -45,6 +46,16 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
 
     private fun start(sessionId: Int) {
         stop()
+        // Do NOT fall back to session 0 (global output mix). Session 0
+        // captures ALL audio on the device — system sounds, notifications,
+        // other apps — which makes the VU react to non-music audio.
+        // If we can't attach to the player's own session, VU just stays
+        // at 0 (better silent than wrong).
+        if (sessionId == 0) {
+            Log.w("VisualizerPlugin", "sessionId is 0 — refusing to attach to global mix")
+            throw IllegalArgumentException("sessionId 0 not supported")
+        }
+
         val captureRange = Visualizer.getCaptureSizeRange()
         val captureSize = if (captureRange != null && captureRange.size >= 2) {
             captureRange[0]
@@ -52,26 +63,17 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             128
         }
 
-        val actualSessionId = try {
-            val test = Visualizer(sessionId)
-            test.release()
-            sessionId
-        } catch (e: Exception) {
-            Log.w("VisualizerPlugin", "sessionId $sessionId failed, trying 0: ${e.message}")
-            0
-        }
-
-        val v = Visualizer(actualSessionId)
+        val v = Visualizer(sessionId)
         v.captureSize = captureSize
         v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
             override fun onWaveFormDataCapture(viz: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
                 if (waveform == null || eventSink == null) return
+                eventCount++
+                if (eventCount % 100 == 1) {
+                    Log.i("VisualizerPlugin", "captured event #$eventCount, bytes=${waveform.size}")
+                }
                 val n = waveform.size
                 if (n < 4) return
-                // Waveform bytes: unsigned 0..255, centered at 128.
-                // For typical music, deviation is ~30-60, so RMS ~ 0.25-0.45.
-                // We do NOT multiply by any factor — keep real values so the
-                // VU needle stays in green/yellow zone.
                 val half = n / 2
                 var sumL = 0.0
                 var sumR = 0.0
@@ -83,17 +85,18 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                 }
                 val rmsL = Math.sqrt(sumL / half) / 128.0
                 val rmsR = Math.sqrt(sumR / half) / 128.0
-                // Mild boost (1.5x) to lift needle off zero on quiet passages,
-                // but capped at 0.85 so it never enters red zone (which starts ~0.85).
-                val scaledL = (rmsL * 1.5).coerceIn(0.0, 0.85)
-                val scaledR = (rmsR * 1.5).coerceIn(0.0, 0.85)
+                // Real RMS values for music are typically 0.1-0.4.
+                // Multiply by 1.8 for visible swing, cap at 0.85 (just below
+                // red zone which starts ~0.85).
+                val scaledL = (rmsL * 1.8).coerceIn(0.0, 0.85)
+                val scaledR = (rmsR * 1.8).coerceIn(0.0, 0.85)
                 eventSink?.success(listOf(scaledL, scaledR))
             }
             override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
         }, 20000, true, false)
         v.enabled = true
         visualizer = v
-        Log.i("VisualizerPlugin", "Visualizer started on sessionId=$actualSessionId captureSize=$captureSize")
+        Log.i("VisualizerPlugin", "Visualizer attached to player session $sessionId captureSize=$captureSize")
     }
 
     private fun stop() {
@@ -106,6 +109,7 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             Log.w("VisualizerPlugin", "stop: ${e.message}")
         }
         visualizer = null
+        eventCount = 0
     }
 
     fun dispose() {

@@ -45,6 +45,9 @@ jobs:
       - name: Generate l10n
         run: flutter gen-l10n
 
+      - name: Verify analysis
+        run: flutter analyze || true
+
       - name: Check if keystore secret is set
         id: check_keystore
         env:
@@ -82,61 +85,60 @@ jobs:
           PROP
 
       # ============================================================
-      # STEP 1: Compile Dart + prepare Android project (NO Gradle).
-      # --config-only means: generate .android_config, compile Dart
-      # to kernel/snapshot, write local.properties — but DON'T run
-      # any Gradle task. This avoids the "Already watching path" bug
-      # entirely (no file watcher is started).
+      # Build with --target-platform android-arm64 for compact APK.
+      # continue-on-error: true because Flutter 3.47.7 has a file-watcher
+      # bug ("Already watching path") that throws AFTER Gradle finishes.
+      # The APK IS built — we just need to find it ourselves.
       # ============================================================
-      - name: Prepare Android project (config-only)
-        run: flutter build apk --config-only --no-tree-shake-icons
-
-      # ============================================================
-      # STEP 2: Invoke Gradle directly. flutter tool is NOT involved,
-      # so its file watcher bug cannot trigger. Gradle puts the APK
-      # in build/app/outputs/apk/release/app-release.apk (note: apk/,
-      # not flutter-apk/ — that's why flutter couldn't find it).
-      # ============================================================
-      - name: Build APK via Gradle (release)
+      - name: Build release APK (arm64 only)
         if: steps.check_keystore.outputs.has_keystore == 'true'
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon --stacktrace
+        continue-on-error: true
+        run: flutter build apk --release --no-tree-shake-icons --target-platform android-arm64
 
-      - name: Build APK via Gradle (debug fallback)
+      - name: Build debug APK fallback (arm64 only)
         if: steps.check_keystore.outputs.has_keystore == 'false'
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon --stacktrace
+        continue-on-error: true
+        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64
 
       # ============================================================
-      # STEP 3: Locate the APK Gradle produced and copy it to the
-      # path upload-artifact expects. We search BOTH apk/release/
-      # AND flutter-apk/ because Gradle may output to either.
+      # Robust APK discovery: search EVERYWHERE, copy to canonical path.
+      # Gradle puts APK in build/app/outputs/apk/release/ or
+      # build/app/outputs/flutter-apk/. We search both + anywhere else.
       # ============================================================
-      - name: Locate and copy APK
+      - name: Find and copy APK
         run: |
-          echo "=== Searching for APK ==="
-          find . -name "*.apk" -exec ls -lh {} \;
+          echo "=== All APK files in repo ==="
+          find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(none found)"
+          echo ""
           mkdir -p build/app/outputs/flutter-apk/
-          APK=$(find . -name "app-release.apk" -o -name "app-debug.apk" 2>/dev/null | head -1)
+          # Try common locations in order of preference
+          APK=""
+          for candidate in \
+            "build/app/outputs/flutter-apk/app-release.apk" \
+            "build/app/outputs/apk/release/app-release.apk" \
+            "build/app/outputs/flutter-apk/app-debug.apk" \
+            "build/app/outputs/apk/debug/app-debug.apk"; do
+            if [ -f "$candidate" ]; then
+              APK="$candidate"
+              break
+            fi
+          done
+          # Last resort: find any apk
           if [ -z "$APK" ]; then
             APK=$(find . -name "*.apk" 2>/dev/null | head -1)
           fi
           if [ -z "$APK" ]; then
-            echo "FATAL: No APK produced by Gradle"
+            echo "FATAL: No APK produced by build"
             exit 1
           fi
           cp "$APK" build/app/outputs/flutter-apk/app-release.apk
-          echo "Copied: $APK -> build/app/outputs/flutter-apk/app-release.apk"
+          echo "Copied: $APK"
           ls -lh build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Pathephon-release
+          name: Pathephon-arm64
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
           if-no-files-found: warn

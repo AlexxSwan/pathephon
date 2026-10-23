@@ -1,8 +1,8 @@
 // ============================================================================
 //  visualizer_service.dart - bridge to native Android Visualizer AudioEffect
 //
-//  Adds exponential smoothing (attack/release) so the VU needle swings
-//  naturally without jitter. Real Visualizer values come in 0..0.85 range.
+//  Attaches ONLY to the player's audio session (never session 0 / global mix).
+//  Logs heartbeat every 2s so we can verify events are flowing.
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -28,11 +28,12 @@ class VisualizerService {
   bool _permissionGranted = false;
   bool _permissionRequested = false;
 
-  // Smoothing state — exponential moving average per channel.
   double _smoothedL = 0;
   double _smoothedR = 0;
-  // Smoothing factor: 0.2 = slow attack/release (looks natural on vintage VU).
-  static const _smoothFactor = 0.2;
+  static const _smoothFactor = 0.25;
+
+  int _eventCount = 0;
+  Timer? _heartbeatTimer;
 
   Stream<StereoAmplitude> get amplitudes => _controller.stream;
 
@@ -41,9 +42,16 @@ class VisualizerService {
     if (!_permissionRequested) {
       _permissionRequested = true;
       try {
-        final status = await Permission.microphone.request();
+        var status = await Permission.microphone.status;
+        if (!status.isGranted) {
+          status = await Permission.microphone.request();
+        }
         _permissionGranted = status.isGranted;
-        debugPrint('[pathephon] microphone permission: $status');
+        debugPrint('[pathephon] microphone permission: $status (granted=$_permissionGranted)');
+        if (!_permissionGranted) {
+          debugPrint('[pathephon] microphone denied — VU will stay at 0. '
+              'User can enable in Settings -> Apps -> Pathephon -> Microphone');
+        }
       } catch (e) {
         debugPrint('[pathephon] permission request failed: $e');
         _permissionGranted = false;
@@ -54,7 +62,9 @@ class VisualizerService {
 
   Future<void> attach(int? sessionId) async {
     if (sessionId == null || sessionId == 0) {
-      await detach();
+      // Don't detach if we already have an active session — androidAudioSessionIdStream
+      // can emit 0 transiently. Only detach on explicit null.
+      debugPrint('[pathephon] visualizer: sessionId is null/0, ignoring (waiting for real id)';
       return;
     }
     if (sessionId == _activeSessionId) return;
@@ -66,13 +76,14 @@ class VisualizerService {
     }
 
     _activeSessionId = sessionId;
+    _eventCount = 0;
     try {
       _eventSub ??= _events.receiveBroadcastStream().listen(
         (data) {
           if (data is List && data.length == 2) {
+            _eventCount++;
             final rawL = (data[0] as num).toDouble();
             final rawR = (data[1] as num).toDouble();
-            // Exponential smoothing — natural VU needle behavior.
             _smoothedL += (rawL - _smoothedL) * _smoothFactor;
             _smoothedR += (rawR - _smoothedR) * _smoothFactor;
             _controller.add(StereoAmplitude(_smoothedL, _smoothedR));
@@ -81,7 +92,13 @@ class VisualizerService {
         onError: (e) => debugPrint('[pathephon] visualizer event error: $e'),
       );
       await _method.invokeMethod('start', {'sessionId': sessionId});
-      debugPrint('[pathephon] visualizer attached to session $sessionId');
+      debugPrint('[pathephon] visualizer attached to player session $sessionId');
+
+      // Heartbeat: log every 2s whether events are flowing.
+      _heartbeatTimer?.cancel();
+      _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+        debugPrint('[pathephon] visualizer heartbeat: $_eventCount events received so far');
+      });
     } catch (e) {
       debugPrint('[pathephon] visualizer start failed (non-fatal): $e');
     }
@@ -92,6 +109,8 @@ class VisualizerService {
     _activeSessionId = null;
     _smoothedL = 0;
     _smoothedR = 0;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     try {
       await _method.invokeMethod('stop');
     } catch (e) {
@@ -103,6 +122,8 @@ class VisualizerService {
   void dispose() {
     _eventSub?.cancel();
     _eventSub = null;
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
     _controller.close();
   }
 }

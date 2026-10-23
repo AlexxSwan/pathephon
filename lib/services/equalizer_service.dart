@@ -1,15 +1,9 @@
 // ============================================================================
 //  equalizer_service.dart - 5-band EQ state holder (UI-side)
-//
-//  Stores band gains in SharedPreferences. VisualizerService-style: this is
-//  the source of truth for the UI. Actual audio processing happens via
-//  just_audio's AndroidEqualizer when the player is initialized — see
-//  EqualizerBindingWidget which subscribes to this service and pushes gains
-//  to the live player.
+//  Stores band gains in SharedPreferences. Real audio processing is TODO.
 // ============================================================================
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:shared_preferences/shared_preferences.dart';
 
 const kEqBandCount = 5;
@@ -93,6 +87,7 @@ class AndroidEqualizerService implements EqualizerService {
     await _save();
   }
 
+  @override
   void dispose() {
     _bandsController.close();
     _enabledController.close();

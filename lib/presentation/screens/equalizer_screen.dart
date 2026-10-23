@@ -1,6 +1,7 @@
 // ============================================================================
 //  equalizer_screen.dart - UI for the 5-band Android Equalizer
-//  Uses vertical Sliders for each band, master enable switch, preset dropdown.
+//  State holder only - gains saved to SharedPreferences.
+//  Native EQ application is a TODO (next iteration).
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,34 +10,18 @@ import '../../core/theme/tube_colors.dart';
 import '../providers/providers.dart';
 import '../../services/equalizer_service.dart';
 
-class EqualizerScreen extends ConsumerStatefulWidget {
+class EqualizerScreen extends ConsumerWidget {
   const EqualizerScreen({super.key});
 
-  @override
-  ConsumerState<EqualizerScreen> createState() => _EqualizerScreenState();
-}
-
-class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
-  @override
-  void initState() {
-    super.initState();
-    // Bind EQ to the live player. The playback service exposes _player.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final eq = ref.read(equalizerServiceProvider);
-      final playback = ref.read(playbackServiceProvider);
-      if (playback is JustAudioPlaybackService) {
-        // We need access to the player. Add a getter.
-      }
-    });
-  }
-
   String _freqLabel(double hz) {
-    if (hz >= 1000) return '${(hz / 1000).toStringAsFixed(hz % 1000 == 0 ? 0 : 1)}k';
+    if (hz >= 1000) {
+      return '${(hz / 1000).toStringAsFixed(hz % 1000 == 0 ? 0 : 1)}k';
+    }
     return hz.toStringAsFixed(0);
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final eq = ref.watch(equalizerServiceProvider);
     final bandsAsync = ref.watch(eqBandsProvider);
     final enabledAsync = ref.watch(eqEnabledProvider);
@@ -58,23 +43,27 @@ class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
       ),
       body: Column(
         children: [
-          // Presets
+          // Presets row
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                const Text('\u041F\u0440\u0435\u0441\u0435\u0442: ',
-                    style: TextStyle(color: TubeColors.textSecondary)),
+                const Text(
+                  '\u041F\u0440\u0435\u0441\u0435\u0442: ',
+                  style: TextStyle(color: TubeColors.textSecondary),
+                ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: DropdownButton<EqPreset>(
                     value: EqPreset.flat,
                     dropdownColor: TubeColors.surface,
                     items: EqPreset.all
-                        .map((p) => DropdownMenuItem(
+                        .map((p) => DropdownMenuItem<EqPreset>(
                               value: p,
-                              child: Text(p.name,
-                                  style: const TextStyle(color: TubeColors.textPrimary)),
+                              child: Text(
+                                p.name,
+                                style: const TextStyle(color: TubeColors.textPrimary),
+                              ),
                             ))
                         .toList(),
                     onChanged: (preset) async {
@@ -153,7 +142,7 @@ class _BandSlider extends StatelessWidget {
         const SizedBox(height: 8),
         Expanded(
           child: RotatedBox(
-            quarterTurns: 3, // vertical slider
+            quarterTurns: 3,
             child: Slider(
               value: value.clamp(-15.0, 15.0),
               min: -15,

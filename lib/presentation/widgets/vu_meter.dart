@@ -1,6 +1,6 @@
 // ============================================================================
-//  vu_meter.dart — vintage VU meter widget using VUPainter
-//  Animated via amplitudeStream (50 Hz) and playback state.
+//  vu_meter.dart - vintage VU meter widget using VUPainter
+//  Stereo version: takes leftAmplitude + rightAmplitude directly.
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,33 +8,24 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/vu_painter.dart';
 import '../providers/providers.dart';
 
-class VUMeter extends ConsumerStatefulWidget {
+class VUMeter extends ConsumerWidget {
   const VUMeter({super.key, this.size = 200});
   final double size;
 
   @override
-  ConsumerState<VUMeter> createState() => _VUMeterState();
-}
-
-class _VUMeterState extends ConsumerState<VUMeter> {
-  double _amplitude = 0;
-  double _brightness = 0;
-
-  @override
-  Widget build(BuildContext context) {
-    ref.listen(amplitudeProvider, (_, amp) {
-      if (!amp.hasValue) return;
-      setState(() {
-        _amplitude = amp.value!;
-        // Brightness = exponential smoothing toward target.
-        final target = _amplitude > 0.05 ? 1.0 : 0.0;
-        _brightness += (target - _brightness) * 0.1;
-      });
-    });
+  Widget build(BuildContext context, WidgetRef ref) {
+    final stereo = ref.watch(stereoAmplitudeProvider).valueOrNull;
+    final left = stereo?.left ?? 0.0;
+    final right = stereo?.right ?? 0.0;
+    final brightness = (left > 0.05 || right > 0.05) ? 1.0 : 0.0;
 
     return CustomPaint(
-      size: Size(widget.size, widget.size * 0.7),
-      painter: VUPainter(amplitude: _amplitude, brightness: _brightness),
+      size: Size(size, size * 0.7),
+      painter: VUPainter(
+        leftAmplitude: left,
+        rightAmplitude: right,
+        brightness: brightness,
+      ),
     );
   }
 }

@@ -47,10 +47,9 @@ class VisualizerService {
           status = await Permission.microphone.request();
         }
         _permissionGranted = status.isGranted;
-        debugPrint('[pathephon] microphone permission: $status (granted=$_permissionGranted)');
+        debugPrint('[pathephon] microphone permission: $status granted=$_permissionGranted');
         if (!_permissionGranted) {
-          debugPrint('[pathephon] microphone denied — VU will stay at 0. '
-              'User can enable in Settings -> Apps -> Pathephon -> Microphone');
+          debugPrint('[pathephon] microphone denied - VU will stay at 0');
         }
       } catch (e) {
         debugPrint('[pathephon] permission request failed: $e');
@@ -61,17 +60,16 @@ class VisualizerService {
   }
 
   Future<void> attach(int? sessionId) async {
+    // Ignore null or 0 session ids - wait for the real player session.
     if (sessionId == null || sessionId == 0) {
-      // Don't detach if we already have an active session — androidAudioSessionIdStream
-      // can emit 0 transiently. Only detach on explicit null.
-      debugPrint('[pathephon] visualizer: sessionId is null/0, ignoring (waiting for real id)';
+      debugPrint('[pathephon] visualizer: sessionId null or 0, waiting for real id');
       return;
     }
     if (sessionId == _activeSessionId) return;
 
     final granted = await _ensurePermission();
     if (!granted) {
-      debugPrint('[pathephon] visualizer: microphone permission denied, no VU data');
+      debugPrint('[pathephon] visualizer: microphone permission denied');
       return;
     }
 
@@ -94,10 +92,9 @@ class VisualizerService {
       await _method.invokeMethod('start', {'sessionId': sessionId});
       debugPrint('[pathephon] visualizer attached to player session $sessionId');
 
-      // Heartbeat: log every 2s whether events are flowing.
       _heartbeatTimer?.cancel();
       _heartbeatTimer = Timer.periodic(const Duration(seconds: 2), (_) {
-        debugPrint('[pathephon] visualizer heartbeat: $_eventCount events received so far');
+        debugPrint('[pathephon] visualizer heartbeat: $_eventCount events so far');
       });
     } catch (e) {
       debugPrint('[pathephon] visualizer start failed (non-fatal): $e');

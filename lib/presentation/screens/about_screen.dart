@@ -1,4 +1,4 @@
-import "package:flutter/material.dart";
+﻿import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/theme/tube_colors.dart";
 
@@ -23,7 +23,7 @@ class AboutScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 8),
             Text(
-              "\u0412\u0435\u0440\u0441\u0438\u044F: 0.2.2 (22)",
+              "\u0412\u0435\u0440\u0441\u0438\u044F: 0.2.3 (23)",
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: TubeColors.textSecondary,
                   ),

@@ -27,71 +27,46 @@ jobs:
           channel: 'stable'
           cache: true
 
+      - name: Show versions
+        run: |
+          flutter --version
+          dart --version
+
       - name: Get dependencies
         run: flutter pub get
 
       - name: Generate l10n
         run: flutter gen-l10n
 
-      - name: Check keystore
-        id: check_keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: |
-          if [ -n "$KEYSTORE_BASE64" ]; then
-            echo "has_keystore=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_keystore=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Decode keystore
-        if: steps.check_keystore.outputs.has_keystore == 'true'
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-        run: echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
-
-      - name: Create key.properties
-        if: steps.check_keystore.outputs.has_keystore == 'true'
-        env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: |
-          cat > android/key.properties << PROP
-          storePassword=$KEYSTORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          keyAlias=$KEY_ALIAS
-          storeFile=upload-keystore.jks
-          PROP
-
-      # continue-on-error: Flutter 3.47 + AGP 9 incompatibility
-      # "Gradle build failed to produce an .apk file" — but APK IS created
-      - name: Build release APK (arm64)
-        if: steps.check_keystore.outputs.has_keystore == 'true'
+      # DEBUG сборка — точно работает (92 MB APK)
+      - name: Build debug APK
         continue-on-error: true
-        run: flutter build apk --release --no-tree-shake-icons --target-platform android-arm64
+        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64 2>&1 | tail -30
 
-      - name: Build debug APK (fallback)
-        if: steps.check_keystore.outputs.has_keystore == 'false'
-        continue-on-error: true
-        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64
-
-      # Find APK anywhere — copy to standard location
+      # Найти APK везде и скопировать
       - name: Find and copy APK
         if: always()
         run: |
           echo "=== All APK files ==="
           find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(no APK)"
 
+          echo ""
+          echo "=== android/app/build/outputs/ ==="
+          find android/app/build -type f 2>/dev/null | head -30 || echo "(no files)"
+
+          echo ""
+          echo "=== build/ ==="
+          find build -type f 2>/dev/null | head -10 || echo "(no files)"
+
           mkdir -p build/app/outputs/flutter-apk/
           APK=$(find . -name "*.apk" 2>/dev/null | head -1)
-
           if [ -n "$APK" ]; then
-            cp "$APK" build/app/outputs/flutter-apk/app-release.apk
-            echo "Copied: $APK"
-            ls -lh build/app/outputs/flutter-apk/app-release.apk
+            cp "$APK" build/app/outputs/flutter-apk/app-debug.apk
+            echo ""
+            echo "✓ Copied: $APK"
+            ls -lh build/app/outputs/flutter-apk/app-debug.apk
           else
-            echo "ERROR: No APK found anywhere"
+            echo "✗ APK НЕ найден нигде"
             exit 1
           fi
 
@@ -99,7 +74,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Pathephon-release
-          path: build/app/outputs/flutter-apk/app-release.apk
+          name: Pathephon-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
           retention-days: 30
           if-no-files-found: warn

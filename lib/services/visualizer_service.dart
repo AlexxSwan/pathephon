@@ -1,9 +1,8 @@
 // ============================================================================
 //  visualizer_service.dart - bridge to native Android Visualizer AudioEffect
 //
-//  Requests microphone permission (required on Android 14+ for Visualizer,
-//  even though we don't actually record anything - it's a side effect of
-//  audio capture API). Streams stereo RMS amplitudes.
+//  Adds exponential smoothing (attack/release) so the VU needle swings
+//  naturally without jitter. Real Visualizer values come in 0..0.85 range.
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -29,6 +28,12 @@ class VisualizerService {
   bool _permissionGranted = false;
   bool _permissionRequested = false;
 
+  // Smoothing state — exponential moving average per channel.
+  double _smoothedL = 0;
+  double _smoothedR = 0;
+  // Smoothing factor: 0.2 = slow attack/release (looks natural on vintage VU).
+  static const _smoothFactor = 0.2;
+
   Stream<StereoAmplitude> get amplitudes => _controller.stream;
 
   Future<bool> _ensurePermission() async {
@@ -36,8 +41,6 @@ class VisualizerService {
     if (!_permissionRequested) {
       _permissionRequested = true;
       try {
-        // Permission.microphone maps to RECORD_AUDIO on Android.
-        // (permission_handler 11.x does not have a recordAudio alias.)
         final status = await Permission.microphone.request();
         _permissionGranted = status.isGranted;
         debugPrint('[pathephon] microphone permission: $status');
@@ -67,9 +70,12 @@ class VisualizerService {
       _eventSub ??= _events.receiveBroadcastStream().listen(
         (data) {
           if (data is List && data.length == 2) {
-            final l = (data[0] as num).toDouble();
-            final r = (data[1] as num).toDouble();
-            _controller.add(StereoAmplitude(l, r));
+            final rawL = (data[0] as num).toDouble();
+            final rawR = (data[1] as num).toDouble();
+            // Exponential smoothing — natural VU needle behavior.
+            _smoothedL += (rawL - _smoothedL) * _smoothFactor;
+            _smoothedR += (rawR - _smoothedR) * _smoothFactor;
+            _controller.add(StereoAmplitude(_smoothedL, _smoothedR));
           }
         },
         onError: (e) => debugPrint('[pathephon] visualizer event error: $e'),
@@ -84,6 +90,8 @@ class VisualizerService {
   Future<void> detach() async {
     if (_activeSessionId == null) return;
     _activeSessionId = null;
+    _smoothedL = 0;
+    _smoothedR = 0;
     try {
       await _method.invokeMethod('stop');
     } catch (e) {

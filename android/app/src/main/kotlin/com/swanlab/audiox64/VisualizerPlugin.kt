@@ -30,9 +30,6 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                     stop()
                     result.success(null)
                 }
-                "isActive" -> {
-                    result.success(visualizer?.enabled == true)
-                }
                 else -> result.notImplemented()
             }
         }
@@ -55,9 +52,6 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             128
         }
 
-        // Try the given session id first; if it fails, fall back to 0 (output mix).
-        // sessionId=0 means "global output mix" - works for any audio output but
-        // requires RECORD_AUDIO permission on Android 14+.
         val actualSessionId = try {
             val test = Visualizer(sessionId)
             test.release()
@@ -74,10 +68,10 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                 if (waveform == null || eventSink == null) return
                 val n = waveform.size
                 if (n < 4) return
-                // Android Visualizer returns MONO mix (not real stereo).
-                // Splitting the array in half gives a synthetic L/R approximation
-                // that visually differentiates channels when content has stereo
-                // panning. RMS of each half, normalized to 0..1.
+                // Waveform bytes: unsigned 0..255, centered at 128.
+                // For typical music, deviation is ~30-60, so RMS ~ 0.25-0.45.
+                // We do NOT multiply by any factor — keep real values so the
+                // VU needle stays in green/yellow zone.
                 val half = n / 2
                 var sumL = 0.0
                 var sumR = 0.0
@@ -89,9 +83,10 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                 }
                 val rmsL = Math.sqrt(sumL / half) / 128.0
                 val rmsR = Math.sqrt(sumR / half) / 128.0
-                // Boost: typical RMS for music is ~0.1-0.3; multiply by 3 for visible swing.
-                val scaledL = (rmsL * 3.0).coerceIn(0.0, 1.0)
-                val scaledR = (rmsR * 3.0).coerceIn(0.0, 1.0)
+                // Mild boost (1.5x) to lift needle off zero on quiet passages,
+                // but capped at 0.85 so it never enters red zone (which starts ~0.85).
+                val scaledL = (rmsL * 1.5).coerceIn(0.0, 0.85)
+                val scaledR = (rmsR * 1.5).coerceIn(0.0, 0.85)
                 eventSink?.success(listOf(scaledL, scaledR))
             }
             override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {}

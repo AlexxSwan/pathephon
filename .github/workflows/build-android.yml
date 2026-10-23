@@ -45,6 +45,12 @@ jobs:
       - name: Generate l10n
         run: flutter gen-l10n
 
+      # ============================================================
+      # Run flutter analyze BEFORE build - shows real Dart errors.
+      # ============================================================
+      - name: Analyze Dart code (verbose)
+        run: flutter analyze --no-pub
+
       - name: Check if keystore secret is set
         id: check_keystore
         env:
@@ -82,44 +88,29 @@ jobs:
           PROP
 
       # ============================================================
-      # STEP 1: Compile Dart + prepare Android project (config-only).
-      # Does NOT run Gradle. Avoids the "Already watching path" bug.
+      # Run build with -v (verbose) to capture the REAL Dart error.
+      # Don't use --config-only — we want the full error output.
       # ============================================================
-      - name: Prepare Android project
-        run: flutter build apk --config-only --no-tree-shake-icons
-
-      # ============================================================
-      # STEP 2: Run Gradle directly. Flutter tool is NOT involved.
-      # Gradle outputs APK to build/app/outputs/apk/release/.
-      # ============================================================
-      - name: Build APK via Gradle (release)
+      - name: Build release APK (verbose, fail-fast)
         if: steps.check_keystore.outputs.has_keystore == 'true'
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+        run: flutter build apk --release --no-tree-shake-icons --target-platform android-arm64 -v
 
-      - name: Build APK via Gradle (debug fallback)
+      - name: Build debug APK fallback
         if: steps.check_keystore.outputs.has_keystore == 'false'
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon
+        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64 -v
 
-      # ============================================================
-      # STEP 3: Find APK + copy to expected path.
-      # Gradle puts APK in apk/release/ (NOT flutter-apk/).
-      # ============================================================
       - name: Find and copy APK
+        if: always()
         run: |
           echo "=== All APK files ==="
-          find . -name "*.apk" -exec ls -lh {} \;
+          find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(none)"
           mkdir -p build/app/outputs/flutter-apk/
           APK=""
           for candidate in \
             "build/app/outputs/apk/release/app-release.apk" \
             "build/app/outputs/apk/debug/app-debug.apk" \
-            "build/app/outputs/flutter-apk/app-release.apk"; do
+            "build/app/outputs/flutter-apk/app-release.apk" \
+            "build/app/outputs/flutter-apk/app-debug.apk"; do
             if [ -f "$candidate" ]; then
               APK="$candidate"
               break
@@ -128,15 +119,15 @@ jobs:
           if [ -z "$APK" ]; then
             APK=$(find . -name "*.apk" 2>/dev/null | head -1)
           fi
-          if [ -z "$APK" ]; then
-            echo "FATAL: No APK produced"
-            exit 1
+          if [ -n "$APK" ]; then
+            cp "$APK" build/app/outputs/flutter-apk/app-release.apk
+            echo "Copied: $APK"
+          else
+            echo "No APK found (build likely failed - check logs above)"
           fi
-          cp "$APK" build/app/outputs/flutter-apk/app-release.apk
-          echo "Copied: $APK"
-          ls -lh build/app/outputs/flutter-apk/app-release.apk
 
       - name: Upload APK artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Pathephon-arm64

@@ -16,9 +16,9 @@ dependencies:
   # State management
   flutter_riverpod: ^2.5.1
 
-  # Audio engine Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р Р‹Р РЋРЎв„ў just_audio is the most stable Flutter audio package.
+  # Audio engine — just_audio is the most stable Flutter audio package.
   # audio_service bridges to Android MediaSession (lockscreen / Bluetooth).
-  # On Android, just_audio uses ExoPlayer under the hood Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р Р‹Р РЋРЎв„ў gets native
+  # On Android, just_audio uses ExoPlayer under the hood — gets native
   # FLAC/Opus/MP3/AAC/WAV/OGG/ALAC for free via MediaExtractor.
   just_audio: ^0.9.39
   audio_service: ^0.18.15
@@ -28,7 +28,7 @@ dependencies:
   on_audio_query: ^2.9.0
   permission_handler: ^11.3.1
 
-  # Persistence (lightweight Р В Р’В Р вЂ™Р’В Р В Р’В Р Р†Р вЂљР’В Р В Р’В Р вЂ™Р’В Р В Р вЂ Р В РІР‚С™Р РЋРІвЂћСћР В Р’В Р В РІР‚В Р В Р’В Р Р†Р вЂљРЎв„ўР В Р Р‹Р РЋРЎв„ў no SQLite ORM needed for MVP)
+  # Persistence (lightweight — no SQLite ORM needed for MVP)
   shared_preferences: ^2.3.2
   path_provider: ^2.1.4
 

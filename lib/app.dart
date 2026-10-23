@@ -1,4 +1,10 @@
-﻿import "package:flutter/material.dart";
+// ============================================================================
+//  app.dart — root widget
+//  - IndexedStack keeps state of all 4 tabs alive (no rebuild on switch).
+//  - Now Playing is the FIRST tab (no nav transition needed from library).
+//  - All Cyrillic in source uses \uXXXX escapes so PowerShell never mangles it.
+// ============================================================================
+import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
 import "package:shared_preferences/shared_preferences.dart";
@@ -7,7 +13,6 @@ import "package:flutter_localizations/flutter_localizations.dart";
 import "core/l10n/generated/app_localizations.dart";
 import "core/theme/retro_theme.dart";
 import "presentation/screens/audiobooks_screen.dart";
-import "presentation/screens/equalizer_screen.dart";
 import "presentation/screens/library_screen.dart";
 import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
@@ -16,11 +21,12 @@ final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 
 class AudioPlayerX64App extends ConsumerWidget {
   const AudioPlayerX64App({super.key});
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     return MaterialApp(
-      title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D",
+      title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D", // Патефон
       debugShowCheckedModeBanner: false,
       theme: RetroTheme.dark,
       locale: locale,
@@ -55,6 +61,8 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _index = 0;
 
+  // IndexedStack: all children stay mounted, state preserved across switches.
+  // Order: NowPlaying (1st, no nav needed) → Library → Audiobooks → About.
   final _screens = const <Widget>[
     NowPlayingScreen(),
     LibraryScreen(),
@@ -75,9 +83,9 @@ class _ShellState extends State<_Shell> {
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: [
           NavigationDestination(
-            icon: const Icon(Icons.play_circle_outline),
-            selectedIcon: const Icon(Icons.play_circle),
-            label: l.nowPlayingTitle,
+            icon: const Icon(Icons.graphic_eq_outlined),
+            selectedIcon: const Icon(Icons.graphic_eq),
+            label: l.navNowPlaying,
           ),
           NavigationDestination(
             icon: const Icon(Icons.library_music_outlined),
@@ -92,6 +100,7 @@ class _ShellState extends State<_Shell> {
           NavigationDestination(
             icon: const Icon(Icons.info_outline),
             selectedIcon: const Icon(Icons.info),
+            // "О программе"
             label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
           ),
         ],

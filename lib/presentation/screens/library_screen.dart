@@ -1,4 +1,4 @@
-﻿import "package:flutter/material.dart";
+import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/l10n/generated/app_localizations.dart";
@@ -106,8 +106,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     index: i,
                     onTap: () {
                       playback.playQueue(tracks: tracks, startIndex: i);
+                      // Flip isPlaying instantly — user manually switches to
+                      // the Now Playing tab (no Navigator push, this is a tab).
                       ref.read(isPlayingProvider.notifier).state = true;
-                      // Switch to Now Playing tab is handled by bottom nav
                     },
                   );
                 },
@@ -152,8 +153,8 @@ class _AlbumGrid extends ConsumerWidget {
             onTap: () {
               if (a.tracks.isEmpty) return;
               playback.playQueue(tracks: a.tracks, startIndex: 0);
+              // Flip isPlaying instantly — user switches to Now Playing tab.
               ref.read(isPlayingProvider.notifier).state = true;
-              // Switch to Now Playing tab is handled by bottom nav
             },
             child: Padding(
               padding: const EdgeInsets.all(10),

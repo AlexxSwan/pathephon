@@ -1,5 +1,5 @@
-﻿// ============================================================================
-//  providers.dart вЂ” central Riverpod wiring (single file for MVP clarity)
+// ============================================================================
+//  providers.dart — central Riverpod wiring (single file for MVP clarity)
 // ============================================================================
 import 'dart:io' show Directory;
 
@@ -136,6 +136,11 @@ final replayGainModeProvider = StateProvider<ReplayGainMode>((ref) {
   return ReplayGainMode.off;
 });
 
+// ---- isPlaying (instant toggle, syncs with snapshot) --------------------
+// Used by library tiles / album grid to flip the play state immediately
+// without waiting for the playback snapshot stream to debounce.
+final isPlayingProvider = StateProvider<bool>((ref) => false);
+
 // ---- Repeat / shuffle (UI mirrors snapshot) -----------------------------
 final repeatModeProvider = StateProvider<RepeatMode>((ref) => RepeatMode.off);
 final shuffleProvider = StateProvider<bool>((ref) => false);
@@ -176,6 +181,3 @@ class AudiobooksNotifier extends StateNotifier<AsyncValue<List<Audiobook>>> {
 final sleepRemainingProvider = StreamProvider<Duration?>((ref) {
   return ref.watch(audioBookServiceProvider).sleepRemaining;
 });
-
-// Manual play/pause state (bypasses stream timing issues)
-final isPlayingProvider = StateProvider<bool>((ref) => false);

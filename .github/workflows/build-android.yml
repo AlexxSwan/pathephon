@@ -28,9 +28,7 @@ jobs:
           cache: true
 
       - name: Show versions
-        run: |
-          flutter --version
-          dart --version
+        run: flutter --version
 
       - name: Get dependencies
         run: flutter pub get
@@ -38,43 +36,21 @@ jobs:
       - name: Generate l10n
         run: flutter gen-l10n
 
-      # DEBUG сборка — точно работает (92 MB APK)
-      - name: Build debug APK
-        continue-on-error: true
-        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64 2>&1 | tail -30
+      # БЕЗ continue-on-error — увидим реальную ошибку
+      - name: Build debug APK (FULL LOG)
+        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64 --verbose 2>&1 | tee build.log
 
-      # Найти APK везде и скопировать
-      - name: Find and copy APK
-        if: always()
-        run: |
-          echo "=== All APK files ==="
-          find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(no APK)"
-
-          echo ""
-          echo "=== android/app/build/outputs/ ==="
-          find android/app/build -type f 2>/dev/null | head -30 || echo "(no files)"
-
-          echo ""
-          echo "=== build/ ==="
-          find build -type f 2>/dev/null | head -10 || echo "(no files)"
-
-          mkdir -p build/app/outputs/flutter-apk/
-          APK=$(find . -name "*.apk" 2>/dev/null | head -1)
-          if [ -n "$APK" ]; then
-            cp "$APK" build/app/outputs/flutter-apk/app-debug.apk
-            echo ""
-            echo "✓ Copied: $APK"
-            ls -lh build/app/outputs/flutter-apk/app-debug.apk
-          else
-            echo "✗ APK НЕ найден нигде"
-            exit 1
-          fi
-
-      - name: Upload APK
+      - name: Upload build log
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Pathephon-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
-          retention-days: 30
+          name: build-log
+          path: build.log
+          retention-days: 7
           if-no-files-found: warn
+
+      - name: Find APK
+        if: always()
+        run: |
+          find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(no APK)"
+          find android/app/build -type f 2>/dev/null | head -20 || echo "(no files in android/app/build)"

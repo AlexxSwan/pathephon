@@ -27,30 +27,36 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Show versions
-        run: flutter --version
-
       - name: Get dependencies
         run: flutter pub get
 
       - name: Generate l10n
         run: flutter gen-l10n
 
-      # БЕЗ continue-on-error — увидим реальную ошибку
-      - name: Build debug APK (FULL LOG)
-        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64 --verbose 2>&1 | tee build.log
+      # BUILD SUCCESSFUL but Flutter 3.47 doesn't find APK (AGP 9 incompatibility)
+      - name: Build debug APK
+        continue-on-error: true
+        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64
 
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-log
-          path: build.log
-          retention-days: 7
-          if-no-files-found: warn
-
-      - name: Find APK
+      - name: Find and copy APK
         if: always()
         run: |
           find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(no APK)"
-          find android/app/build -type f 2>/dev/null | head -20 || echo "(no files in android/app/build)"
+          mkdir -p build/app/outputs/flutter-apk/
+          APK=$(find . -name "*.apk" 2>/dev/null | head -1)
+          if [ -n "$APK" ]; then
+            cp "$APK" build/app/outputs/flutter-apk/app-debug.apk
+            echo "Copied: $APK"
+          else
+            echo "ERROR: No APK found"
+            exit 1
+          fi
+
+      - name: Upload APK
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pathephon-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30
+          if-no-files-found: warn

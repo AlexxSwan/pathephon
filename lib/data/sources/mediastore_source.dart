@@ -1,10 +1,9 @@
 // ============================================================================
 //  mediastore_source.dart - Android MediaStore-backed audio discovery
 //
-//  IMPORTANT: on_audio_query's MediaStore only sees EMBEDDED art (ID3/Vorbis
-//  tags). Many users keep cover.jpg/folder.jpg/album.jpg next to audio files
-//  instead of embedding. We scan the track's directory for these files and
-//  set track.artUri to the cover file URL if found.
+//  Scans track directories for cover.jpg/folder.jpg/album.jpg when the track
+//  has no embedded art. All directory scans are wrapped in try-catch so a
+//  permission/IO error on one folder never breaks the whole library scan.
 // ============================================================================
 import 'dart:io';
 
@@ -19,34 +18,29 @@ class MediaStoreSource {
 
   final OnAudioQuery _query;
 
-  /// Common cover-art filenames (lowercase, no extension).
-  /// Searched in order — first match wins.
-  static const _coverFileNames = [
-    'cover', 'folder', 'album', 'front',
-    'albumart', 'coverart', 'art',
-    'cover.jpg', 'cover.jpeg', 'cover.png',
-  ];
-
-  /// Extensions to try for each cover filename.
-  static const _coverExtensions = ['jpg', 'jpeg', 'png', 'webp'];
-
   /// Look in [trackDir] for a cover image. Returns file:// URI or null.
+  /// NEVER throws - all errors are caught and return null.
   static String? _findCoverInDir(String trackDir) {
     if (trackDir.isEmpty) return null;
-    final dir = Directory(trackDir);
     try {
+      final dir = Directory(trackDir);
       if (!dir.existsSync()) return null;
       final entities = dir.listSync(recursive: false, followLinks: false);
-      // Build a set of lowercase filenames (without path) for fast lookup.
       final byName = <String, String>{};
       for (final e in entities) {
         if (e is! File) continue;
-        final name = e.uri.pathSegments.last.toLowerCase();
-        byName[name] = e.path;
+        try {
+          final name = e.uri.pathSegments.last.toLowerCase();
+          byName[name] = e.path;
+        } catch (_) {
+          continue;
+        }
       }
-      // 1. Try each base name with each extension
-      for (final base in _coverFileNames) {
-        for (final ext in _coverExtensions) {
+      // 1. Try standard names
+      const bases = ['cover', 'folder', 'album', 'front', 'albumart', 'coverart', 'art'];
+      const exts = ['jpg', 'jpeg', 'png', 'webp'];
+      for (final base in bases) {
+        for (final ext in exts) {
           final fname = '$base.$ext';
           final path = byName[fname];
           if (path != null) {
@@ -54,17 +48,20 @@ class MediaStoreSource {
           }
         }
       }
-      // 2. Try files that START with "cover" / "folder" / "album" / "front"
+      // 2. Try files starting with "cover" / "folder" / "album" / "front"
       for (final name in byName.keys) {
-        for (final base in ['cover', 'folder', 'album', 'front']) {
-          if (name.startsWith(base) && _hasImageExt(name)) {
-            return Uri.file(byName[name]!).toString();
-          }
+        if ((name.startsWith('cover') ||
+             name.startsWith('folder') ||
+             name.startsWith('album') ||
+             name.startsWith('front')) && _hasImageExt(name)) {
+          return Uri.file(byName[name]!).toString();
         }
       }
-      // 3. Last resort: any image file in the directory
+      // 3. Last resort: any image file (except artist.*/back.*)
       for (final name in byName.keys) {
-        if (_hasImageExt(name) && !name.contains('artist') && !name.contains('back')) {
+        if (_hasImageExt(name) &&
+            !name.startsWith('artist') &&
+            !name.startsWith('back')) {
           return Uri.file(byName[name]!).toString();
         }
       }
@@ -78,10 +75,9 @@ class MediaStoreSource {
     final dot = name.lastIndexOf('.');
     if (dot < 0) return false;
     final ext = name.substring(dot + 1);
-    return _coverExtensions.contains(ext);
+    return const ['jpg', 'jpeg', 'png', 'webp'].contains(ext);
   }
 
-  /// Get the directory part of a file path.
   static String _dirOf(String path) {
     final slash = path.lastIndexOf('/');
     if (slash < 0) return '';
@@ -99,24 +95,31 @@ class MediaStoreSource {
       orderType: OrderType.DESC_OR_GREATER,
     );
 
-    final tracks = songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList();
-    // For each track without an artUri, try to find cover.jpg/folder.jpg/etc
-    // in the same directory. Cache per-directory to avoid re-scanning.
+    // Map each song to a Track, then enrich with cover art from folder.
+    // Build a NEW list (no in-place mutation) - safer.
     final dirCoverCache = <String, String?>{};
-    for (final t in tracks) {
-      if (t.artUri.isNotEmpty) continue;
-      final dir = _dirOf(t.filePath);
-      if (dir.isEmpty) continue;
-      final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
-      if (cover != null) {
-        // Mutate via copyWith - Track is immutable
-        // We need a mutable approach: build a new Track with artUri set.
-        // Since tracks is List<Track> (mutable), we can replace.
-        final idx = tracks.indexOf(t);
-        tracks[idx] = t.copyWith(artUri: cover);
+    final tracks = <Track>[];
+    for (final s in songs) {
+      if (!_isSupportedFormat(s)) continue;
+      try {
+        var t = TagSource.fromSongModel(s);
+        if (t.artUri.isEmpty) {
+          final dir = _dirOf(t.filePath);
+          if (dir.isNotEmpty) {
+            // putIfAbsent caches per-directory so we only scan once per folder
+            final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
+            if (cover != null) {
+              t = t.copyWith(artUri: cover);
+            }
+          }
+        }
+        tracks.add(t);
+      } catch (_) {
+        // Skip individual bad tracks instead of failing the whole scan
+        continue;
       }
     }
-    return tracks.toList(growable: false);
+    return tracks;
   }
 
   OnAudioQuery get query => _query;
@@ -138,76 +141,74 @@ class MediaStoreSource {
     );
     if (result == null || result.isEmpty) return const <Track>[];
 
-    final tracks = result.map((f) {
-      final path = f.path ?? '';
-      if (path.isEmpty) return null;
-      final ext = path.toLowerCase().split('.').last;
-      final uri = Uri.file(path).toString();
-      return Track(
-        id: uri,
-        uri: uri,
-        title: f.name,
-        fileExtension: ext,
-        filePath: path,
-      );
-    }).whereType<Track>().toList(growable: false);
-
-    // Look for cover art in each track's directory
-    return _enrichWithCoverArt(tracks);
+    final dirCoverCache = <String, String?>{};
+    final tracks = <Track>[];
+    for (final f in result) {
+      try {
+        final path = f.path ?? '';
+        if (path.isEmpty) continue;
+        final ext = path.toLowerCase().split('.').last;
+        final uri = Uri.file(path).toString();
+        var artUri = '';
+        final dir = _dirOf(path);
+        if (dir.isNotEmpty) {
+          final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
+          if (cover != null) artUri = cover;
+        }
+        tracks.add(Track(
+          id: uri,
+          uri: uri,
+          title: f.name,
+          fileExtension: ext,
+          filePath: path,
+          artUri: artUri,
+        ));
+      } catch (_) {
+        continue;
+      }
+    }
+    return tracks;
   }
 
   Future<List<Track>> pickDirectory() async {
     final dirPath = await FilePicker.getDirectoryPath();
     if (dirPath == null) return const <Track>[];
 
-    final dir = Directory(dirPath);
-    if (!await dir.exists()) return const <Track>[];
+    try {
+      final dir = Directory(dirPath);
+      if (!await dir.exists()) return const <Track>[];
 
-    final tracks = <Track>[];
-    final entities = dir.listSync(recursive: false, followLinks: false);
-    entities.sort((a, b) => a.path.compareTo(b.path));
-    // Find cover art for the picked directory ONCE
-    final dirCover = _findCoverInDir(dirPath);
-    for (final e in entities) {
-      if (e is! File) continue;
-      final path = e.path;
-      final dot = path.lastIndexOf('.');
-      if (dot < 0) continue;
-      final ext = path.substring(dot + 1).toLowerCase();
-      if (!_supportedExtensions.contains(ext)) continue;
-      final name = e.uri.pathSegments.last;
-      final uri = Uri.file(path).toString();
-      tracks.add(Track(
-        id: uri,
-        uri: uri,
-        title: Uri.decodeComponent(name),
-        fileExtension: ext,
-        filePath: path,
-        artUri: dirCover ?? '',
-      ));
-    }
-    return tracks;
-  }
-
-  /// For each track in the list, find cover art in its directory.
-  /// Caches per-directory to avoid repeated scans.
-  List<Track> _enrichWithCoverArt(List<Track> tracks) {
-    final dirCoverCache = <String, String?>{};
-    final result = <Track>[];
-    for (final t in tracks) {
-      if (t.artUri.isNotEmpty) {
-        result.add(t);
-        continue;
+      // Find cover art for the picked directory ONCE
+      final dirCover = _findCoverInDir(dirPath);
+      final tracks = <Track>[];
+      final entities = dir.listSync(recursive: false, followLinks: false);
+      entities.sort((a, b) => a.path.compareTo(b.path));
+      for (final e in entities) {
+        if (e is! File) continue;
+        try {
+          final path = e.path;
+          final dot = path.lastIndexOf('.');
+          if (dot < 0) continue;
+          final ext = path.substring(dot + 1).toLowerCase();
+          if (!_supportedExtensions.contains(ext)) continue;
+          final name = e.uri.pathSegments.last;
+          final uri = Uri.file(path).toString();
+          tracks.add(Track(
+            id: uri,
+            uri: uri,
+            title: Uri.decodeComponent(name),
+            fileExtension: ext,
+            filePath: path,
+            artUri: dirCover ?? '',
+          ));
+        } catch (_) {
+          continue;
+        }
       }
-      final dir = _dirOf(t.filePath);
-      if (dir.isEmpty) {
-        result.add(t);
-        continue;
-      }
-      final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
-      result.add(cover == null ? t : t.copyWith(artUri: cover));
+      return tracks;
+    } catch (_) {
+      return const <Track>[];
     }
-    return result;
   }
 
   static const _supportedExtensions = {

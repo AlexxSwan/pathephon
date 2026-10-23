@@ -1,5 +1,5 @@
 // ============================================================================
-//  providers.dart - central Riverpod wiring (single file for MVP clarity)
+//  providers.dart - central Riverpod wiring
 // ============================================================================
 import 'dart:io' show Directory;
 
@@ -21,12 +21,10 @@ import '../../services/equalizer_service.dart';
 import '../../services/playback_service.dart';
 import '../../services/visualizer_service.dart';
 
-// ---- SharedPreferences ---------------------------------------------------
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('sharedPreferencesProvider must be overridden in main()');
 });
 
-// ---- Singletons ----------------------------------------------------------
 final mediaStoreSourceProvider = Provider<MediaStoreSource>((ref) {
   return MediaStoreSource(OnAudioQuery());
 });
@@ -51,26 +49,22 @@ final audiobookRepositoryProvider = Provider<AudiobookRepository>((ref) {
   return AudiobookRepository(prefs);
 });
 
-// ---- Playback service ----------------------------------------------------
 final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final svc = JustAudioPlaybackService();
   ref.onDispose(svc.dispose);
   return svc;
 });
 
-// ---- Visualizer service (single instance) -------------------------------
 final visualizerServiceProvider = Provider<VisualizerService>((ref) {
   final svc = VisualizerService();
   ref.onDispose(svc.dispose);
   return svc;
 });
 
-// ---- Stereo amplitude stream (L, R) from real Visualizer -----------------
 final stereoAmplitudeProvider = StreamProvider<StereoAmplitude>((ref) {
   return ref.watch(visualizerServiceProvider).amplitudes;
 });
 
-// ---- EQ service ----------------------------------------------------------
 final equalizerServiceProvider = Provider<EqualizerService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   final svc = AndroidEqualizerService(prefs);
@@ -78,7 +72,6 @@ final equalizerServiceProvider = Provider<EqualizerService>((ref) {
   return svc;
 });
 
-// ---- Audio book service --------------------------------------------------
 final audioBookServiceProvider = Provider<AudioBookService>((ref) {
   final svc = AudioBookService(
     playback: ref.watch(playbackServiceProvider),
@@ -88,7 +81,6 @@ final audioBookServiceProvider = Provider<AudioBookService>((ref) {
   return svc;
 });
 
-// ---- Library state -------------------------------------------------------
 final libraryStateProvider =
     StateNotifierProvider<LibraryNotifier, AsyncValue<List<Track>>>((ref) {
   return LibraryNotifier(ref.watch(libraryRepositoryProvider));
@@ -114,13 +106,11 @@ class LibraryNotifier extends StateNotifier<AsyncValue<List<Track>>> {
   }
 }
 
-// Group derived state
 final albumsProvider = Provider<List<Album>>((ref) {
   final tracks = ref.watch(libraryStateProvider).valueOrNull ?? const <Track>[];
   return ref.watch(libraryRepositoryProvider).groupAlbums(tracks);
 });
 
-// ---- Playback snapshot ---------------------------------------------------
 final playbackSnapshotProvider = StreamProvider<PlaybackSnapshot>((ref) {
   return ref.watch(playbackServiceProvider).state;
 });
@@ -129,12 +119,10 @@ final playbackPositionProvider = StreamProvider<Duration>((ref) {
   return ref.watch(playbackServiceProvider).positionStream;
 });
 
-// Keep amplitudeProvider for backward compat (returns L channel amplitude).
 final amplitudeProvider = StreamProvider<double>((ref) {
   return ref.watch(playbackServiceProvider).amplitudeStream;
 });
 
-// ---- EQ state ------------------------------------------------------------
 final eqBandsProvider = StreamProvider<List<double>>((ref) {
   return ref.watch(equalizerServiceProvider).bandsStream;
 });
@@ -143,19 +131,15 @@ final eqEnabledProvider = StreamProvider<bool>((ref) {
   return ref.watch(equalizerServiceProvider).enabledStream;
 });
 
-// ---- ReplayGain mode (UI toggle) ----------------------------------------
 final replayGainModeProvider = StateProvider<ReplayGainMode>((ref) {
   return ReplayGainMode.off;
 });
 
-// ---- isPlaying (instant toggle) -----------------------------------------
 final isPlayingProvider = StateProvider<bool>((ref) => false);
 
-// ---- Repeat / shuffle (UI mirrors snapshot) -----------------------------
 final repeatModeProvider = StateProvider<RepeatMode>((ref) => RepeatMode.off);
 final shuffleProvider = StateProvider<bool>((ref) => false);
 
-// ---- Audiobooks state ---------------------------------------------------
 final audiobooksStateProvider =
     StateNotifierProvider<AudiobooksNotifier, AsyncValue<List<Audiobook>>>((ref) {
   return AudiobooksNotifier(ref.watch(audiobookRepositoryProvider));
@@ -187,7 +171,6 @@ class AudiobooksNotifier extends StateNotifier<AsyncValue<List<Audiobook>>> {
   }
 }
 
-// ---- Sleep timer state --------------------------------------------------
 final sleepRemainingProvider = StreamProvider<Duration?>((ref) {
   return ref.watch(audioBookServiceProvider).sleepRemaining;
 });

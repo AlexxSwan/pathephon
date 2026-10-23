@@ -1,6 +1,5 @@
 // ============================================================================
 //  playback_service.dart - REAL playback via just_audio + audio_service
-//  Exposes androidAudioSessionId so VisualizerService can attach.
 // ============================================================================
 import 'dart:async';
 import 'dart:math' as math;
@@ -24,6 +23,7 @@ abstract class PlaybackService {
   Future<void> play();
   Future<void> pause();
   Future<void> stop();
+  Future<void> clearQueue();
   Future<void> seekTo(Duration position);
   Future<void> skipToNext();
   Future<void> skipToPrevious();
@@ -138,8 +138,6 @@ class JustAudioPlaybackService implements PlaybackService {
       }
     });
 
-    // Expose androidAudioSessionId changes for VisualizerService.
-    // just_audio's androidAudioSessionIdStream emits int? (null before play).
     _player.androidAudioSessionIdStream.listen((id) {
       if (id != null) {
         _sessionIdController.add(id);
@@ -243,8 +241,30 @@ class JustAudioPlaybackService implements PlaybackService {
     await _player.pause();
   }
 
+  /// stop() PRESERVES the queue. Just pauses and resets position to 0 so
+  /// the user can resume. The actual queue wipe only happens in clearQueue()
+  /// (which nothing in the UI calls automatically — only explicit user action).
   @override
   Future<void> stop() async {
+    await _initCompleter.future;
+    await _player.pause();
+    await _player.seek(Duration.zero);
+    _stateController.add(PlaybackSnapshot(
+      current: _queue.isEmpty ? null : _queue[_index.clamp(0, _queue.length - 1)],
+      queue: _queue,
+      index: _index,
+      position: Duration.zero,
+      duration: _player.duration ?? Duration.zero,
+      isPlaying: false,
+      isBuffering: false,
+      shuffle: _shuffle,
+      repeatMode: _repeat,
+      replayGainMode: _rg,
+    ));
+  }
+
+  @override
+  Future<void> clearQueue() async {
     await _initCompleter.future;
     await _player.stop();
     await _handler?.stop();
@@ -367,7 +387,10 @@ class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> onTaskRemoved() async {
-    await _player.stop();
+    // Do NOT call _player.stop() — that wipes the queue.
+    // Just pause; OS will eventually kill the process but at least we don't
+    // actively destroy the user's playlist.
+    await _player.pause();
     await super.onTaskRemoved();
   }
 }

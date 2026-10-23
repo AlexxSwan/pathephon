@@ -4,6 +4,7 @@
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
@@ -57,7 +58,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Column(
             children: [
-              // Top bar: exit button (left) + title + queue button (right)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -246,7 +246,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     shrinkWrap: true,
                     padding: EdgeInsets.zero,
                     itemCount: queue.length,
-                    itemExtent: 52, // fixed height per row = compact
+                    itemExtent: 52,
                     itemBuilder: (_, i) {
                       final t = queue[i];
                       final isCurrent = i == currentIndex;
@@ -259,7 +259,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                           child: Row(
                             children: [
-                              // Track number or playing indicator
                               SizedBox(
                                 width: 28,
                                 child: isCurrent

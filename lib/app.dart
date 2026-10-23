@@ -1,10 +1,3 @@
-// ============================================================================
-//  app.dart - root widget
-//  - IndexedStack keeps state of all 4 tabs alive.
-//  - Now Playing is the FIRST tab.
-//  - PopScope: back button on non-first tab switches to Now Playing;
-//    on Now Playing shows exit confirmation dialog.
-// ============================================================================
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
@@ -70,19 +63,18 @@ class _ShellState extends State<_Shell> {
     AboutScreen(),
   ];
 
-  Future<bool> _onWillPop() async {
+  Future<void> _handleBack() async {
     if (_index != 0) {
       setState(() => _index = 0);
-      return false; // don't pop
+      return;
     }
-    // On Now Playing tab: ask for confirmation
     final shouldExit = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF1A1410),
         title: Text(
           "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F?",
-          style: const TextStyle(color: Color(0xFFF4E9D2)),
+          style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 18),
         ),
         actions: [
           TextButton(
@@ -105,7 +97,9 @@ class _ShellState extends State<_Shell> {
         ],
       ),
     ) ?? false;
-    return shouldExit;
+    if (shouldExit) {
+      SystemNavigator.pop();
+    }
   }
 
   @override
@@ -113,9 +107,8 @@ class _ShellState extends State<_Shell> {
     final l = AppLocalizations.of(context);
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) async {
-        if (didPop) return;
-        await _onWillPop();
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleBack();
       },
       child: Scaffold(
         body: IndexedStack(

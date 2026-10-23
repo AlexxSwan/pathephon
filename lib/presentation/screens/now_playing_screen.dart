@@ -1,5 +1,5 @@
 // ============================================================================
-//  now_playing_screen.dart - full-screen now-playing with VU meter, art, controls
+//  now_playing_screen.dart - full-screen now-playing with stereo VU meter
 // ============================================================================
 import 'dart:typed_data';
 
@@ -15,20 +15,42 @@ import '../../domain/models/track.dart';
 import '../providers/providers.dart';
 import '../widgets/playback_controls.dart';
 
-class NowPlayingScreen extends ConsumerWidget {
+class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<NowPlayingScreen> createState() => _NowPlayingScreenState();
+}
+
+class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
+  @override
+  void initState() {
+    super.initState();
+    // Hook visualizer to playback's audio session id stream.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final playback = ref.read(playbackServiceProvider);
+      final visualizer = ref.read(visualizerServiceProvider);
+      playback.audioSessionIdStream.listen((sessionId) {
+        visualizer.attach(sessionId);
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
     final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
-    final amp = ref.watch(amplitudeProvider).valueOrNull ?? 0.0;
+    final stereo = ref.watch(stereoAmplitudeProvider).valueOrNull;
     final playback = ref.watch(playbackServiceProvider);
     ref.watch(isPlayingProvider);
 
     final track = snap?.current;
     final duration = snap?.duration ?? Duration.zero;
+    final leftAmp = stereo?.left ?? 0.0;
+    final rightAmp = stereo?.right ?? 0.0;
+    final isPlaying = snap?.isPlaying ?? false;
+    final brightness = isPlaying ? 1.0 : 0.0;
 
     return Scaffold(
       body: SafeArea(
@@ -78,9 +100,14 @@ class NowPlayingScreen extends ConsumerWidget {
 
               const SizedBox(height: 16),
 
+              // ---- Stereo VU meter (L | R) ----
               CustomPaint(
-                size: const Size(220, 154),
-                painter: VUPainter(amplitude: amp, brightness: amp > 0.05 ? 1.0 : 0.0),
+                size: Size(MediaQuery.of(context).size.width - 40, 130),
+                painter: VUPainter(
+                  leftAmplitude: leftAmp,
+                  rightAmplitude: rightAmp,
+                  brightness: brightness,
+                ),
               ),
 
               const SizedBox(height: 8),

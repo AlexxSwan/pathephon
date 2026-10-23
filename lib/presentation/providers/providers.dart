@@ -1,5 +1,5 @@
 // ============================================================================
-//  providers.dart — central Riverpod wiring (single file for MVP clarity)
+//  providers.dart - central Riverpod wiring (single file for MVP clarity)
 // ============================================================================
 import 'dart:io' show Directory;
 
@@ -19,9 +19,9 @@ import '../../domain/models/track.dart';
 import '../../services/audio_book_service.dart';
 import '../../services/equalizer_service.dart';
 import '../../services/playback_service.dart';
+import '../../services/visualizer_service.dart';
 
 // ---- SharedPreferences ---------------------------------------------------
-// Initialized in main.dart before runApp; overridden via ProviderScope.
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('sharedPreferencesProvider must be overridden in main()');
 });
@@ -56,6 +56,18 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final svc = JustAudioPlaybackService();
   ref.onDispose(svc.dispose);
   return svc;
+});
+
+// ---- Visualizer service (single instance) -------------------------------
+final visualizerServiceProvider = Provider<VisualizerService>((ref) {
+  final svc = VisualizerService();
+  ref.onDispose(svc.dispose);
+  return svc;
+});
+
+// ---- Stereo amplitude stream (L, R) from real Visualizer -----------------
+final stereoAmplitudeProvider = StreamProvider<StereoAmplitude>((ref) {
+  return ref.watch(visualizerServiceProvider).amplitudes;
 });
 
 // ---- EQ service ----------------------------------------------------------
@@ -97,7 +109,6 @@ class LibraryNotifier extends StateNotifier<AsyncValue<List<Track>>> {
     }
   }
 
-  /// Replace library with manually picked files (no MediaStore scan).
   void setPickedTracks(List<Track> tracks) {
     state = AsyncValue.data(tracks);
   }
@@ -118,6 +129,7 @@ final playbackPositionProvider = StreamProvider<Duration>((ref) {
   return ref.watch(playbackServiceProvider).positionStream;
 });
 
+// Keep amplitudeProvider for backward compat (returns L channel amplitude).
 final amplitudeProvider = StreamProvider<double>((ref) {
   return ref.watch(playbackServiceProvider).amplitudeStream;
 });
@@ -136,13 +148,7 @@ final replayGainModeProvider = StateProvider<ReplayGainMode>((ref) {
   return ReplayGainMode.off;
 });
 
-// ---- isPlaying (instant toggle, syncs with snapshot) --------------------
-// Used by library tiles / album grid to flip the play state immediately
-// without waiting for the playback snapshot stream to debounce.
-// PlaybackControls reads snap.isPlaying directly from the snapshot stream,
-// so the play/pause icon updates independently of this provider. This
-// provider exists purely to trigger rebuilds in now_playing_screen via
-// ref.watch(isPlayingProvider) when the user taps a track.
+// ---- isPlaying (instant toggle) -----------------------------------------
 final isPlayingProvider = StateProvider<bool>((ref) => false);
 
 // ---- Repeat / shuffle (UI mirrors snapshot) -----------------------------

@@ -1,5 +1,6 @@
 // ============================================================================
 //  playback_service.dart - REAL playback via just_audio + audio_service
+//  Exposes androidAudioSessionId so VisualizerService can attach.
 // ============================================================================
 import 'dart:async';
 import 'dart:math' as math;
@@ -17,6 +18,7 @@ abstract class PlaybackService {
   Stream<PlaybackSnapshot> get state;
   Stream<Duration> get positionStream;
   Stream<double> get amplitudeStream;
+  Stream<int> get audioSessionIdStream;
 
   Future<void> playQueue({required List<Track> tracks, required int startIndex});
   Future<void> play();
@@ -90,10 +92,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _ampController = StreamController<double>.broadcast();
-
-  Timer? _ampTimer;
-  double _ampPhase = 0;
-  double _ampSmoothed = 0;
+  final _sessionIdController = StreamController<int>.broadcast();
 
   @override
   Stream<PlaybackSnapshot> get state => _stateController.stream;
@@ -101,6 +100,8 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<Duration> get positionStream => _player.positionStream;
   @override
   Stream<double> get amplitudeStream => _ampController.stream;
+  @override
+  Stream<int> get audioSessionIdStream => _sessionIdController.stream;
 
   Future<void> _init() async {
     try {
@@ -128,13 +129,21 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.playerStateStream.listen((st) {
       _emitState(st);
-      _startAmplitudeLoopIfPlaying(st.playing);
     });
 
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
+      }
+    });
+
+    // Expose androidAudioSessionId changes for VisualizerService.
+    // just_audio's androidAudioSessionIdStream emits int? (null before play).
+    _player.androidAudioSessionIdStream.listen((id) {
+      if (id != null) {
+        _sessionIdController.add(id);
+        debugPrint('[pathephon] audio session id: $id');
       }
     });
 
@@ -164,39 +173,6 @@ class JustAudioPlaybackService implements PlaybackService {
       replayGainMode: _rg,
     ));
   }
-
-  /// Simulated VU needle amplitude.
-  ///
-  /// Output range: 0.05..0.55 (LINEAR, mapped directly by VUPainter).
-  /// With VUPainter using linear mapping:
-  ///   0.55 -> ~55% of the arc -> stays in the yellow zone (BEFORE red)
-  ///   0.30 -> ~30% of the arc -> middle green
-  ///
-  /// Exponential smoothing makes the needle swing naturally without jitter.
-  void _startAmplitudeLoopIfPlaying(bool playing) {
-    if (playing) {
-      _ampTimer ??= Timer.periodic(const Duration(milliseconds: 50), (_) {
-        _ampPhase += 0.10;
-        // Two slow sine waves around 0.30 with swing +/- 0.20
-        final target = 0.30 + 0.20 * _sinSum(_ampPhase);
-        // Exponential smoothing toward target (slow attack, slow release)
-        _ampSmoothed += (target - _ampSmoothed) * 0.15;
-        // Small noise for organic feel
-        final noise = 0.02 * (DateTime.now().microsecondsSinceEpoch % 100) / 100;
-        final amp = (_ampSmoothed + noise).clamp(0.05, 0.55);
-        _ampController.add(amp);
-      });
-    } else {
-      _ampTimer?.cancel();
-      _ampTimer = null;
-      // Smoothly return to 0
-      _ampSmoothed = 0;
-      _ampController.add(0);
-    }
-  }
-
-  double _sinSum(double t) =>
-      0.5 * (1 + math.sin(t * 0.6) + 0.5 * math.sin(t * 1.7)) / 2;
 
   @override
   Future<void> playQueue({required List<Track> tracks, required int startIndex}) async {
@@ -343,9 +319,9 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 
   void dispose() {
-    _ampTimer?.cancel();
     _stateController.close();
     _ampController.close();
+    _sessionIdController.close();
     _player.dispose();
   }
 }

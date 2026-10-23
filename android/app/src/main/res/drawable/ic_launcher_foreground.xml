@@ -6,205 +6,233 @@
     android:viewportHeight="108">
 
     <!--
-        Vintage phonograph (gramophone) on radiating sunburst background.
-        Matches the reference image: side-view gramophone with large horn,
-        turntable base, and radial rays emanating from center.
-        White silhouette on transparent (background is gradient).
+        Turntable (record player) viewed from above-angle, matching reference:
+        - Square black body with rounded corners
+        - Black platter with white vinyl record on top
+        - Black center label on the record with white spindle
+        - Curved tonearm from top-right pivot to the record
+        - Speed slider on right side (vertical bar with knob)
+        - Round knob + square button at bottom-left
+        - 45rpm adapter hole at top-right corner
+        - Four feet under the body (small rectangles)
+        Centered in 108x108 canvas.
     -->
 
-    <!-- Radial sunburst rays (8 rays from center) -->
+    <!-- ===== BODY (black square, rounded corners) ===== -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 54,12 L 56,12 Z"
-        android:fillAlpha="0.18"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 88,20 L 90,22 Z"
-        android:fillAlpha="0.18"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 96,54 L 96,56 Z"
-        android:fillAlpha="0.18"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 88,88 L 90,86 Z"
-        android:fillAlpha="0.18"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 54,96 L 52,96 Z"
-        android:fillAlpha="0.18"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 20,88 L 18,86 Z"
-        android:fillAlpha="0.18"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 12,54 L 12,52 Z"
-        android:fillAlpha="0.18"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 20,20 L 18,22 Z"
-        android:fillAlpha="0.18"/>
-
-    <!-- Diagonal rays (thinner, between the main 8) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 72,18 L 74,20 Z"
-        android:fillAlpha="0.10"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 90,38 L 91,40 Z"
-        android:fillAlpha="0.10"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 90,72 L 91,70 Z"
-        android:fillAlpha="0.10"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 72,90 L 74,88 Z"
-        android:fillAlpha="0.10"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 36,90 L 34,88 Z"
-        android:fillAlpha="0.10"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 18,72 L 17,70 Z"
-        android:fillAlpha="0.10"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 18,38 L 17,40 Z"
-        android:fillAlpha="0.10"/>
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,54 L 36,18 L 34,20 Z"
-        android:fillAlpha="0.10"/>
-
-    <!-- ===== GRAMOPHONE (side view, white silhouette) ===== -->
-
-    <!-- Base cabinet (rectangular wooden box) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 32,72
-            L 76,72
-            C 79,72 81,74 81,77
-            L 81,90
-            C 81,93 79,95 76,95
-            L 32,95
-            C 29,95 27,93 27,90
-            L 27,77
-            C 27,74 29,72 32,72
+        android:fillColor="#1A1A1A"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:pathData="M 22,28
+            L 86,28
+            C 89,28 91,30 91,33
+            L 91,82
+            C 91,85 89,87 86,87
+            L 22,87
+            C 19,87 17,85 17,82
+            L 17,33
+            C 17,30 19,28 22,28
             Z" />
 
-    <!-- Cabinet top edge line (decorative groove) -->
+    <!-- ===== PLATTER (large black circle, the turntable disc) ===== -->
     <path
-        android:fillColor="#FF6B1A"
-        android:pathData="M 32,76 L 76,76 L 76,77 L 32,77 Z" />
+        android:fillColor="#000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1"
+        android:pathData="M 48,58
+            m -22,0
+            a 22,22 0 1,0 44,0
+            a 22,22 0 1,0 -44,0
+            Z" />
 
-    <!-- Turntable platter (oval, on top of cabinet) -->
+    <!-- Platter rim highlight (thin white ring just inside) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.5"
+        android:fillColor="#00000000"
+        android:pathData="M 48,58
+            m -20,0
+            a 20,20 0 1,0 40,0
+            a 20,20 0 1,0 -40,0
+            Z" />
+
+    <!-- ===== VINYL RECORD (white circle on the platter, slightly smaller) ===== -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 54,72
+        android:pathData="M 48,58
             m -16,0
-            a 16,3 0 1,0 32,0
-            a 16,3 0 1,0 -32,0
+            a 16,16 0 1,0 32,0
+            a 16,16 0 1,0 -32,0
             Z" />
 
-    <!-- Platter inner (vinyl visible) -->
+    <!-- Vinyl grooves (concentric circles, thin black strokes) -->
     <path
-        android:fillColor="#FF6B1A"
-        android:pathData="M 54,72
-            m -12,0
-            a 12,2 0 1,0 24,0
-            a 12,2 0 1,0 -24,0
+        android:strokeColor="#000000"
+        android:strokeWidth="0.4"
+        android:fillColor="#00000000"
+        android:pathData="M 48,58
+            m -14,0
+            a 14,14 0 1,0 28,0
+            a 14,14 0 1,0 -28,0
             Z" />
-
-    <!-- Vinyl record (darker oval on platter) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 54,72
-            m -10,0
-            a 10,1.5 0 1,0 20,0
-            a 10,1.5 0 1,0 -20,0
+        android:strokeColor="#000000"
+        android:strokeWidth="0.3"
+        android:fillColor="#00000000"
+        android:pathData="M 48,58
+            m -11,0
+            a 11,11 0 1,0 22,0
+            a 11,11 0 1,0 -22,0
             Z" />
-
-    <!-- Horn: large morning-glory shape (curving from base up-left to opening) -->
-    <!-- Horn neck (narrow tube from cabinet up to bell) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 40,72
-            L 50,72
-            L 36,40
-            L 28,44
+        android:strokeColor="#000000"
+        android:strokeWidth="0.3"
+        android:fillColor="#00000000"
+        android:pathData="M 48,58
+            m -8,0
+            a 8,8 0 1,0 16,0
+            a 8,8 0 1,0 -16,0
             Z" />
 
-    <!-- Horn bell (large opening - the iconic gramophone flower shape) -->
+    <!-- ===== CENTER LABEL (black circle on the record) ===== -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 18,42
-            C 18,28 28,18 42,18
-            C 56,18 64,30 64,44
-            L 64,46
-            C 64,50 60,52 56,52
-            L 28,52
-            C 22,52 18,48 18,42
+        android:fillColor="#000000"
+        android:pathData="M 48,58
+            m -5,0
+            a 5,5 0 1,0 10,0
+            a 5,5 0 1,0 -10,0
             Z" />
 
-    <!-- Horn inner opening (orange creates depth - the "hole" of the bell) -->
-    <path
-        android:fillColor="#FF6B1A"
-        android:pathData="M 26,40
-            C 26,32 32,26 42,26
-            C 52,26 58,32 58,42
-            L 58,44
-            C 58,46 56,48 54,48
-            L 30,48
-            C 28,48 26,46 26,44
-            Z" />
-
-    <!-- Horn center (where sound emerges) -->
+    <!-- ===== SPINDLE (white dot in the very center) ===== -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 40,38
-            m -4,0
-            a 4,4 0 1,0 8,0
-            a 4,4 0 1,0 -8,0
+        android:pathData="M 48,58
+            m -1,0
+            a 1,1 0 1,0 2,0
+            a 1,1 0 1,0 -2,0
             Z" />
 
-    <!-- Tonearm (thin bar from cabinet up to horn opening) -->
+    <!-- ===== TONEARM (curved bar from top-right pivot to the record) ===== -->
+    <!-- Pivot base (large circle at top-right of body) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 56,72
-            L 60,72
-            L 44,48
-            L 40,50
+        android:strokeColor="#000000"
+        android:strokeWidth="0.5"
+        android:pathData="M 78,38
+            m -5,0
+            a 5,5 0 1,0 10,0
+            a 5,5 0 1,0 -10,0
             Z" />
 
-    <!-- Tonearm pivot (small circle on cabinet top) -->
+    <!-- Pivot inner (black dot) -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M 78,38
+            m -2,0
+            a 2,2 0 1,0 4,0
+            a 2,2 0 1,0 -4,0
+            Z" />
+
+    <!-- Tonearm shaft: from pivot (78,38) curving down-left to headshell (54,52) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="2.5"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M 78,40
+            Q 70,48 60,52
+            L 54,54" />
+
+    <!-- Tonearm shadow (thin black line just under the white arm for depth) -->
+    <path
+        android:strokeColor="#000000"
+        android:strokeWidth="0.8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000"
+        android:pathData="M 79,41
+            Q 71,49 61,53
+            L 55,55" />
+
+    <!-- Headshell (small rectangle where the needle is, on the record) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 58,72
+        android:strokeColor="#000000"
+        android:strokeWidth="0.5"
+        android:pathData="M 50,52 L 58,52 L 58,56 L 50,56 Z" />
+
+    <!-- ===== SPEED SLIDER (right side, vertical track with knob) ===== -->
+    <!-- Slider track (vertical line) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:pathData="M 84,42 L 84,72" />
+
+    <!-- Slider knob (small circle on the track) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#000000"
+        android:strokeWidth="0.5"
+        android:pathData="M 84,58
+            m -2.5,0
+            a 2.5,2.5 0 1,0 5,0
+            a 2.5,2.5 0 1,0 -5,0
+            Z" />
+
+    <!-- ===== 45RPM ADAPTER HOLE (top-right corner, small circle) ===== -->
+    <path
+        android:fillColor="#000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="0.6"
+        android:pathData="M 82,30
+            m -2,0
+            a 2,2 0 1,0 4,0
+            a 2,2 0 1,0 -4,0
+            Z" />
+
+    <!-- ===== KNOB (bottom-left, round) ===== -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:strokeColor="#000000"
+        android:strokeWidth="0.5"
+        android:pathData="M 26,76
             m -3,0
             a 3,3 0 1,0 6,0
             a 3,3 0 1,0 -6,0
             Z" />
 
-    <!-- Crank handle on right side of cabinet -->
+    <!-- Knob indicator (small black line) -->
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 81,82
-            L 88,82
-            L 88,85
-            L 81,85
-            Z" />
+        android:strokeColor="#000000"
+        android:strokeWidth="0.8"
+        android:fillColor="#00000000"
+        android:pathData="M 26,74 L 26,72" />
 
-    <!-- Crank knob (small circle) -->
+    <!-- ===== SQUARE BUTTON (next to knob, bottom-left) ===== -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 90,83
-            m -2,0
-            a 2,2 0 1,0 4,0
-            a 2,2 0 1,0 -4,0
-            Z" />
+        android:strokeColor="#000000"
+        android:strokeWidth="0.5"
+        android:pathData="M 32,73 L 38,73 L 38,79 L 32,79 Z" />
+
+    <!-- ===== FEET (four small rectangles under the body) ===== -->
+    <path
+        android:fillColor="#000000"
+        android:pathData="M 22,87 L 26,87 L 26,90 L 22,90 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M 82,87 L 86,87 L 86,90 L 82,90 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M 22,87 L 26,87 L 26,90 L 22,90 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M 82,87 L 86,87 L 86,90 L 82,90 Z" />
+
+    <!-- Subtle shadow under the body (depth effect) -->
+    <path
+        android:fillColor="#000000"
+        android:fillAlpha="0.2"
+        android:pathData="M 22,87 L 86,87 L 86,89 L 22,89 Z" />
 
 </vector>

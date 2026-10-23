@@ -139,6 +139,10 @@ final replayGainModeProvider = StateProvider<ReplayGainMode>((ref) {
 // ---- isPlaying (instant toggle, syncs with snapshot) --------------------
 // Used by library tiles / album grid to flip the play state immediately
 // without waiting for the playback snapshot stream to debounce.
+// PlaybackControls reads snap.isPlaying directly from the snapshot stream,
+// so the play/pause icon updates independently of this provider. This
+// provider exists purely to trigger rebuilds in now_playing_screen via
+// ref.watch(isPlayingProvider) when the user taps a track.
 final isPlayingProvider = StateProvider<bool>((ref) => false);
 
 // ---- Repeat / shuffle (UI mirrors snapshot) -----------------------------

@@ -1,13 +1,19 @@
 // ============================================================================
-//  playback_service.dart - REAL playback via just_audio + audio_service
+//  playback_service.dart - playback with PERSISTENT QUEUE
+//
+//  The queue is serialized to SharedPreferences on every change and
+//  restored on init. So when the app is killed and restarted, the user
+//  can resume the same playlist from where they left off.
 // ============================================================================
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:just_audio/just_audio.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/replaygain.dart';
 import '../domain/enums/repeat_mode.dart';
@@ -33,6 +39,7 @@ abstract class PlaybackService {
   Future<void> setSpeed(double speed);
   Future<void> setReplayGain(ReplayGainMode mode);
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled});
+  Future<void> restoreSavedQueue();
 }
 
 class PlaybackSnapshot {
@@ -75,9 +82,14 @@ class PlaybackSnapshot {
 }
 
 class JustAudioPlaybackService implements PlaybackService {
-  JustAudioPlaybackService() {
+  JustAudioPlaybackService(this._prefs) {
     _init();
   }
+
+  final SharedPreferences _prefs;
+  static const _queueKey = 'pathephon.queue.v1';
+  static const _indexKey = 'pathephon.queue.index.v1';
+  static const _positionKey = 'pathephon.queue.position.v1';
 
   final _player = AudioPlayer();
   AudioHandler? _handler;
@@ -89,6 +101,7 @@ class JustAudioPlaybackService implements PlaybackService {
   bool _shuffle = false;
   RepeatMode _repeat = RepeatMode.off;
   ReplayGainMode _rg = ReplayGainMode.off;
+  Duration _savedPosition = Duration.zero;
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _ampController = StreamController<double>.broadcast();
@@ -129,6 +142,8 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.playerStateStream.listen((st) {
       _emitState(st);
+      // Persist position every state change for resume-after-kill.
+      _savePosition();
     });
 
     _player.sequenceStateStream.listen((seqState) {
@@ -145,8 +160,10 @@ class JustAudioPlaybackService implements PlaybackService {
       }
     });
 
-    Timer.periodic(const Duration(milliseconds: 500), (_) {
+    // Save position every 5 seconds while playing.
+    Timer.periodic(const Duration(seconds: 5), (_) {
       if (_queue.isNotEmpty) {
+        _savePosition();
         _emitState(_player.playerState);
       }
     });
@@ -170,6 +187,75 @@ class JustAudioPlaybackService implements PlaybackService {
       repeatMode: _repeat,
       replayGainMode: _rg,
     ));
+  }
+
+  // ---- Queue persistence ----
+  Future<void> _saveQueue() async {
+    try {
+      final json = jsonEncode(_queue.map((t) => t.toJson()).toList());
+      await _prefs.setString(_queueKey, json);
+      await _prefs.setInt(_indexKey, _index);
+      debugPrint('[pathephon] queue saved: ${_queue.length} tracks, index=$_index');
+    } catch (e) {
+      debugPrint('[pathephon] saveQueue failed: $e');
+    }
+  }
+
+  Future<void> _savePosition() async {
+    if (_queue.isEmpty) return;
+    try {
+      await _prefs.setInt(_positionKey, _player.position.inMilliseconds);
+    } catch (_) {}
+  }
+
+  @override
+  Future<void> restoreSavedQueue() async {
+    await _initCompleter.future;
+    try {
+      final raw = _prefs.getString(_queueKey);
+      if (raw == null) {
+        debugPrint('[pathephon] no saved queue');
+        return;
+      }
+      final list = jsonDecode(raw) as List;
+      final tracks = list
+          .map((j) => Track.fromJson(j as Map<String, dynamic>))
+          .toList(growable: false);
+      if (tracks.isEmpty) return;
+
+      _queue = List.unmodifiable(tracks);
+      _index = _prefs.getInt(_indexKey) ?? 0;
+      _savedPosition = Duration(milliseconds: _prefs.getInt(_positionKey) ?? 0);
+
+      final sources = tracks.map(_toSource).toList(growable: false);
+      final initial = _index.clamp(0, sources.length - 1);
+
+      // Set the audio source but DO NOT auto-play. User must press play.
+      await _player.setAudioSource(
+        ConcatenatingAudioSource(
+          children: sources,
+          useLazyPreparation: true,
+        ),
+        initialPosition: _savedPosition,
+        initialIndex: initial,
+      );
+
+      _stateController.add(PlaybackSnapshot(
+        current: _queue[initial],
+        queue: _queue,
+        index: initial,
+        position: _savedPosition,
+        duration: _player.duration ?? Duration.zero,
+        isPlaying: false,
+        isBuffering: false,
+        shuffle: _shuffle,
+        repeatMode: _repeat,
+        replayGainMode: _rg,
+      ));
+      debugPrint('[pathephon] queue restored: ${tracks.length} tracks at index $initial pos ${_savedPosition.inSeconds}s');
+    } catch (e, st) {
+      debugPrint('[pathephon] restoreSavedQueue failed: $e\n$st');
+    }
   }
 
   @override
@@ -198,6 +284,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
       await _player.seek(Duration.zero, index: initial);
       await _player.play();
+      await _saveQueue();
       debugPrint('[pathephon] playQueue: playing "${tracks[initial].title}"');
     } catch (e, st) {
       debugPrint('[pathephon] playQueue FAILED: $e\n$st');
@@ -239,16 +326,15 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> pause() async {
     await _initCompleter.future;
     await _player.pause();
+    await _savePosition();
   }
 
-  /// stop() PRESERVES the queue. Just pauses and resets position to 0 so
-  /// the user can resume. The actual queue wipe only happens in clearQueue()
-  /// (which nothing in the UI calls automatically — only explicit user action).
   @override
   Future<void> stop() async {
     await _initCompleter.future;
     await _player.pause();
     await _player.seek(Duration.zero);
+    await _savePosition();
     _stateController.add(PlaybackSnapshot(
       current: _queue.isEmpty ? null : _queue[_index.clamp(0, _queue.length - 1)],
       queue: _queue,
@@ -270,6 +356,9 @@ class JustAudioPlaybackService implements PlaybackService {
     await _handler?.stop();
     _queue = const [];
     _index = 0;
+    await _prefs.remove(_queueKey);
+    await _prefs.remove(_indexKey);
+    await _prefs.remove(_positionKey);
     _stateController.add(PlaybackSnapshot.empty);
   }
 
@@ -277,6 +366,7 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> seekTo(Duration position) async {
     await _initCompleter.future;
     await _player.seek(position);
+    await _savePosition();
   }
 
   @override
@@ -285,6 +375,8 @@ class JustAudioPlaybackService implements PlaybackService {
     if (_queue.isEmpty) return;
     if (_player.hasNext) {
       await _player.seekToNext();
+      _index = _player.currentIndex ?? _index;
+      await _saveQueue();
     }
   }
 
@@ -294,6 +386,8 @@ class JustAudioPlaybackService implements PlaybackService {
     if (_queue.isEmpty) return;
     if (_player.hasPrevious) {
       await _player.seekToPrevious();
+      _index = _player.currentIndex ?? _index;
+      await _saveQueue();
     }
   }
 
@@ -387,9 +481,6 @@ class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
 
   @override
   Future<void> onTaskRemoved() async {
-    // Do NOT call _player.stop() — that wipes the queue.
-    // Just pause; OS will eventually kill the process but at least we don't
-    // actively destroy the user's playlist.
     await _player.pause();
     await super.onTaskRemoved();
   }

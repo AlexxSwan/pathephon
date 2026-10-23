@@ -5,87 +5,122 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- Background fill removed — background is in ic_launcher_background -->
+    <!--
+        Classic gramophone silhouette:
+        - Large morning-glory horn (flower-shaped) on top-left
+        - Curved neck tapering down to the box
+        - Rectangular wooden box base
+        - Crank on the right side
+        - Tonearm going from box up to horn opening
+        Centered in the 108x108 canvas with safe-zone padding (~24dp).
+    -->
 
-    <!-- Gramophone horn (left side, sweeping curve) -->
+    <!-- Horn opening: large ellipse (the bell of the gramophone) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 38,30
-            C 28,30 22,38 22,48
-            L 22,62
-            C 22,68 26,72 32,72
+        android:pathData="M 30,28
+            C 18,28 12,40 12,52
+            C 12,64 20,72 32,72
             L 50,72
-            C 56,72 60,68 60,62
-            L 60,48
-            C 60,38 54,30 44,30
+            C 62,72 68,62 68,50
+            C 68,38 60,28 48,28
             Z" />
 
-    <!-- Horn opening (oval) -->
+    <!-- Horn inner shadow (creates depth) -->
     <path
-        android:fillColor="#FF6B1A"
-        android:pathData="M 41,34
-            C 35,34 31,40 31,46
-            L 31,60
-            C 31,64 34,67 38,67
-            L 46,67
-            C 50,67 53,64 53,60
-            L 53,46
-            C 53,40 49,34 43,34
+        android:fillColor="#FFB87A"
+        android:pathData="M 34,34
+            C 26,34 22,42 22,50
+            C 22,58 28,64 36,64
+            L 46,64
+            C 54,64 58,58 58,50
+            C 58,42 52,34 44,34
             Z" />
 
-    <!-- Tonearm (diagonal line from top-right to horn) -->
+    <!-- Horn center dot (where sound comes out) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 70,28
-            L 78,28
-            L 78,32
-            L 55,55
-            L 50,52
-            Z" />
-
-    <!-- Tonearm pivot (circle) -->
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M 74,32
+        android:pathData="M 40,50
             m -6,0
             a 6,6 0 1,0 12,0
             a 6,6 0 1,0 -12,0
             Z" />
 
-    <!-- Turntable platter (right side, oval) -->
+    <!-- Neck of the horn (tapering tube from horn down to box) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 62,62
-            m 0,-2
-            a 22,8 0 1,0 44,0
-            a 22,8 0 1,0 -44,0
+        android:pathData="M 38,72
+            L 50,72
+            L 56,84
+            L 44,84
             Z" />
 
-    <!-- Platter center label -->
+    <!-- Tonearm: thin bar going from box up to horn opening -->
     <path
-        android:fillColor="#FF6B1A"
-        android:pathData="M 84,62
+        android:fillColor="#FFFFFF"
+        android:pathData="M 60,82
+            L 66,82
+            L 50,56
+            L 46,58
+            Z" />
+
+    <!-- Tonearm pivot (small circle on the box) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 63,82
             m -5,0
-            a 5,2 0 1,0 10,0
-            a 5,2 0 1,0 -10,0
+            a 5,5 0 1,0 10,0
+            a 5,5 0 1,0 -10,0
             Z" />
 
-    <!-- Crank handle (right side, small) -->
+    <!-- Wooden box base (the gramophone cabinet) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 92,48
-            L 96,48
-            L 96,58
-            L 92,58
+        android:pathData="M 30,82
+            L 78,82
+            C 82,82 84,84 84,88
+            L 84,96
+            C 84,98 82,100 78,100
+            L 30,100
+            C 26,100 24,98 24,96
+            L 24,88
+            C 24,84 26,82 30,82
             Z" />
 
-    <!-- Base/stand (bottom) -->
+    <!-- Box front panel divider line (decorative) -->
+    <path
+        android:fillColor="#FFB87A"
+        android:pathData="M 30,90
+            L 78,90
+            L 78,92
+            L 30,92
+            Z" />
+
+    <!-- Crank handle on the right side of the box -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 28,76
-            L 88,76
-            L 88,82
-            L 28,82
+        android:pathData="M 84,90
+            L 92,90
+            L 92,94
+            L 84,94
+            Z" />
+
+    <!-- Crank knob (small circle at end) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M 94,92
+            m -3,0
+            a 3,3 0 1,0 6,0
+            a 3,3 0 1,0 -6,0
+            Z" />
+
+    <!-- Turntable disc visible on top of box (small ellipse) -->
+    <path
+        android:fillColor="#FFB87A"
+        android:pathData="M 50,82
+            m 0,-1
+            a 14,2 0 1,0 28,0
+            a 14,2 0 1,0 -28,0
             Z" />
 
 </vector>

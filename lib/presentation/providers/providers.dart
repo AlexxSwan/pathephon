@@ -50,8 +50,12 @@ final audiobookRepositoryProvider = Provider<AudiobookRepository>((ref) {
 });
 
 final playbackServiceProvider = Provider<PlaybackService>((ref) {
-  final svc = JustAudioPlaybackService();
+  final prefs = ref.watch(sharedPreferencesProvider);
+  final svc = JustAudioPlaybackService(prefs);
   ref.onDispose(svc.dispose);
+  // Auto-restore saved queue on first construction.
+  // Fire-and-forget — the service's _initCompleter handles ordering.
+  Future.microtask(() => svc.restoreSavedQueue());
   return svc;
 });
 

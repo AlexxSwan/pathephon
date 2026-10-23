@@ -5,11 +5,13 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:on_audio_query/on_audio_query.dart';
 
 import '../../core/l10n/generated/app_localizations.dart';
 import '../../core/theme/tube_colors.dart';
 import '../../core/theme/vu_painter.dart';
 import '../../core/utils/duration_format.dart';
+import '../../domain/models/track.dart';
 import '../providers/providers.dart';
 import '../widgets/playback_controls.dart';
 
@@ -136,10 +138,6 @@ class NowPlayingScreen extends ConsumerWidget {
   }
 }
 
-/// Resolves artwork for a track:
-/// 1. If track.artUri is set (network/file URL) -> Image.network
-/// 2. Else if track.mediaStoreId != null -> queryArtwork + Image.memory
-/// 3. Else -> fallback album icon
 class _ArtworkImage extends ConsumerStatefulWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
@@ -178,9 +176,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       if (mounted && _loadingId == id) {
         setState(() => _bytes = bytes);
       }
-    } catch (_) {
-      // ignore — fallback icon shown
-    }
+    } catch (_) {}
   }
 
   @override
@@ -200,7 +196,6 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
           const Icon(Icons.album, size: 120, color: TubeColors.brass));
     }
     if (t.mediaStoreId != null) {
-      // Loading
       return const Center(
         child: SizedBox(width: 24, height: 24,
           child: CircularProgressIndicator(strokeWidth: 2, color: TubeColors.brass)));

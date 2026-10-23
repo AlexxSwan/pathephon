@@ -3,6 +3,8 @@ import "package:flutter_riverpod/flutter_riverpod.dart";
 
 import "../../core/l10n/generated/app_localizations.dart";
 import "../../core/theme/tube_colors.dart";
+import "../../domain/models/album.dart";
+import "../../domain/models/track.dart";
 import "../providers/providers.dart";
 import "../widgets/track_list_tile.dart";
 
@@ -24,19 +26,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   }
 
   Future<void> _pickAndPlay(Future<List<Track>> Function() picker) async {
-    final mediaStore = ref.read(mediaStoreSourceProvider);
     final playback = ref.read(playbackServiceProvider);
     final tracks = await picker();
     if (tracks.isEmpty) return;
-    // Replace the library view with the picked tracks AND start playing
-    // the first one immediately. This is the behavior users expect from a
-    // "Pick files" button: choose -> hear it.
     ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
     await playback.playQueue(tracks: tracks, startIndex: 0);
     ref.read(isPlayingProvider.notifier).state = true;
-    // The mediaStore variable is used implicitly via the closure; if you
-    // want to log which folder was picked, do it here.
-    mediaStore.toString();
   }
 
   @override

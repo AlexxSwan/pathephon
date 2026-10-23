@@ -1,14 +1,13 @@
 // ============================================================================
 //  visualizer_service.dart - bridge to native Android Visualizer AudioEffect
 //
-//  Captures real waveform data from the audio output (via the audio session
-//  id just_audio exposes) and streams per-channel RMS amplitudes.
-//  Falls back to (0, 0) when native plugin unavailable or session id not yet
-//  known.
+//  Requests RECORD_AUDIO permission (required on Android 14+) before
+//  attaching to the audio session. Streams stereo RMS amplitudes.
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
+import 'package:permission_handler/permission_handler.dart';
 
 class StereoAmplitude {
   const StereoAmplitude(this.left, this.right);
@@ -26,21 +25,42 @@ class VisualizerService {
   final _controller = StreamController<StereoAmplitude>.broadcast();
 
   int? _activeSessionId;
+  bool _permissionGranted = false;
+  bool _permissionRequested = false;
 
   Stream<StereoAmplitude> get amplitudes => _controller.stream;
 
-  /// Start visualizing the given audio session id.
-  /// Pass null to stop. Idempotent: if the same id is already active, no-op.
+  Future<bool> _ensurePermission() async {
+    if (_permissionGranted) return true;
+    if (!_permissionRequested) {
+      _permissionRequested = true;
+      try {
+        final status = await Permission.recordAudio.request();
+        _permissionGranted = status.isGranted;
+        debugPrint('[pathephon] RECORD_AUDIO permission: $status');
+      } catch (e) {
+        debugPrint('[pathephon] permission request failed: $e');
+        _permissionGranted = false;
+      }
+    }
+    return _permissionGranted;
+  }
+
   Future<void> attach(int? sessionId) async {
     if (sessionId == null || sessionId == 0) {
       await detach();
       return;
     }
     if (sessionId == _activeSessionId) return;
-    _activeSessionId = sessionId;
 
+    final granted = await _ensurePermission();
+    if (!granted) {
+      debugPrint('[pathephon] visualizer: RECORD_AUDIO denied, cannot capture audio');
+      return;
+    }
+
+    _activeSessionId = sessionId;
     try {
-      // Subscribe before starting so we don't miss the first event.
       _eventSub ??= _events.receiveBroadcastStream().listen(
         (data) {
           if (data is List && data.length == 2) {

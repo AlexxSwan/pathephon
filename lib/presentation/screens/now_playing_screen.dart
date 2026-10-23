@@ -26,7 +26,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   @override
   void initState() {
     super.initState();
-    // Hook visualizer to playback's audio session id stream.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final playback = ref.read(playbackServiceProvider);
       final visualizer = ref.read(visualizerServiceProvider);
@@ -58,10 +57,15 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Column(
             children: [
+              // Top bar: exit button (left) + title + queue button (right)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const SizedBox(width: 48),
+                  IconButton(
+                    icon: const Icon(Icons.power_settings_new),
+                    tooltip: '\u0412\u044B\u0445\u043E\u0434',
+                    onPressed: () => _showExitDialog(context),
+                  ),
                   Text(
                     l.nowPlayingTitle,
                     style: Theme.of(context).textTheme.titleMedium,
@@ -100,7 +104,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
               const SizedBox(height: 16),
 
-              // ---- Stereo VU meter (L | R) ----
               CustomPaint(
                 size: Size(MediaQuery.of(context).size.width - 40, 130),
                 painter: VUPainter(
@@ -165,6 +168,38 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
   }
 
+  void _showExitDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1410),
+        title: Text(
+          '\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F?',
+          style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 18),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(
+              '\u041E\u0442\u043C\u0435\u043D\u0430',
+              style: const TextStyle(color: Color(0xFFB89968)),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              SystemNavigator.pop();
+            },
+            child: Text(
+              '\u0412\u044B\u0439\u0442\u0438',
+              style: const TextStyle(color: Color(0xFFFF6B1A)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _showQueueSheet(BuildContext context, WidgetRef ref) {
     final snap = ref.read(playbackSnapshotProvider).valueOrNull;
     final queue = snap?.queue ?? const <Track>[];
@@ -174,28 +209,32 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     showModalBottomSheet(
       context: context,
       backgroundColor: TubeColors.surface,
+      isScrollControlled: true,
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.7,
+      ),
       builder: (sheetCtx) {
         return SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 8, 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      '\u041E\u0447\u0435\u0440\u0435\u0434\u044C (${queue.length})',
+                      '\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u00B7 ${queue.length}',
                       style: Theme.of(sheetCtx).textTheme.titleMedium,
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close),
+                      icon: const Icon(Icons.close, size: 20),
                       onPressed: () => Navigator.of(sheetCtx).pop(),
                     ),
                   ],
                 ),
               ),
-              const Divider(height: 1),
+              const Divider(height: 1, thickness: 1),
               if (queue.isEmpty)
                 const Padding(
                   padding: EdgeInsets.all(24),
@@ -205,34 +244,84 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 Flexible(
                   child: ListView.builder(
                     shrinkWrap: true,
+                    padding: EdgeInsets.zero,
                     itemCount: queue.length,
+                    itemExtent: 52, // fixed height per row = compact
                     itemBuilder: (_, i) {
                       final t = queue[i];
                       final isCurrent = i == currentIndex;
-                      return ListTile(
-                        leading: Icon(
-                          isCurrent ? Icons.play_arrow : Icons.music_note,
-                          color: isCurrent ? TubeColors.amberHot : TubeColors.brass,
-                        ),
-                        title: Text(
-                          t.title,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: isCurrent ? TubeColors.amberHot : null,
-                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                          ),
-                        ),
-                        subtitle: Text(
-                          t.artist,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: TubeColors.textSecondary),
-                        ),
+                      return InkWell(
                         onTap: () {
                           playback.playQueue(tracks: queue, startIndex: i);
                           Navigator.of(sheetCtx).pop();
                         },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          child: Row(
+                            children: [
+                              // Track number or playing indicator
+                              SizedBox(
+                                width: 28,
+                                child: isCurrent
+                                    ? const Icon(Icons.play_arrow, size: 18,
+                                        color: TubeColors.amberHot)
+                                    : Text(
+                                        '${i + 1}',
+                                        style: TextStyle(
+                                          color: TubeColors.textMuted,
+                                          fontSize: 12,
+                                        ),
+                                        textAlign: TextAlign.center,
+                                      ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      t.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: TextStyle(
+                                        color: isCurrent
+                                            ? TubeColors.amberHot
+                                            : TubeColors.textPrimary,
+                                        fontWeight: isCurrent
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        fontSize: 13,
+                                        height: 1.2,
+                                      ),
+                                    ),
+                                    if (t.artist.isNotEmpty)
+                                      Text(
+                                        t.artist,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          color: TubeColors.textSecondary,
+                                          fontSize: 11,
+                                          height: 1.2,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              if (t.durationMs > 0)
+                                Text(
+                                  formatDuration(Duration(milliseconds: t.durationMs)),
+                                  style: TextStyle(
+                                    color: TubeColors.textMuted,
+                                    fontSize: 11,
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
                       );
                     },
                   ),

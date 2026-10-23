@@ -1,14 +1,16 @@
 // ============================================================================
-//  app.dart — root widget
-//  - IndexedStack keeps state of all 4 tabs alive (no rebuild on switch).
-//  - Now Playing is the FIRST tab (no nav transition needed from library).
-//  - All Cyrillic in source uses \uXXXX escapes so PowerShell never mangles it.
+//  app.dart - root widget
+//  - IndexedStack keeps state of all 4 tabs alive.
+//  - Now Playing is the FIRST tab.
+//  - PopScope: back button on non-first tab switches to Now Playing;
+//    on Now Playing shows exit confirmation dialog.
 // ============================================================================
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
 import "package:shared_preferences/shared_preferences.dart";
 import "package:flutter_localizations/flutter_localizations.dart";
+import "package:flutter/services.dart";
 
 import "core/l10n/generated/app_localizations.dart";
 import "core/theme/retro_theme.dart";
@@ -26,7 +28,7 @@ class AudioPlayerX64App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     return MaterialApp(
-      title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D", // Патефон
+      title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D",
       debugShowCheckedModeBanner: false,
       theme: RetroTheme.dark,
       locale: locale,
@@ -61,8 +63,6 @@ class _Shell extends StatefulWidget {
 class _ShellState extends State<_Shell> {
   int _index = 0;
 
-  // IndexedStack: all children stay mounted, state preserved across switches.
-  // Order: NowPlaying (1st, no nav needed) → Library → Audiobooks → About.
   final _screens = const <Widget>[
     NowPlayingScreen(),
     LibraryScreen(),
@@ -70,40 +70,84 @@ class _ShellState extends State<_Shell> {
     AboutScreen(),
   ];
 
+  Future<bool> _onWillPop() async {
+    if (_index != 0) {
+      setState(() => _index = 0);
+      return false; // don't pop
+    }
+    // On Now Playing tab: ask for confirmation
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1410),
+        title: Text(
+          "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F?",
+          style: const TextStyle(color: Color(0xFFF4E9D2)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(
+              "\u041E\u0442\u043C\u0435\u043D\u0430",
+              style: const TextStyle(color: Color(0xFFB89968)),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop(true);
+              SystemNavigator.pop();
+            },
+            child: Text(
+              "\u0412\u044B\u0439\u0442\u0438",
+              style: const TextStyle(color: Color(0xFFFF6B1A)),
+            ),
+          ),
+        ],
+      ),
+    ) ?? false;
+    return shouldExit;
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    return Scaffold(
-      body: IndexedStack(
-        index: _index,
-        children: _screens,
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
-        onDestinationSelected: (i) => setState(() => _index = i),
-        destinations: [
-          NavigationDestination(
-            icon: const Icon(Icons.graphic_eq_outlined),
-            selectedIcon: const Icon(Icons.graphic_eq),
-            label: l.navNowPlaying,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.library_music_outlined),
-            selectedIcon: const Icon(Icons.library_music),
-            label: l.navLibrary,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.menu_book_outlined),
-            selectedIcon: const Icon(Icons.menu_book),
-            label: l.navAudiobooks,
-          ),
-          NavigationDestination(
-            icon: const Icon(Icons.info_outline),
-            selectedIcon: const Icon(Icons.info),
-            // "О программе"
-            label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
-          ),
-        ],
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        await _onWillPop();
+      },
+      child: Scaffold(
+        body: IndexedStack(
+          index: _index,
+          children: _screens,
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _index,
+          onDestinationSelected: (i) => setState(() => _index = i),
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.graphic_eq_outlined),
+              selectedIcon: const Icon(Icons.graphic_eq),
+              label: l.navNowPlaying,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.library_music_outlined),
+              selectedIcon: const Icon(Icons.library_music),
+              label: l.navLibrary,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.menu_book_outlined),
+              selectedIcon: const Icon(Icons.menu_book),
+              label: l.navAudiobooks,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.info_outline),
+              selectedIcon: const Icon(Icons.info),
+              label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
+            ),
+          ],
+        ),
       ),
     );
   }

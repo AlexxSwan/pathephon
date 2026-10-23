@@ -1,7 +1,7 @@
 name: pathephon
 description: All-format retro-tube audio player for modern Android x64.
 publish_to: 'none'
-version: 0.1.6+7
+version: 0.1.7+8
 
 environment:
   sdk: '>=3.5.0 <4.0.0'
@@ -13,33 +13,22 @@ dependencies:
   flutter_localizations:
     sdk: flutter
 
-  # State management
   flutter_riverpod: ^2.5.1
 
-  # Audio engine — just_audio is the most stable Flutter audio package.
-  # audio_service bridges to Android MediaSession (lockscreen / Bluetooth).
-  # On Android, just_audio uses ExoPlayer under the hood — gets native
-  # FLAC/Opus/MP3/AAC/WAV/OGG/ALAC for free via MediaExtractor.
   just_audio: ^0.9.39
   audio_service: ^0.18.15
   audio_session: ^0.1.21
 
-  # MediaStore access (Android)
   on_audio_query: ^2.9.0
   permission_handler: ^11.3.1
 
-  # Persistence (lightweight — no SQLite ORM needed for MVP)
   shared_preferences: ^2.3.2
   path_provider: ^2.1.4
 
-  # UI
   google_fonts: ^6.2.1
   palette_generator: ^0.3.3+4
   file_picker: ^13.1.0
 
-  # Utilities
-  # intl version is auto-resolved by flutter_localizations from the SDK.
-  # Using `any` lets pub pick whatever the local Flutter SDK requires.
   intl: any
   path: ^1.9.0
   uuid: ^4.5.1

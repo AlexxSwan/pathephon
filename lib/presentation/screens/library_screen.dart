@@ -60,13 +60,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               if (tracks.isEmpty) return;
               ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
             },
-             param($m) 
-    $val = $m.Value
-    if ($val -match "\u0412\u044B\u0431\u0440\u0430\u0442\u044C") { $val }
-    elseif ($val -match "folder") { 'tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443"' }
-    elseif ($val -match "audio") { 'tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B"' }
-    else { $val }
-,
+            tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443",
           ),
           IconButton(
             icon: const Icon(Icons.audio_file),
@@ -76,13 +70,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
               if (tracks.isEmpty) return;
               ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
             },
-             param($m) 
-    $val = $m.Value
-    if ($val -match "\u0412\u044B\u0431\u0440\u0430\u0442\u044C") { $val }
-    elseif ($val -match "folder") { 'tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443"' }
-    elseif ($val -match "audio") { 'tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B"' }
-    else { $val }
-,
+            tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B",
           ),
           IconButton(
             icon: const Icon(Icons.search),
@@ -117,7 +105,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     track: t,
                     index: i,
                     onTap: () {
-                      playback.playQueue(tracks: tracks, startIndex: i); ref.read(isPlayingProvider.notifier).state = true;
+                      playback.playQueue(tracks: tracks, startIndex: i);
+                      ref.read(isPlayingProvider.notifier).state = true;
                       Navigator.of(context).pushNamed("/now-playing");
                     },
                   );
@@ -162,7 +151,8 @@ class _AlbumGrid extends ConsumerWidget {
           child: InkWell(
             onTap: () {
               if (a.tracks.isEmpty) return;
-              playback.playQueue(tracks: a.tracks, startIndex: 0); ref.read(isPlayingProvider.notifier).state = true;
+              playback.playQueue(tracks: a.tracks, startIndex: 0);
+              ref.read(isPlayingProvider.notifier).state = true;
               Navigator.of(context).pushNamed("/now-playing");
             },
             child: Padding(

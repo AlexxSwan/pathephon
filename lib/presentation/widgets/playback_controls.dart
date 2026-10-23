@@ -9,13 +9,11 @@ class PlaybackControls extends ConsumerWidget {
   const PlaybackControls({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
     final isPlaying = ref.watch(isPlayingProvider);
     final shuffle = ref.watch(shuffleProvider);
     final repeat = ref.watch(repeatModeProvider);
     final playback = ref.watch(playbackServiceProvider);
 
-    // Sync isPlayingProvider with stream
     ref.listen(playbackSnapshotProvider, (_, snap) {
       if (snap.hasValue) {
         final streamPlaying = snap.value!.isPlaying;

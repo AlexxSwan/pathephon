@@ -16,7 +16,7 @@ class AboutScreen extends ConsumerWidget {
             SizedBox(height: 24),
             Text("\u041F\u0430\u0442\u0435\u0444\u043E\u043D", style: Theme.of(context).textTheme.displaySmall),
             SizedBox(height: 8),
-            Text("\u0412\u0435\u0440\u0441\u0438\u044F: 0.1.4 (5)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: TubeColors.textSecondary)),
+            Text("\u0412\u0435\u0440\u0441\u0438\u044F: 0.1.5 (6)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: TubeColors.textSecondary)),
             SizedBox(height: 24),
             Text("\u0410\u0432\u0442\u043E\u0440: SwanLab", style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.brass)),
             SizedBox(height: 8),

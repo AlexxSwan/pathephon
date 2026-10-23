@@ -1,5 +1,5 @@
 // ============================================================================
-//  track.dart — immutable Track model (plain Dart, no Freezed needed)
+//  track.dart - immutable Track model (plain Dart, no Freezed needed)
 // ============================================================================
 import 'package:flutter/foundation.dart';
 
@@ -25,6 +25,7 @@ class Track {
     this.fileExtension = '',
     this.filePath = '',
     this.artUri = '',
+    this.mediaStoreId,
     this.replayGainTrack,
     this.replayGainAlbum,
     this.dateAddedMs = 0,
@@ -49,6 +50,9 @@ class Track {
   final String fileExtension;
   final String filePath;
   final String artUri;
+  /// Android MediaStore _id column (for queryArtwork). Null for tracks
+  /// picked via file_picker (no MediaStore row).
+  final int? mediaStoreId;
   final double? replayGainTrack;
   final double? replayGainAlbum;
   final int dateAddedMs;
@@ -73,6 +77,7 @@ class Track {
     String? fileExtension,
     String? filePath,
     String? artUri,
+    int? mediaStoreId,
     double? replayGainTrack,
     double? replayGainAlbum,
     int? dateAddedMs,
@@ -97,6 +102,7 @@ class Track {
       fileExtension: fileExtension ?? this.fileExtension,
       filePath: filePath ?? this.filePath,
       artUri: artUri ?? this.artUri,
+      mediaStoreId: mediaStoreId ?? this.mediaStoreId,
       replayGainTrack: replayGainTrack ?? this.replayGainTrack,
       replayGainAlbum: replayGainAlbum ?? this.replayGainAlbum,
       dateAddedMs: dateAddedMs ?? this.dateAddedMs,
@@ -140,6 +146,7 @@ class Track {
         'fileExtension': fileExtension,
         'filePath': filePath,
         'artUri': artUri,
+        'mediaStoreId': mediaStoreId,
         'replayGainTrack': replayGainTrack,
         'replayGainAlbum': replayGainAlbum,
         'dateAddedMs': dateAddedMs,
@@ -165,6 +172,7 @@ class Track {
         fileExtension: (json['fileExtension'] as String?) ?? '',
         filePath: (json['filePath'] as String?) ?? '',
         artUri: (json['artUri'] as String?) ?? '',
+        mediaStoreId: (json['mediaStoreId'] as num?)?.toInt(),
         replayGainTrack: (json['replayGainTrack'] as num?)?.toDouble(),
         replayGainAlbum: (json['replayGainAlbum'] as num?)?.toDouble(),
         dateAddedMs: (json['dateAddedMs'] as num?)?.toInt() ?? 0,

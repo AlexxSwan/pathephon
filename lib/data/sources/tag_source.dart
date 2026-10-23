@@ -1,11 +1,5 @@
 // ============================================================================
-//  tag_source.dart — read-only tag metadata via on_audio_query.
-//
-//  We use on_audio_query's MediaStore-backed fields (already available after
-//  querySongs). No separate audiotags dependency needed for MVP.
-//
-//  For the tag editor screen, we delegate to on_audio_query's queryWithFilters
-//  for read, and tag write-back is deferred to a future native MethodChannel.
+//  tag_source.dart - read-only tag metadata via on_audio_query.
 // ============================================================================
 import 'dart:typed_data';
 
@@ -24,20 +18,13 @@ class TagSource {
     return _query.queryArtwork(trackId, ArtworkType.AUDIO, size: 600);
   }
 
-  /// Returns genre name for a track (requires a separate genre query).
   Future<String> fetchGenre(int trackId) async {
-    // on_audio_query doesn't directly map track → genre in MVP scope.
-    // Returning empty string is acceptable; UI gracefully handles missing genre.
     return '';
   }
 
-  /// Heuristic ReplayGain extraction: parse filename for "RG_-6.4dB" patterns
-  /// or read ID3 TXXX frames. For MVP we return null — ReplayGain is applied
-  /// manually via the EQ screen toggle.
   static double? parseReplayGainFromComments(Map<String, String>? comments) {
     if (comments == null) return null;
     final raw = comments['REPLAYGAIN_TRACK_GAIN'] ??
-        comments['replaygain_track_gain'] ??
         comments['replaygain_track_gain'];
     if (raw == null) return null;
     final match =
@@ -47,6 +34,7 @@ class TagSource {
   }
 
   /// Build a Track from on_audio_query's SongModel.
+  /// mediaStoreId is set so the UI can lazy-fetch artwork via queryArtwork.
   static Track fromSongModel(SongModel s) {
     final path = s.data;
     final ext = path.toLowerCase().substring(path.lastIndexOf('.') + 1);
@@ -64,6 +52,7 @@ class TagSource {
       sizeBytes: s.size,
       fileExtension: ext,
       filePath: path,
+      mediaStoreId: s.id,
       dateAddedMs: (s.dateAdded ?? 0) * 1000,
     );
   }

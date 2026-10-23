@@ -164,13 +164,18 @@ class JustAudioPlaybackService implements PlaybackService {
     ));
   }
 
+  /// Fake amplitude loop — simulates a vintage VU needle.
+  /// Range: 0.0..0.55 (kept OUT of the red zone, which starts ~0.85).
+  /// Two slow sine waves + a touch of noise = natural-looking swing.
+  /// Real Visualizer integration is a post-MVP TODO.
   void _startAmplitudeLoopIfPlaying(bool playing) {
     if (playing) {
       _ampTimer ??= Timer.periodic(const Duration(milliseconds: 50), (_) {
-        _ampPhase += 0.18;
-        final base = 0.5 + 0.4 * _sinSum(_ampPhase);
-        final noise = 0.1 * (DateTime.now().microsecondsSinceEpoch % 100) / 100;
-        _ampController.add((base + noise).clamp(0.0, 1.0));
+        _ampPhase += 0.12;
+        // Base around 0.28, swing +/- 0.22 → range ~0.06..0.50
+        final base = 0.28 + 0.22 * _sinSum(_ampPhase);
+        final noise = 0.04 * (DateTime.now().microsecondsSinceEpoch % 100) / 100;
+        _ampController.add((base + noise).clamp(0.0, 0.6));
       });
     } else {
       _ampTimer?.cancel();
@@ -180,7 +185,7 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   double _sinSum(double t) =>
-      0.5 * (1 + math.sin(t * 0.7) + 0.6 * math.sin(t * 2.3) + 0.4 * math.sin(t * 5.7)) / 2;
+      0.5 * (1 + math.sin(t * 0.7) + 0.6 * math.sin(t * 2.3)) / 2;
 
   @override
   Future<void> playQueue({required List<Track> tracks, required int startIndex}) async {

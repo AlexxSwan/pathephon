@@ -1,9 +1,8 @@
 // ============================================================================
-//  now_playing_screen.dart — full-screen now-playing with VU meter, art, controls
-//  - No back arrow: this is the FIRST tab in IndexedStack, not a pushed route.
-//  - VU meter drawn via CustomPaint + VUPainter directly (no extra widget layer).
-//  - isPlaying comes from isPlayingProvider for instant toggle.
+//  now_playing_screen.dart - full-screen now-playing with VU meter, art, controls
 // ============================================================================
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -24,7 +23,6 @@ class NowPlayingScreen extends ConsumerWidget {
     final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
     final amp = ref.watch(amplitudeProvider).valueOrNull ?? 0.0;
     final playback = ref.watch(playbackServiceProvider);
-    // Watch isPlayingProvider so the screen rebuilds the moment user taps a track.
     ref.watch(isPlayingProvider);
 
     final track = snap?.current;
@@ -36,11 +34,9 @@ class NowPlayingScreen extends ConsumerWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Column(
             children: [
-              // ---- Top bar (no back arrow — this is a tab, not a route) ----
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  // Empty leading slot keeps title centered.
                   const SizedBox(width: 48),
                   Text(
                     l.nowPlayingTitle,
@@ -48,14 +44,13 @@ class NowPlayingScreen extends ConsumerWidget {
                   ),
                   IconButton(
                     icon: const Icon(Icons.queue_music),
-                    onPressed: () {/* TODO: queue sheet */},
+                    onPressed: () {},
                   ),
                 ],
               ),
 
               const SizedBox(height: 16),
 
-              // ---- Album art (large) ----
               Expanded(
                 flex: 4,
                 child: Center(
@@ -72,9 +67,7 @@ class NowPlayingScreen extends ConsumerWidget {
                           ),
                         ],
                       ),
-                      child: track == null || track.artUri.isEmpty
-                          ? const Icon(Icons.album, size: 120, color: TubeColors.brass)
-                          : Image.network(track.artUri, fit: BoxFit.cover),
+                      child: _ArtworkImage(track: track),
                     ),
                   ),
                 ),
@@ -82,7 +75,6 @@ class NowPlayingScreen extends ConsumerWidget {
 
               const SizedBox(height: 16),
 
-              // ---- VU meter (direct CustomPaint, no extra widget) ----
               CustomPaint(
                 size: const Size(220, 154),
                 painter: VUPainter(amplitude: amp, brightness: amp > 0.05 ? 1.0 : 0.0),
@@ -90,15 +82,14 @@ class NowPlayingScreen extends ConsumerWidget {
 
               const SizedBox(height: 8),
 
-              // ---- Track info ----
               Text(
-                track?.title ?? '—',
+                track?.title ?? '\u2014',
                 style: Theme.of(context).textTheme.displaySmall,
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 4),
               Text(
-                [track?.artist, track?.album].whereType<String>().join(' \u00B7 '), // middot
+                [track?.artist, track?.album].whereType<String>().join(' \u00B7 '),
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: TubeColors.textSecondary,
                     ),
@@ -116,7 +107,6 @@ class NowPlayingScreen extends ConsumerWidget {
 
               const SizedBox(height: 16),
 
-              // ---- Seek bar (uses inMilliseconds directly) ----
               Row(
                 children: [
                   Text(formatDuration(pos), style: Theme.of(context).textTheme.labelSmall),
@@ -137,12 +127,84 @@ class NowPlayingScreen extends ConsumerWidget {
 
               const SizedBox(height: 16),
 
-              // ---- Controls ----
               const PlaybackControls(),
             ],
           ),
         ),
       ),
     );
+  }
+}
+
+/// Resolves artwork for a track:
+/// 1. If track.artUri is set (network/file URL) -> Image.network
+/// 2. Else if track.mediaStoreId != null -> queryArtwork + Image.memory
+/// 3. Else -> fallback album icon
+class _ArtworkImage extends ConsumerStatefulWidget {
+  const _ArtworkImage({required this.track});
+  final Track? track;
+
+  @override
+  ConsumerState<_ArtworkImage> createState() => _ArtworkImageState();
+}
+
+class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
+  Uint8List? _bytes;
+  int? _loadingId;
+
+  @override
+  void didUpdateWidget(_ArtworkImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final t = widget.track;
+    if (t == null) {
+      _bytes = null;
+      _loadingId = null;
+      return;
+    }
+    if (t.mediaStoreId != null && t.mediaStoreId != _loadingId) {
+      _loadingId = t.mediaStoreId;
+      _bytes = null;
+      _fetchArt(t.mediaStoreId!);
+    } else if (t.mediaStoreId == null) {
+      _bytes = null;
+      _loadingId = null;
+    }
+  }
+
+  Future<void> _fetchArt(int id) async {
+    try {
+      final ms = ref.read(mediaStoreSourceProvider);
+      final bytes = await ms.query.queryArtwork(id, ArtworkType.AUDIO, size: 600);
+      if (mounted && _loadingId == id) {
+        setState(() => _bytes = bytes);
+      }
+    } catch (_) {
+      // ignore — fallback icon shown
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    if (t == null) {
+      return const Icon(Icons.album, size: 120, color: TubeColors.brass);
+    }
+    if (t.artUri.isNotEmpty) {
+      return Image.network(t.artUri, fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+          const Icon(Icons.album, size: 120, color: TubeColors.brass));
+    }
+    if (_bytes != null) {
+      return Image.memory(_bytes!, fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+          const Icon(Icons.album, size: 120, color: TubeColors.brass));
+    }
+    if (t.mediaStoreId != null) {
+      // Loading
+      return const Center(
+        child: SizedBox(width: 24, height: 24,
+          child: CircularProgressIndicator(strokeWidth: 2, color: TubeColors.brass)));
+    }
+    return const Icon(Icons.album, size: 120, color: TubeColors.brass);
   }
 }

@@ -1,9 +1,5 @@
 // ============================================================================
-//  playback_service.dart - playback with PERSISTENT QUEUE
-//
-//  The queue is serialized to SharedPreferences on every change and
-//  restored on init. So when the app is killed and restarted, the user
-//  can resume the same playlist from where they left off.
+//  playback_service.dart - playback with persistent queue + REAL EQ
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -39,6 +35,10 @@ abstract class PlaybackService {
   Future<void> setSpeed(double speed);
   Future<void> setReplayGain(ReplayGainMode mode);
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled});
+  // NEW: real EQ control via just_audio's AndroidEqualizer
+  int get eqBandCount;
+  Future<void> setEqBandGain(int band, double gainDb);
+  Future<void> setEqEnabled(bool enabled);
   Future<void> restoreSavedQueue();
 }
 
@@ -91,7 +91,13 @@ class JustAudioPlaybackService implements PlaybackService {
   static const _indexKey = 'pathephon.queue.index.v1';
   static const _positionKey = 'pathephon.queue.position.v1';
 
-  final _player = AudioPlayer();
+  // AndroidEqualizer created eagerly so AudioPipeline can use it.
+  final AndroidEqualizer _androidEq = AndroidEqualizer();
+
+  // AudioPlayer created with the EQ pipeline so all audio goes through it.
+  late final AudioPlayer _player = AudioPlayer(
+    audioPipeline: AudioPipeline(audioEffects: [_androidEq]),
+  );
   AudioHandler? _handler;
 
   final _initCompleter = Completer<void>();
@@ -115,6 +121,15 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<double> get amplitudeStream => _ampController.stream;
   @override
   Stream<int> get audioSessionIdStream => _sessionIdController.stream;
+
+  @override
+  int get eqBandCount {
+    try {
+      return _androidEq.parameters.bandCount;
+    } catch (_) {
+      return 0;
+    }
+  }
 
   Future<void> _init() async {
     try {
@@ -142,7 +157,6 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.playerStateStream.listen((st) {
       _emitState(st);
-      // Persist position every state change for resume-after-kill.
       _savePosition();
     });
 
@@ -160,7 +174,6 @@ class JustAudioPlaybackService implements PlaybackService {
       }
     });
 
-    // Save position every 5 seconds while playing.
     Timer.periodic(const Duration(seconds: 5), (_) {
       if (_queue.isNotEmpty) {
         _savePosition();
@@ -189,13 +202,11 @@ class JustAudioPlaybackService implements PlaybackService {
     ));
   }
 
-  // ---- Queue persistence ----
   Future<void> _saveQueue() async {
     try {
       final json = jsonEncode(_queue.map((t) => t.toJson()).toList());
       await _prefs.setString(_queueKey, json);
       await _prefs.setInt(_indexKey, _index);
-      debugPrint('[pathephon] queue saved: ${_queue.length} tracks, index=$_index');
     } catch (e) {
       debugPrint('[pathephon] saveQueue failed: $e');
     }
@@ -213,10 +224,7 @@ class JustAudioPlaybackService implements PlaybackService {
     await _initCompleter.future;
     try {
       final raw = _prefs.getString(_queueKey);
-      if (raw == null) {
-        debugPrint('[pathephon] no saved queue');
-        return;
-      }
+      if (raw == null) return;
       final list = jsonDecode(raw) as List;
       final tracks = list
           .map((j) => Track.fromJson(j as Map<String, dynamic>))
@@ -230,7 +238,6 @@ class JustAudioPlaybackService implements PlaybackService {
       final sources = tracks.map(_toSource).toList(growable: false);
       final initial = _index.clamp(0, sources.length - 1);
 
-      // Set the audio source but DO NOT auto-play. User must press play.
       await _player.setAudioSource(
         ConcatenatingAudioSource(
           children: sources,
@@ -252,7 +259,7 @@ class JustAudioPlaybackService implements PlaybackService {
         repeatMode: _repeat,
         replayGainMode: _rg,
       ));
-      debugPrint('[pathephon] queue restored: ${tracks.length} tracks at index $initial pos ${_savedPosition.inSeconds}s');
+      debugPrint('[pathephon] queue restored: ${tracks.length} tracks');
     } catch (e, st) {
       debugPrint('[pathephon] restoreSavedQueue failed: $e\n$st');
     }
@@ -261,11 +268,7 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> playQueue({required List<Track> tracks, required int startIndex}) async {
     await _initCompleter.future;
-
-    if (tracks.isEmpty) {
-      debugPrint('[pathephon] playQueue: empty tracks list');
-      return;
-    }
+    if (tracks.isEmpty) return;
     _queue = List.unmodifiable(tracks);
     _index = startIndex.clamp(0, tracks.length - 1);
 
@@ -281,11 +284,9 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: Duration.zero,
         initialIndex: initial,
       );
-
       await _player.seek(Duration.zero, index: initial);
       await _player.play();
       await _saveQueue();
-      debugPrint('[pathephon] playQueue: playing "${tracks[initial].title}"');
     } catch (e, st) {
       debugPrint('[pathephon] playQueue FAILED: $e\n$st');
       _stateController.add(PlaybackSnapshot.empty);
@@ -431,6 +432,29 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
+
+  // NEW: real EQ via AndroidEqualizer
+  @override
+  Future<void> setEqBandGain(int band, double gainDb) async {
+    await _initCompleter.future;
+    try {
+      final count = _androidEq.parameters.bandCount;
+      if (band < 0 || band >= count) return;
+      _androidEq.setBandGain(band, gainDb.clamp(-15.0, 15.0));
+    } catch (e) {
+      debugPrint('[pathephon] setEqBandGain failed: $e');
+    }
+  }
+
+  @override
+  Future<void> setEqEnabled(bool enabled) async {
+    await _initCompleter.future;
+    try {
+      _androidEq.enabled = enabled;
+    } catch (e) {
+      debugPrint('[pathephon] setEqEnabled failed: $e');
+    }
+  }
 
   void dispose() {
     _stateController.close();

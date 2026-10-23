@@ -6,121 +6,100 @@
     android:viewportHeight="108">
 
     <!--
-        Classic gramophone silhouette:
-        - Large morning-glory horn (flower-shaped) on top-left
-        - Curved neck tapering down to the box
-        - Rectangular wooden box base
-        - Crank on the right side
-        - Tonearm going from box up to horn opening
-        Centered in the 108x108 canvas with safe-zone padding (~24dp).
+        Turntable viewed from above (top-down), matching the reference image:
+        - Large platter circle (white)
+        - Vinyl record with concentric grooves (orange strokes on white)
+        - Orange center label with white spindle hole
+        - Tonearm sweeping from top-right pivot down to the record
+        - Tonearm pivot at top-right corner
+        - Tonearm head/cartridge where it meets the record
+        - Small control dots on the left side (decorative)
     -->
 
-    <!-- Horn opening: large ellipse (the bell of the gramophone) -->
+    <!-- Platter base ring (outer white circle) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 30,28
-            C 18,28 12,40 12,52
-            C 12,64 20,72 32,72
-            L 50,72
-            C 62,72 68,62 68,50
-            C 68,38 60,28 48,28
-            Z" />
+        android:pathData="M 54,56 m -34,0 a 34,34 0 1,0 68,0 a 34,34 0 1,0 -68,0 Z" />
 
-    <!-- Horn inner shadow (creates depth) -->
+    <!-- Platter inner (orange tint creates a ring effect) -->
     <path
-        android:fillColor="#FFB87A"
-        android:pathData="M 34,34
-            C 26,34 22,42 22,50
-            C 22,58 28,64 36,64
-            L 46,64
-            C 54,64 58,58 58,50
-            C 58,42 52,34 44,34
-            Z" />
+        android:fillColor="#FF8C42"
+        android:pathData="M 54,56 m -30,0 a 30,30 0 1,0 60,0 a 30,30 0 1,0 -60,0 Z" />
 
-    <!-- Horn center dot (where sound comes out) -->
+    <!-- Vinyl record (white disc on top of platter) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 40,50
-            m -6,0
-            a 6,6 0 1,0 12,0
-            a 6,6 0 1,0 -12,0
-            Z" />
+        android:pathData="M 54,56 m -26,0 a 26,26 0 1,0 52,0 a 26,26 0 1,0 -52,0 Z" />
 
-    <!-- Neck of the horn (tapering tube from horn down to box) -->
+    <!-- Vinyl grooves: concentric circles (orange strokes) -->
+    <path
+        android:strokeColor="#FF8C42"
+        android:strokeWidth="0.9"
+        android:fillColor="#00000000"
+        android:pathData="M 54,56 m -22,0 a 22,22 0 1,0 44,0 a 22,22 0 1,0 -44,0 Z" />
+    <path
+        android:strokeColor="#FF8C42"
+        android:strokeWidth="0.7"
+        android:fillColor="#00000000"
+        android:pathData="M 54,56 m -18,0 a 18,18 0 1,0 36,0 a 18,18 0 1,0 -36,0 Z" />
+    <path
+        android:strokeColor="#FF8C42"
+        android:strokeWidth="0.6"
+        android:fillColor="#00000000"
+        android:pathData="M 54,56 m -14,0 a 14,14 0 1,0 28,0 a 14,14 0 1,0 -28,0 Z" />
+    <path
+        android:strokeColor="#FF8C42"
+        android:strokeWidth="0.5"
+        android:fillColor="#00000000"
+        android:pathData="M 54,56 m -10,0 a 10,10 0 1,0 20,0 a 10,10 0 1,0 -20,0 Z" />
+
+    <!-- Center label (orange circle) -->
+    <path
+        android:fillColor="#FF6B1A"
+        android:pathData="M 54,56 m -6,0 a 6,6 0 1,0 12,0 a 6,6 0 1,0 -12,0 Z" />
+
+    <!-- Spindle hole (white dot in center) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 38,72
-            L 50,72
-            L 56,84
-            L 44,84
-            Z" />
+        android:pathData="M 54,56 m -1.5,0 a 1.5,1.5 0 1,0 3,0 a 1.5,1.5 0 1,0 -3,0 Z" />
 
-    <!-- Tonearm: thin bar going from box up to horn opening -->
+    <!-- Tonearm: thick white bar from top-right pivot to record edge -->
+    <!-- Pivot at ~(88, 26), tip at ~(66, 48) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 60,82
-            L 66,82
-            L 50,56
-            L 46,58
-            Z" />
+        android:pathData="M 89,25 L 93,21 L 68,50 L 64,46 Z" />
 
-    <!-- Tonearm pivot (small circle on the box) -->
+    <!-- Tonearm pivot base (large white circle at top-right) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 63,82
-            m -5,0
-            a 5,5 0 1,0 10,0
-            a 5,5 0 1,0 -10,0
-            Z" />
+        android:pathData="M 90,28 m -7,0 a 7,7 0 1,0 14,0 a 7,7 0 1,0 -14,0 Z" />
 
-    <!-- Wooden box base (the gramophone cabinet) -->
+    <!-- Tonearm pivot inner (orange dot) -->
+    <path
+        android:fillColor="#FF6B1A"
+        android:pathData="M 90,28 m -3,0 a 3,3 0 1,0 6,0 a 3,3 0 1,0 -6,0 Z" />
+
+    <!-- Tonearm head/cartridge (small rectangle where needle meets record) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 30,82
-            L 78,82
-            C 82,82 84,84 84,88
-            L 84,96
-            C 84,98 82,100 78,100
-            L 30,100
-            C 26,100 24,98 24,96
-            L 24,88
-            C 24,84 26,82 30,82
-            Z" />
+        android:pathData="M 60,44 L 68,44 L 68,52 L 60,52 Z" />
 
-    <!-- Box front panel divider line (decorative) -->
-    <path
-        android:fillColor="#FFB87A"
-        android:pathData="M 30,90
-            L 78,90
-            L 78,92
-            L 30,92
-            Z" />
-
-    <!-- Crank handle on the right side of the box -->
+    <!-- Control dots on left side (decorative, like buttons) -->
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 84,90
-            L 92,90
-            L 92,94
-            L 84,94
-            Z" />
-
-    <!-- Crank knob (small circle at end) -->
+        android:pathData="M 20,40 m -2,0 a 2,2 0 1,0 4,0 a 2,2 0 1,0 -4,0 Z" />
     <path
         android:fillColor="#FFFFFF"
-        android:pathData="M 94,92
-            m -3,0
-            a 3,3 0 1,0 6,0
-            a 3,3 0 1,0 -6,0
-            Z" />
-
-    <!-- Turntable disc visible on top of box (small ellipse) -->
+        android:pathData="M 20,52 m -2,0 a 2,2 0 1,0 4,0 a 2,2 0 1,0 -4,0 Z" />
     <path
-        android:fillColor="#FFB87A"
-        android:pathData="M 50,82
-            m 0,-1
-            a 14,2 0 1,0 28,0
-            a 14,2 0 1,0 -28,0
-            Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M 20,64 m -2,0 a 2,2 0 1,0 4,0 a 2,2 0 1,0 -4,0 Z" />
+
+    <!-- Small speed selector line (left side, decorative) -->
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.5"
+        android:fillColor="#00000000"
+        android:pathData="M 16,30 L 24,30" />
 
 </vector>

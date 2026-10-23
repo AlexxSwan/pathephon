@@ -107,7 +107,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                     onTap: () {
                       playback.playQueue(tracks: tracks, startIndex: i);
                       ref.read(isPlayingProvider.notifier).state = true;
-                      Navigator.of(context).pushNamed("/now-playing");
+                      // Switch to Now Playing tab is handled by bottom nav
                     },
                   );
                 },
@@ -153,7 +153,7 @@ class _AlbumGrid extends ConsumerWidget {
               if (a.tracks.isEmpty) return;
               playback.playQueue(tracks: a.tracks, startIndex: 0);
               ref.read(isPlayingProvider.notifier).state = true;
-              Navigator.of(context).pushNamed("/now-playing");
+              // Switch to Now Playing tab is handled by bottom nav
             },
             child: Padding(
               padding: const EdgeInsets.all(10),

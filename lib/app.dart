@@ -32,9 +32,6 @@ class AudioPlayerX64App extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       home: const _Shell(),
-      routes: {
-        "/now-playing": (_) => const NowPlayingScreen(),
-      },
     );
   }
 }
@@ -57,25 +54,46 @@ class _Shell extends StatefulWidget {
 
 class _ShellState extends State<_Shell> {
   int _index = 0;
+
   final _screens = const <Widget>[
+    NowPlayingScreen(),
     LibraryScreen(),
     AudiobooksScreen(),
-    EqualizerScreen(),
     AboutScreen(),
   ];
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     return Scaffold(
-      body: _screens[_index],
+      body: IndexedStack(
+        index: _index,
+        children: _screens,
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: [
-          NavigationDestination(icon: const Icon(Icons.library_music_outlined), selectedIcon: const Icon(Icons.library_music), label: l.navLibrary),
-          NavigationDestination(icon: const Icon(Icons.menu_book_outlined), selectedIcon: const Icon(Icons.menu_book), label: l.navAudiobooks),
-          NavigationDestination(icon: const Icon(Icons.equalizer_outlined), selectedIcon: const Icon(Icons.equalizer), label: l.navEqualizer),
-          NavigationDestination(icon: const Icon(Icons.info_outline), selectedIcon: const Icon(Icons.info), label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435"),
+          NavigationDestination(
+            icon: const Icon(Icons.play_circle_outline),
+            selectedIcon: const Icon(Icons.play_circle),
+            label: l.nowPlayingTitle,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.library_music_outlined),
+            selectedIcon: const Icon(Icons.library_music),
+            label: l.navLibrary,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.menu_book_outlined),
+            selectedIcon: const Icon(Icons.menu_book),
+            label: l.navAudiobooks,
+          ),
+          NavigationDestination(
+            icon: const Icon(Icons.info_outline),
+            selectedIcon: const Icon(Icons.info),
+            label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
+          ),
         ],
       ),
     );

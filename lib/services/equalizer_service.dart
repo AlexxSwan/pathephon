@@ -1,9 +1,12 @@
 // ============================================================================
-//  equalizer_service.dart - 5-band EQ state holder (UI-side)
-//  Stores band gains in SharedPreferences. Real audio processing is TODO.
+//  equalizer_service.dart - 5-band EQ via native Android Equalizer AudioEffect
+//  Attaches to the player's audio session id (same as Visualizer).
+//  All gains are real - applied to the actual audio output.
 // ============================================================================
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const kEqBandCount = 5;
@@ -17,6 +20,7 @@ abstract class EqualizerService {
   Future<void> setBandGain(int bandIndex, double gainDb);
   Future<void> setEnabled(bool enabled);
   Future<void> reset();
+  Future<void> attachToSession(int sessionId);
   void dispose();
 }
 
@@ -26,12 +30,14 @@ class AndroidEqualizerService implements EqualizerService {
   }
 
   final SharedPreferences _prefs;
+  static const _method = MethodChannel('pathephon/equalizer');
 
   final _bandsController = StreamController<List<double>>.broadcast();
   final _enabledController = StreamController<bool>.broadcast();
 
   List<double> _bands = List.filled(kEqBandCount, 0.0);
   bool _enabled = false;
+  int? _attachedSessionId;
 
   @override
   Stream<List<double>> get bandsStream => _bandsController.stream;
@@ -66,10 +72,33 @@ class AndroidEqualizerService implements EqualizerService {
   }
 
   @override
+  Future<void> attachToSession(int sessionId) async {
+    if (sessionId == 0 || sessionId == _attachedSessionId) return;
+    _attachedSessionId = sessionId;
+    try {
+      await _method.invokeMethod('attach', {'sessionId': sessionId});
+      // Apply current state to the freshly attached EQ.
+      await _method.invokeMethod('setEnabled', {'enabled': _enabled});
+      await _method.invokeMethod('setAllBands', {'gains': _bands});
+      debugPrint('[pathephon] EQ attached to session $sessionId');
+    } catch (e) {
+      debugPrint('[pathephon] EQ attach failed (non-fatal): $e');
+    }
+  }
+
+  @override
   Future<void> setBandGain(int bandIndex, double gainDb) async {
     if (bandIndex < 0 || bandIndex >= kEqBandCount) return;
     _bands[bandIndex] = gainDb.clamp(-15.0, 15.0);
     _bandsController.add(List.unmodifiable(_bands));
+    try {
+      await _method.invokeMethod('setBandGain', {
+        'band': bandIndex,
+        'gain': _bands[bandIndex],
+      });
+    } catch (e) {
+      debugPrint('[pathephon] EQ setBandGain failed: $e');
+    }
     await _save();
   }
 
@@ -77,6 +106,15 @@ class AndroidEqualizerService implements EqualizerService {
   Future<void> setEnabled(bool enabled) async {
     _enabled = enabled;
     _enabledController.add(_enabled);
+    try {
+      await _method.invokeMethod('setEnabled', {'enabled': enabled});
+      if (enabled) {
+        // Re-apply all band gains when enabling
+        await _method.invokeMethod('setAllBands', {'gains': _bands});
+      }
+    } catch (e) {
+      debugPrint('[pathephon] EQ setEnabled failed: $e');
+    }
     await _save();
   }
 
@@ -84,6 +122,9 @@ class AndroidEqualizerService implements EqualizerService {
   Future<void> reset() async {
     _bands = List.filled(kEqBandCount, 0.0);
     _broadcast();
+    try {
+      await _method.invokeMethod('setAllBands', {'gains': _bands});
+    } catch (_) {}
     await _save();
   }
 

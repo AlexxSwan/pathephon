@@ -1,7 +1,7 @@
 // ============================================================================
-//  playback_service.dart - playback with persistent queue + REAL EQ
-//  Uses just_audio's AndroidEqualizer (correct API: androidAudioEffects,
-//  await parameters, setBandGain on band objects, setEnabled method).
+//  playback_service.dart - playback with persistent queue
+//  Plain AudioPlayer (no AudioPipeline) — Visualizer works again.
+//  EQ handled by separate native EqualizerPlugin (see EqualizerPlugin.kt).
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -36,9 +36,6 @@ abstract class PlaybackService {
   Future<void> setSpeed(double speed);
   Future<void> setReplayGain(ReplayGainMode mode);
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled});
-  Future<void> setEqBandGain(int band, double gainDb);
-  Future<void> setEqEnabled(bool enabled);
-  int get eqBandCount;
   Future<void> restoreSavedQueue();
 }
 
@@ -91,17 +88,9 @@ class JustAudioPlaybackService implements PlaybackService {
   static const _indexKey = 'pathephon.queue.index.v1';
   static const _positionKey = 'pathephon.queue.position.v1';
 
-  // AndroidEqualizer created eagerly so AudioPipeline can use it.
-  final AndroidEqualizer _androidEq = AndroidEqualizer();
-
-  // AudioPlayer created with the EQ pipeline so all audio goes through it.
-  // Note: just_audio 0.9.x uses `androidAudioEffects` (not `audioEffects`)
-  // for Android-specific effects.
-  late final AudioPlayer _player = AudioPlayer(
-    audioPipeline: AudioPipeline(
-      androidAudioEffects: [_androidEq],
-    ),
-  );
+  // Plain AudioPlayer — no AudioPipeline. This keeps androidAudioSessionIdStream
+  // working so Visualizer can attach. EQ handled by native plugin.
+  final _player = AudioPlayer();
   AudioHandler? _handler;
 
   final _initCompleter = Completer<void>();
@@ -125,13 +114,6 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<double> get amplitudeStream => _ampController.stream;
   @override
   Stream<int> get audioSessionIdStream => _sessionIdController.stream;
-
-  @override
-  int get eqBandCount {
-    // parameters is a Future<AndroidEqualizerParameters>; we can't await
-    // in a sync getter, so return 0 (UI uses fixed kEqBandCount=5 anyway).
-    return 0;
-  }
 
   Future<void> _init() async {
     try {
@@ -434,29 +416,6 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
-
-  // Real EQ: await parameters, then setBandGain on band object.
-  @override
-  Future<void> setEqBandGain(int band, double gainDb) async {
-    await _initCompleter.future;
-    try {
-      final params = await _androidEq.parameters;
-      if (band < 0 || band >= params.bands.length) return;
-      await params.bands[band].setGain(gainDb.clamp(-15.0, 15.0));
-    } catch (e) {
-      debugPrint('[pathephon] setEqBandGain failed: $e');
-    }
-  }
-
-  @override
-  Future<void> setEqEnabled(bool enabled) async {
-    await _initCompleter.future;
-    try {
-      await _androidEq.setEnabled(enabled);
-    } catch (e) {
-      debugPrint('[pathephon] setEqEnabled failed: $e');
-    }
-  }
 
   void dispose() {
     _stateController.close();

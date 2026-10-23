@@ -1,9 +1,7 @@
 // ============================================================================
 //  equalizer_screen.dart - 5-band EQ with REAL audio processing
-//
-//  Uses just_audio's AndroidEqualizer (via PlaybackService.setEqBandGain).
-//  Local state for instant slider response, synced to service for persistence
-//  and to playback service for actual audio effect.
+//  Hooks EQ to playback's audioSessionId (via visualizer service pattern).
+//  Local state for instant slider response, synced to native EQ.
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -33,9 +31,12 @@ class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
       _bands = List.from(eq.currentBands);
       _enabled = eq.isEnabled;
       _initialized = true;
-      // Apply current state to the real EQ on first build.
+      // Hook EQ to the player's audio session id stream.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _applyAllToAudio();
+        final playback = ref.read(playbackServiceProvider);
+        playback.audioSessionIdStream.listen((sessionId) {
+          eq.attachToSession(sessionId);
+        });
       });
     }
   }
@@ -47,37 +48,19 @@ class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
     return hz.toStringAsFixed(0);
   }
 
-  Future<void> _applyAllToAudio() async {
-    final playback = ref.read(playbackServiceProvider);
-    await playback.setEqEnabled(_enabled);
-    for (var i = 0; i < _bands.length; i++) {
-      await playback.setEqBandGain(i, _bands[i]);
-    }
-  }
-
   Future<void> _onBandChanged(int i, double v) async {
     setState(() {
       _bands[i] = v.clamp(-15.0, 15.0);
-      _selectedPreset = null; // manual change clears preset selection
+      _selectedPreset = null;
     });
     final eq = ref.read(equalizerServiceProvider);
-    final playback = ref.read(playbackServiceProvider);
     await eq.setBandGain(i, v);
-    await playback.setEqBandGain(i, v);
   }
 
   Future<void> _onEnabledChanged(bool v) async {
     setState(() => _enabled = v);
     final eq = ref.read(equalizerServiceProvider);
-    final playback = ref.read(playbackServiceProvider);
     await eq.setEnabled(v);
-    await playback.setEqEnabled(v);
-    if (v) {
-      // Re-apply all band gains when enabling
-      for (var i = 0; i < _bands.length; i++) {
-        await playback.setEqBandGain(i, _bands[i]);
-      }
-    }
   }
 
   Future<void> _onPresetSelected(EqPreset? preset) async {
@@ -87,10 +70,8 @@ class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
       _bands = List.from(preset.gains);
     });
     final eq = ref.read(equalizerServiceProvider);
-    final playback = ref.read(playbackServiceProvider);
     for (var i = 0; i < preset.gains.length; i++) {
       await eq.setBandGain(i, preset.gains[i]);
-      await playback.setEqBandGain(i, preset.gains[i]);
     }
   }
 
@@ -100,11 +81,7 @@ class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
       _selectedPreset = EqPreset.flat;
     });
     final eq = ref.read(equalizerServiceProvider);
-    final playback = ref.read(playbackServiceProvider);
     await eq.reset();
-    for (var i = 0; i < _bands.length; i++) {
-      await playback.setEqBandGain(i, 0.0);
-    }
   }
 
   @override
@@ -123,7 +100,6 @@ class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
       ),
       body: Column(
         children: [
-          // Presets row
           Padding(
             padding: const EdgeInsets.all(16),
             child: Row(
@@ -158,7 +134,6 @@ class _EqualizerScreenState extends ConsumerState<EqualizerScreen> {
             ),
           ),
           const Divider(),
-          // Bands
           Expanded(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),

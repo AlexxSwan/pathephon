@@ -18,6 +18,12 @@ android {
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Restrict to arm64-v8a (modern phones) + x86_64 (emulators/tablets).
+        // Without this, Flutter builds for all ABIs (including armeabi-v7a
+        // and x86 which we don't want).
+        ndk {
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     val keystoreProperties = Properties()

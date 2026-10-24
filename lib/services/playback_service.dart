@@ -1,23 +1,25 @@
 // ============================================================================
-//  playback_service.dart - playback with NATIVE MediaSession integration
+//  playback_service.dart - audio_service + _player.play() + MediaSession metadata
 //
-//  Uses MediaSessionService (native Kotlin) instead of audio_service.
-//  - _player.play() for playback (always works)
-//  - MediaSessionService for lock screen + headset + Bluetooth
-//  - Listens to media button events and forwards to _player
+//  - _player.play() for playback (always works, proven in 0.8.7)
+//  - AudioService.init() for foreground service + notification
+//  - _broadcastState auto-updates MediaSession (triggers lock screen notification)
+//  - _updateMediaItem sets title/artist/album for lock screen display
+//  - Handler overrides for headset/Bluetooth/lock screen button events
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:just_audio/just_audio.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/replaygain.dart';
 import '../domain/enums/repeat_mode.dart';
 import '../domain/models/track.dart';
-import '../services/media_session_service.dart';
 
 abstract class PlaybackService {
   Stream<PlaybackSnapshot> get state;
@@ -48,12 +50,10 @@ class PlaybackSnapshot {
     required this.isBuffering, required this.shuffle,
     required this.repeatMode, required this.replayGainMode,
   });
-
   final Track? current; final List<Track> queue; final int index;
   final Duration position; final Duration duration;
   final bool isPlaying; final bool isBuffering; final bool shuffle;
   final RepeatMode repeatMode; final ReplayGainMode replayGainMode;
-
   static PlaybackSnapshot empty = PlaybackSnapshot(
     current: null, queue: const [], index: 0, position: Duration.zero,
     duration: Duration.zero, isPlaying: false, isBuffering: false,
@@ -62,17 +62,15 @@ class PlaybackSnapshot {
 }
 
 class JustAudioPlaybackService implements PlaybackService {
-  JustAudioPlaybackService(this._prefs, this._mediaSession) { _init(); }
-
+  JustAudioPlaybackService(this._prefs) { _init(); }
   final SharedPreferences _prefs;
-  final MediaSessionService _mediaSession;
   static const _queueKey = 'pathephon.queue.v1';
   static const _indexKey = 'pathephon.queue.index.v1';
   static const _positionKey = 'pathephon.queue.position.v1';
 
   final _player = AudioPlayer();
+  AudioHandler? _handler;
   final _initCompleter = Completer<void>();
-  StreamSubscription? _mediaButtonSub;
 
   List<Track> _queue = const [];
   int _index = 0;
@@ -96,20 +94,33 @@ class JustAudioPlaybackService implements PlaybackService {
       await session.configure(const AudioSessionConfiguration.music());
     } catch (e) { debugPrint('[pathephon] AudioSession failed: $e'); }
 
+    try {
+      _handler = await AudioService.init(
+        builder: () => _PathephonAudioHandler(_player),
+        config: const AudioServiceConfig(
+          androidNotificationChannelId: 'pathephon_playback',
+          androidNotificationChannelName: 'Pathephon Playback',
+          androidNotificationOngoing: true,
+          androidStopForegroundOnPause: true,
+        ),
+      );
+      debugPrint('[pathephon] AudioService.init OK');
+    } catch (e) {
+      debugPrint('[pathephon] AudioService.init FAILED: $e');
+    }
+
     _stateController.add(PlaybackSnapshot.empty);
 
     _player.playerStateStream.listen((st) {
       _emitState(st);
       _savePosition();
-      // Update MediaSession playback state
-      _updateMediaSessionState(st);
     });
 
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
-        _updateMediaSessionMetadata();
+        _updateMediaItem();
       }
     });
 
@@ -117,47 +128,8 @@ class JustAudioPlaybackService implements PlaybackService {
       if (id != null) _sessionIdController.add(id);
     });
 
-    // Listen to media button events (headset, Bluetooth, lock screen)
-    _mediaButtonSub = _mediaSession.events.listen((event) {
-      debugPrint('[pathephon] Media button event: $event');
-      switch (event) {
-        case 'play':
-          _player.play();
-          break;
-        case 'pause':
-          _player.pause();
-          break;
-        case 'next':
-          if (_player.hasNext) {
-            _player.seekToNext();
-            _index = _player.currentIndex ?? _index;
-            _updateMediaSessionMetadata();
-            _saveQueue();
-          }
-          break;
-        case 'prev':
-          if (_player.hasPrevious) {
-            _player.seekToPrevious();
-            _index = _player.currentIndex ?? _index;
-            _updateMediaSessionMetadata();
-            _saveQueue();
-          }
-          break;
-        case 'stop':
-          _player.pause();
-          break;
-        case 'seek:pos':
-          final posMs = int.tryParse(event.split(':').last) ?? 0;
-          _player.seek(Duration(milliseconds: posMs));
-          break;
-      }
-    });
-
     Timer.periodic(const Duration(seconds: 5), (_) {
-      if (_queue.isNotEmpty) {
-        _savePosition();
-        _emitState(_player.playerState);
-      }
+      if (_queue.isNotEmpty) { _savePosition(); _emitState(_player.playerState); }
     });
 
     _initCompleter.complete();
@@ -176,27 +148,33 @@ class JustAudioPlaybackService implements PlaybackService {
     ));
   }
 
-  /// Update MediaSession metadata (title, artist, album) for lock screen.
-  void _updateMediaSessionMetadata() {
-    if (_queue.isEmpty) return;
+  void _updateMediaItem() {
+    if (_handler == null || _queue.isEmpty) return;
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
     final t = _queue[idx];
-    _mediaSession.updateMetadata(
-      title: t.title,
-      artist: t.artist,
-      album: t.album,
-      durationMs: t.durationMs,
+    final mediaItem = MediaItem(
+      id: t.id, album: t.album, title: t.title, artist: t.artist,
+      duration: Duration(milliseconds: t.durationMs),
     );
+    try {
+      (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
+    } catch (e) {
+      debugPrint('[pathephon] _updateMediaItem: $e');
+    }
   }
 
-  /// Update MediaSession playback state for lock screen controls.
-  void _updateMediaSessionState(PlayerState st) {
-    final stateStr = st.playing ? 'playing' : 'paused';
-    _mediaSession.updatePlaybackState(
-      state: stateStr,
-      positionMs: _player.position.inMilliseconds,
-    );
+  void _updateQueueStream() {
+    if (_handler == null) return;
+    final items = _queue.map((t) => MediaItem(
+      id: t.id, album: t.album, title: t.title, artist: t.artist,
+      duration: Duration(milliseconds: t.durationMs),
+    )).toList();
+    try {
+      (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
+    } catch (e) {
+      debugPrint('[pathephon] _updateQueueStream: $e');
+    }
   }
 
   Future<void> _saveQueue() async {
@@ -220,19 +198,17 @@ class JustAudioPlaybackService implements PlaybackService {
       final list = jsonDecode(raw) as List;
       final tracks = list.map((j) => Track.fromJson(j as Map<String, dynamic>)).toList(growable: false);
       if (tracks.isEmpty) return;
-
       _queue = List.unmodifiable(tracks);
       _index = _prefs.getInt(_indexKey) ?? 0;
       final savedPos = Duration(milliseconds: _prefs.getInt(_positionKey) ?? 0);
-
       final sources = tracks.map(_toSource).toList(growable: false);
       final initial = _index.clamp(0, sources.length - 1);
-
       await _player.setAudioSource(
         ConcatenatingAudioSource(children: sources, useLazyPreparation: true),
         initialPosition: savedPos, initialIndex: initial,
       );
-
+      _updateQueueStream();
+      _updateMediaItem();
       _stateController.add(PlaybackSnapshot(
         current: _queue[initial], queue: _queue, index: initial,
         position: savedPos, duration: _player.duration ?? Duration.zero,
@@ -248,24 +224,18 @@ class JustAudioPlaybackService implements PlaybackService {
     if (tracks.isEmpty) return;
     _queue = List.unmodifiable(tracks);
     _index = startIndex.clamp(0, tracks.length - 1);
-
     final sources = tracks.map(_toSource).toList(growable: false);
     final initial = startIndex.clamp(0, sources.length - 1);
-
     try {
       await _player.setAudioSource(
         ConcatenatingAudioSource(children: sources, useLazyPreparation: true),
         initialPosition: Duration.zero, initialIndex: initial,
       );
       await _player.seek(Duration.zero, index: initial);
-
-      // Start MediaSession (creates notification + lock screen widget)
-      await _mediaSession.start();
-      _updateMediaSessionMetadata();
-
+      _updateQueueStream();
+      _updateMediaItem();
       await _player.play();
       await _saveQueue();
-      debugPrint('[pathephon] playQueue: started');
     } catch (e) {
       debugPrint('[pathephon] playQueue FAILED: $e');
       _stateController.add(PlaybackSnapshot.empty);
@@ -283,14 +253,16 @@ class JustAudioPlaybackService implements PlaybackService {
     } else {
       uri = Uri.parse(t.uri);
     }
-    return AudioSource.uri(uri);
+    return AudioSource.uri(uri, tag: MediaItem(
+      id: t.id, album: t.album, title: t.title, artist: t.artist,
+      duration: Duration(milliseconds: t.durationMs),
+    ));
   }
 
   @override
   Future<void> play() async { await _initCompleter.future; await _player.play(); }
   @override
   Future<void> pause() async { await _initCompleter.future; await _player.pause(); await _savePosition(); }
-
   @override
   Future<void> stop() async {
     await _initCompleter.future;
@@ -299,12 +271,11 @@ class JustAudioPlaybackService implements PlaybackService {
     await _savePosition();
     _emitState(_player.playerState);
   }
-
   @override
   Future<void> clearQueue() async {
     await _initCompleter.future;
     await _player.stop();
-    await _mediaSession.stop();
+    await _handler?.stop();
     _queue = const [];
     _index = 0;
     await _prefs.remove(_queueKey);
@@ -312,10 +283,8 @@ class JustAudioPlaybackService implements PlaybackService {
     await _prefs.remove(_positionKey);
     _stateController.add(PlaybackSnapshot.empty);
   }
-
   @override
   Future<void> seekTo(Duration position) async { await _initCompleter.future; await _player.seek(position); await _savePosition(); }
-
   @override
   Future<void> skipToNext() async {
     await _initCompleter.future;
@@ -323,11 +292,10 @@ class JustAudioPlaybackService implements PlaybackService {
     if (_player.hasNext) {
       await _player.seekToNext();
       _index = _player.currentIndex ?? _index;
-      _updateMediaSessionMetadata();
+      _updateMediaItem();
       await _saveQueue();
     }
   }
-
   @override
   Future<void> skipToPrevious() async {
     await _initCompleter.future;
@@ -335,11 +303,10 @@ class JustAudioPlaybackService implements PlaybackService {
     if (_player.hasPrevious) {
       await _player.seekToPrevious();
       _index = _player.currentIndex ?? _index;
-      _updateMediaSessionMetadata();
+      _updateMediaItem();
       await _saveQueue();
     }
   }
-
   @override
   Future<void> setShuffle(bool enabled) async { await _initCompleter.future; _shuffle = enabled; await _player.setShuffleModeEnabled(enabled); }
   @override
@@ -351,7 +318,6 @@ class JustAudioPlaybackService implements PlaybackService {
     };
     await _player.setLoopMode(am);
   }
-
   @override
   Future<void> setVolume(double volume) => _player.setVolume(volume.clamp(0.0, 1.0));
   @override
@@ -366,11 +332,66 @@ class JustAudioPlaybackService implements PlaybackService {
   }
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
-
   void dispose() {
-    _mediaButtonSub?.cancel();
     _stateController.close();
     _sessionIdController.close();
     _player.dispose();
+  }
+}
+
+/// AudioHandler: _broadcastState auto-updates MediaSession (triggers notification).
+/// Overrides handle EXTERNAL events (headset, Bluetooth, lock screen buttons).
+class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
+  _PathephonAudioHandler(this._player) {
+    _player.playbackEventStream.listen(_broadcastState);
+  }
+  final AudioPlayer _player;
+
+  @override
+  Future<void> play() => _player.play();
+  @override
+  Future<void> pause() => _player.pause();
+  @override
+  Future<void> stop() async { await _player.stop(); await super.stop(); }
+  @override
+  Future<void> skipToNext() => _player.seekToNext();
+  @override
+  Future<void> skipToPrevious() => _player.seekToPrevious();
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
+
+  void _broadcastState(PlaybackEvent event) {
+    final state = _player.playerState;
+    playbackState.add(PlaybackState(
+      controls: [
+        if (_player.hasPrevious) MediaControl.skipToPrevious,
+        if (state.playing) MediaControl.pause else MediaControl.play,
+        if (_player.hasNext) MediaControl.skipToNext,
+        MediaControl.stop,
+      ],
+      systemActions: const {
+        MediaAction.seek, MediaAction.seekForward, MediaAction.seekBackward,
+        MediaAction.playPause, MediaAction.setSpeed,
+      },
+      androidCompactActionIndices: const [0, 1, 2],
+      processingState: switch (state.processingState) {
+        ProcessingState.idle => AudioProcessingState.idle,
+        ProcessingState.loading => AudioProcessingState.loading,
+        ProcessingState.buffering => AudioProcessingState.buffering,
+        ProcessingState.ready => AudioProcessingState.ready,
+        ProcessingState.completed => AudioProcessingState.completed,
+      },
+      playing: state.playing,
+      updatePosition: _player.position,
+      bufferedPosition: _player.bufferedPosition,
+      speed: _player.speed,
+      queueIndex: _player.currentIndex,
+    ));
+  }
+
+  @override
+  Future<void> onTaskRemoved() async {
+    await _player.pause();
+    await super.onTaskRemoved();
   }
 }

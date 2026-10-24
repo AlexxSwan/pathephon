@@ -23,7 +23,6 @@ import '../../services/audio_book_service.dart';
 import '../../services/equalizer_service.dart';
 import '../../services/playback_service.dart';
 import '../../services/visualizer_service.dart';
-import '../../services/media_session_service.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('sharedPreferencesProvider must be overridden in main()');
@@ -55,7 +54,7 @@ final audiobookRepositoryProvider = Provider<AudiobookRepository>((ref) {
 
 final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
-  final ms = ref.watch(mediaSessionServiceProvider); final svc = JustAudioPlaybackService(prefs, ms);
+  final svc = JustAudioPlaybackService(prefs);
   ref.onDispose(svc.dispose);
 
   // On startup: restore queue in playback service.
@@ -86,12 +85,6 @@ final libraryRestoreProvider = FutureProvider<void>((ref) async {
 
 final visualizerServiceProvider = Provider<VisualizerService>((ref) {
   final svc = VisualizerService();
-  ref.onDispose(svc.dispose);
-  return svc;
-});
-
-final mediaSessionServiceProvider = Provider<MediaSessionService>((ref) {
-  final svc = MediaSessionService();
   ref.onDispose(svc.dispose);
   return svc;
 });

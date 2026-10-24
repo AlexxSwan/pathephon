@@ -1,16 +1,15 @@
 // ============================================================================
-//  mediastore_source.dart - audio discovery
+//  mediastore_source.dart - audio discovery with SAF fallback for folders
 //
-//  IMPORTANT: FilePicker.getDirectoryPath() on Android 11+ returns a SAF
-//  tree URI like "content://com.android.externalstorage.documents/tree/...".
-//  dart:io Directory cannot list such URIs. We detect this case and fall
-//  back to MediaStore query filtered by the parent folder, OR show a clear
-//  error so the user knows to use "files" picker instead.
+//  pickDirectory(): if FilePicker returns a content:// tree URI, calls
+//  native FolderScannerPlugin to enumerate via DocumentFile API.
+//  Otherwise (filesystem path), uses dart:io Directory.
 // ============================================================================
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 
 import '../../domain/models/track.dart';
@@ -20,11 +19,11 @@ class MediaStoreSource {
   MediaStoreSource(this._query);
 
   final OnAudioQuery _query;
+  static const _folderScanner = MethodChannel('pathephon/folder_scanner');
 
   static const _coverBases = ['cover', 'folder', 'album', 'front', 'albumart', 'coverart', 'art'];
   static const _coverExts = ['jpg', 'jpeg', 'png', 'webp'];
 
-  /// Detect if path is a SAF content URI (cannot be listed via Directory).
   static bool _isContentUri(String path) {
     return path.startsWith('content://') ||
            path.startsWith('content%3A') ||
@@ -90,16 +89,12 @@ class MediaStoreSource {
     debugPrint('[pathephon] fetchAllTracks: starting');
     if (!await _query.permissionsStatus()) {
       final granted = await _query.permissionsRequest();
-      if (!granted) {
-        debugPrint('[pathephon] fetchAllTracks: permission denied');
-        return const <Track>[];
-      }
+      if (!granted) return const <Track>[];
     }
     final songs = await _query.querySongs(
       sortType: SongSortType.DATE_ADDED,
       orderType: OrderType.DESC_OR_GREATER,
     );
-    debugPrint('[pathephon] fetchAllTracks: got ${songs.length} songs');
     return songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
   }
 
@@ -112,13 +107,8 @@ class MediaStoreSource {
   Future<bool> requestPermission() async => _query.permissionsRequest();
 
   Future<List<Track>> pickAudioFiles() async {
-    debugPrint('[pathephon] pickAudioFiles: starting');
     final result = await FilePicker.pickFiles(type: FileType.audio);
-    if (result == null || result.isEmpty) {
-      debugPrint('[pathephon] pickAudioFiles: no files picked');
-      return const <Track>[];
-    }
-    debugPrint('[pathephon] pickAudioFiles: got ${result.length} files');
+    if (result == null || result.isEmpty) return const <Track>[];
 
     final dirCoverCache = <String, String?>{};
     final tracks = <Track>[];
@@ -126,7 +116,6 @@ class MediaStoreSource {
       try {
         final path = f.path ?? '';
         if (path.isEmpty) continue;
-        debugPrint('[pathephon] pickAudioFiles: file path = $path');
         final ext = path.toLowerCase().split('.').last;
         final uri = Uri.file(path).toString();
         var artUri = '';
@@ -143,47 +132,61 @@ class MediaStoreSource {
           filePath: path,
           artUri: artUri,
         ));
-      } catch (e) {
-        debugPrint('[pathephon] pickAudioFiles: error: $e');
+      } catch (_) {
         continue;
       }
     }
-    debugPrint('[pathephon] pickAudioFiles: returning ${tracks.length} tracks');
     return tracks;
   }
 
+  /// Pick a directory. Works with both filesystem paths and SAF tree URIs.
   Future<List<Track>> pickDirectory() async {
     debugPrint('[pathephon] pickDirectory: starting');
     final dirPath = await FilePicker.getDirectoryPath();
-    if (dirPath == null) {
-      debugPrint('[pathephon] pickDirectory: user cancelled');
-      return const <Track>[];
-    }
+    if (dirPath == null) return const <Track>[];
     debugPrint('[pathephon] pickDirectory: picked path = $dirPath');
 
-    // Check if this is a SAF content URI (Android 11+)
+    // SAF tree URI: use native FolderScannerPlugin
     if (_isContentUri(dirPath)) {
-      debugPrint('[pathephon] pickDirectory: SAF content URI detected, cannot list directly');
-      debugPrint('[pathephon] pickDirectory: returning empty - user should use "files" picker');
-      // We cannot list a SAF tree URI from Dart. The user should use
-      // "files" picker (pickAudioFiles) which uses SAF file picker that
-      // grants per-file access.
-      return const <Track>[];
-    }
-
-    try {
-      final dir = Directory(dirPath);
-      if (!await dir.exists()) {
-        debugPrint('[pathephon] pickDirectory: dir does not exist');
+      debugPrint('[pathephon] pickDirectory: SAF URI detected, calling FolderScannerPlugin');
+      try {
+        final result = await _folderScanner.invokeMethod('scanFolder', {'treeUri': dirPath});
+        if (result is! List) {
+          debugPrint('[pathephon] pickDirectory: unexpected result type');
+          return const <Track>[];
+        }
+        final tracks = <Track>[];
+        for (final item in result) {
+          if (item is! Map) continue;
+          final uri = item['uri'] as String;
+          final name = item['name'] as String;
+          final artUri = (item['artUri'] as String?) ?? '';
+          final ext = name.toLowerCase().split('.').last;
+          tracks.add(Track(
+            id: uri,
+            uri: uri,
+            title: name,
+            fileExtension: ext,
+            filePath: dirPath,
+            artUri: artUri,
+          ));
+        }
+        debugPrint('[pathephon] pickDirectory: SAF scan returned ${tracks.length} tracks');
+        return tracks;
+      } catch (e, st) {
+        debugPrint('[pathephon] pickDirectory SAF scan FAILED: $e\n$st');
         return const <Track>[];
       }
+    }
+
+    // Filesystem path: use dart:io Directory
+    try {
+      final dir = Directory(dirPath);
+      if (!await dir.exists()) return const <Track>[];
 
       final dirCover = _findCoverInDir(dirPath);
-      debugPrint('[pathephon] pickDirectory: cover art = $dirCover');
-
       final tracks = <Track>[];
       final entities = dir.listSync(recursive: false, followLinks: false);
-      debugPrint('[pathephon] pickDirectory: ${entities.length} entities');
       entities.sort((a, b) => a.path.compareTo(b.path));
       for (final e in entities) {
         if (e is! File) continue;
@@ -203,15 +206,14 @@ class MediaStoreSource {
             filePath: path,
             artUri: dirCover ?? '',
           ));
-        } catch (e) {
-          debugPrint('[pathephon] pickDirectory: entity error: $e');
+        } catch (_) {
           continue;
         }
       }
-      debugPrint('[pathephon] pickDirectory: returning ${tracks.length} tracks');
+      debugPrint('[pathephon] pickDirectory: dart:io scan returned ${tracks.length} tracks');
       return tracks;
     } catch (e, st) {
-      debugPrint('[pathephon] pickDirectory FAILED: $e\n$st');
+      debugPrint('[pathephon] pickDirectory dart:io FAILED: $e\n$st');
       return const <Track>[];
     }
   }

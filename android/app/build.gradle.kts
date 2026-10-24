@@ -18,8 +18,6 @@ android {
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // arm64-v8a ONLY — modern phones. No x86_64 (saves ~20MB).
-        // Emulator users can build x86_64 locally if needed.
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -75,6 +73,8 @@ android {
 dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("com.google.android.material:material:1.12.0")
+    // Required for DocumentFile API (SAF folder scanning)
+    implementation("androidx.documentfile:documentfile:1.0.1")
 }
 
 flutter {

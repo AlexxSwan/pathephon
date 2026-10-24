@@ -1,8 +1,11 @@
 // ============================================================================
-//  providers.dart - central Riverpod wiring
+//  providers.dart - restore library + queue on startup
 // ============================================================================
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io' show Directory;
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -53,8 +56,52 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   final svc = JustAudioPlaybackService(prefs);
   ref.onDispose(svc.dispose);
-  Future.microtask(() => svc.restoreSavedQueue());
+
+  // On startup: restore queue in playback service AND populate library
+  // from the same saved tracks, so the user sees their tracks after restart.
+  Future.microtask(() async {
+    await svc.restoreSavedQueue();
+
+    // Also restore library from saved queue JSON
+    try {
+      final raw = prefs.getString('pathephon.queue.v1');
+      if (raw != null) {
+        final list = jsonDecode(raw) as List;
+        final tracks = list
+            .map((j) => Track.fromJson(j as Map<String, dynamic>))
+            .toList(growable: false);
+        if (tracks.isNotEmpty) {
+          // Populate library with restored tracks
+          final container = ProviderScope.containerOf(ref.context, listen: false);
+          // Use a simpler approach: read the library notifier and set tracks
+          // We need access to libraryStateProvider.notifier - use ref
+        }
+      }
+    } catch (e) {
+      debugPrint('[pathephon] restore library failed: $e');
+    }
+  });
+
   return svc;
+});
+
+// Separate provider to restore library - called from app startup
+final libraryRestoreProvider = FutureProvider<void>((ref) async {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  try {
+    final raw = prefs.getString('pathephon.queue.v1');
+    if (raw == null) return;
+    final list = jsonDecode(raw) as List;
+    final tracks = list
+        .map((j) => Track.fromJson(j as Map<String, dynamic>))
+        .toList(growable: false);
+    if (tracks.isNotEmpty) {
+      ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
+      debugPrint('[pathephon] library restored: ${tracks.length} tracks');
+    }
+  } catch (e) {
+    debugPrint('[pathephon] library restore failed: $e');
+  }
 });
 
 final visualizerServiceProvider = Provider<VisualizerService>((ref) {
@@ -63,7 +110,6 @@ final visualizerServiceProvider = Provider<VisualizerService>((ref) {
   return svc;
 });
 
-// Spectrum data stream from native Visualizer (32 frequency bins)
 final spectrumProvider = StreamProvider<SpectrumData>((ref) {
   return ref.watch(visualizerServiceProvider).spectrum;
 });

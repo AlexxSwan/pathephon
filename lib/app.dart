@@ -13,6 +13,7 @@ import "presentation/screens/library_screen.dart";
 import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
 import "presentation/widgets/permission_gate.dart";
+import "presentation/providers/providers.dart";
 
 final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 
@@ -22,6 +23,8 @@ class AudioPlayerX64App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
+    // Trigger library restore on startup
+    ref.watch(libraryRestoreProvider);
     return MaterialApp(
       title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D",
       debugShowCheckedModeBanner: false,
@@ -82,27 +85,16 @@ class _ShellState extends State<_Shell> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text(
-              "\u041E\u0442\u043C\u0435\u043D\u0430",
-              style: const TextStyle(color: Color(0xFFB89968)),
-            ),
+            child: const Text("\u041E\u0442\u043C\u0435\u043D\u0430", style: TextStyle(color: Color(0xFFB89968))),
           ),
           TextButton(
-            onPressed: () {
-              Navigator.of(ctx).pop(true);
-              SystemNavigator.pop();
-            },
-            child: const Text(
-              "\u0412\u044B\u0439\u0442\u0438",
-              style: const TextStyle(color: Color(0xFFFF6B1A)),
-            ),
+            onPressed: () { Navigator.of(ctx).pop(true); SystemNavigator.pop(); },
+            child: const Text("\u0412\u044B\u0439\u0442\u0438", style: TextStyle(color: Color(0xFFFF6B1A))),
           ),
         ],
       ),
     ) ?? false;
-    if (shouldExit) {
-      SystemNavigator.pop();
-    }
+    if (shouldExit) SystemNavigator.pop();
   }
 
   @override
@@ -110,20 +102,13 @@ class _ShellState extends State<_Shell> {
     final l = AppLocalizations.of(context);
     return PopScope(
       canPop: false,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) _handleBack();
-      },
+      onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleBack(); },
       child: Scaffold(
-        body: IndexedStack(
-          index: _index,
-          children: _screens,
-        ),
+        body: IndexedStack(index: _index, children: _screens),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
             color: const Color(0xFF1A1410),
-            border: Border(
-              top: BorderSide(color: const Color(0xFFB89968).withOpacity(0.3), width: 1),
-            ),
+            border: Border(top: BorderSide(color: const Color(0xFFB89968).withOpacity(0.3), width: 1)),
           ),
           child: SafeArea(
             top: false,
@@ -132,41 +117,11 @@ class _ShellState extends State<_Shell> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _NavButton(
-                    icon: Icons.graphic_eq_outlined,
-                    activeIcon: Icons.graphic_eq,
-                    label: l.navNowPlaying,
-                    selected: _index == 0,
-                    onTap: () => setState(() => _index = 0),
-                  ),
-                  _NavButton(
-                    icon: Icons.library_music_outlined,
-                    activeIcon: Icons.library_music,
-                    label: l.navLibrary,
-                    selected: _index == 1,
-                    onTap: () => setState(() => _index = 1),
-                  ),
-                  _NavButton(
-                    icon: Icons.equalizer_outlined,
-                    activeIcon: Icons.equalizer,
-                    label: l.navEqualizer,
-                    selected: _index == 2,
-                    onTap: () => setState(() => _index = 2),
-                  ),
-                  _NavButton(
-                    icon: Icons.menu_book_outlined,
-                    activeIcon: Icons.menu_book,
-                    label: l.navAudiobooks,
-                    selected: _index == 3,
-                    onTap: () => setState(() => _index = 3),
-                  ),
-                  _NavButton(
-                    icon: Icons.info_outline,
-                    activeIcon: Icons.info,
-                    label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435",
-                    selected: _index == 4,
-                    onTap: () => setState(() => _index = 4),
-                  ),
+                  _NavButton(icon: Icons.graphic_eq_outlined, activeIcon: Icons.graphic_eq, label: l.navNowPlaying, selected: _index == 0, onTap: () => setState(() => _index = 0)),
+                  _NavButton(icon: Icons.library_music_outlined, activeIcon: Icons.library_music, label: l.navLibrary, selected: _index == 1, onTap: () => setState(() => _index = 1)),
+                  _NavButton(icon: Icons.equalizer_outlined, activeIcon: Icons.equalizer, label: l.navEqualizer, selected: _index == 2, onTap: () => setState(() => _index = 2)),
+                  _NavButton(icon: Icons.menu_book_outlined, activeIcon: Icons.menu_book, label: l.navAudiobooks, selected: _index == 3, onTap: () => setState(() => _index = 3)),
+                  _NavButton(icon: Icons.info_outline, activeIcon: Icons.info, label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435", selected: _index == 4, onTap: () => setState(() => _index = 4)),
                 ],
               ),
             ),
@@ -178,14 +133,7 @@ class _ShellState extends State<_Shell> {
 }
 
 class _NavButton extends StatelessWidget {
-  const _NavButton({
-    required this.icon,
-    required this.activeIcon,
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
+  const _NavButton({required this.icon, required this.activeIcon, required this.label, required this.selected, required this.onTap});
   final IconData icon;
   final IconData activeIcon;
   final String label;
@@ -214,10 +162,7 @@ class _NavButton extends StatelessWidget {
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeInOut,
               child: selected
-                  ? Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
-                    )
+                  ? Padding(padding: const EdgeInsets.only(left: 6), child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)))
                   : const SizedBox.shrink(),
             ),
           ],

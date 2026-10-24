@@ -57,30 +57,9 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final svc = JustAudioPlaybackService(prefs);
   ref.onDispose(svc.dispose);
 
-  // On startup: restore queue in playback service AND populate library
-  // from the same saved tracks, so the user sees their tracks after restart.
-  Future.microtask(() async {
-    await svc.restoreSavedQueue();
-
-    // Also restore library from saved queue JSON
-    try {
-      final raw = prefs.getString('pathephon.queue.v1');
-      if (raw != null) {
-        final list = jsonDecode(raw) as List;
-        final tracks = list
-            .map((j) => Track.fromJson(j as Map<String, dynamic>))
-            .toList(growable: false);
-        if (tracks.isNotEmpty) {
-          // Populate library with restored tracks
-          final container = ProviderScope.containerOf(ref.context, listen: false);
-          // Use a simpler approach: read the library notifier and set tracks
-          // We need access to libraryStateProvider.notifier - use ref
-        }
-      }
-    } catch (e) {
-      debugPrint('[pathephon] restore library failed: $e');
-    }
-  });
+  // On startup: restore queue in playback service.
+  // Library is restored separately by libraryRestoreProvider (see below).
+  Future.microtask(() => svc.restoreSavedQueue());
 
   return svc;
 });

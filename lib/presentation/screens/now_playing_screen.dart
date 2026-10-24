@@ -1,18 +1,14 @@
 // ============================================================================
-//  now_playing_screen.dart - Now Playing with stereo VU + simple artwork
+//  now_playing_screen.dart - Now Playing with simple artwork
 //
-//  Artwork priority:
-//    1. track.artUri (embedded art URI from MediaStore)
+//  Artwork priority (NO queryArtwork - that was unstable):
+//    1. track.artUri (from MediaStore embedded art OR folder cover.jpg)
 //    2. Album artwork fallback (another track in same album with artUri)
-//    3. Embedded art via on_audio_query.queryArtwork (mediaStoreId)
-//    4. App icon (gramophone PNG) as last-resort fallback
+//    3. App icon (gramophone PNG)
 // ============================================================================
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:on_audio_query/on_audio_query.dart';
 
 import '../../core/l10n/generated/app_localizations.dart';
 import '../../core/theme/tube_colors.dart';
@@ -188,20 +184,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text(
-              '\u041E\u0442\u043C\u0435\u043D\u0430',
-              style: TextStyle(color: Color(0xFFB89968)),
-            ),
+            child: const Text('\u041E\u0442\u043C\u0435\u043D\u0430',
+                style: TextStyle(color: Color(0xFFB89968))),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               SystemNavigator.pop();
             },
-            child: const Text(
-              '\u0412\u044B\u0439\u0442\u0438',
-              style: TextStyle(color: Color(0xFFFF6B1A)),
-            ),
+            child: const Text('\u0412\u044B\u0439\u0442\u0438',
+                style: TextStyle(color: Color(0xFFFF6B1A))),
           ),
         ],
       ),
@@ -271,11 +263,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                 width: 32,
                                 child: isCurrent
                                     ? const Icon(Icons.play_arrow, size: 22, color: TubeColors.amberHot)
-                                    : Text(
-                                        '${i + 1}',
+                                    : Text('${i + 1}',
                                         style: const TextStyle(color: TubeColors.textMuted, fontSize: 14),
-                                        textAlign: TextAlign.center,
-                                      ),
+                                        textAlign: TextAlign.center),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
@@ -296,21 +286,17 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                                       ),
                                     ),
                                     if (t.artist.isNotEmpty)
-                                      Text(
-                                        t.artist,
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                        style: const TextStyle(color: TubeColors.textSecondary, fontSize: 12, height: 1.15),
-                                      ),
+                                      Text(t.artist,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: const TextStyle(color: TubeColors.textSecondary, fontSize: 12, height: 1.15)),
                                   ],
                                 ),
                               ),
                               const SizedBox(width: 8),
                               if (t.durationMs > 0)
-                                Text(
-                                  formatDuration(Duration(milliseconds: t.durationMs)),
-                                  style: const TextStyle(color: TubeColors.textMuted, fontSize: 12),
-                                ),
+                                Text(formatDuration(Duration(milliseconds: t.durationMs)),
+                                    style: const TextStyle(color: TubeColors.textMuted, fontSize: 12)),
                             ],
                           ),
                         ),
@@ -326,73 +312,16 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Artwork widget with fallbacks.
-class _ArtworkImage extends ConsumerStatefulWidget {
+/// Simple artwork widget - NO queryArtwork (was unstable).
+/// Priority: track.artUri -> album fallback -> app icon.
+class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
 
   @override
-  ConsumerState<_ArtworkImage> createState() => _ArtworkImageState();
-}
-
-class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
-  Uint8List? _bytes;
-  int? _loadingMediaStoreId;
-
-  @override
-  void didUpdateWidget(_ArtworkImage oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _maybeFetch();
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeFetch());
-  }
-
-  void _maybeFetch() {
-    final t = widget.track;
-    if (t == null) {
-      _bytes = null;
-      _loadingMediaStoreId = null;
-      return;
-    }
-    // If track has artUri OR album fallback artUri, no need to fetch from MediaStore
-    final albumArt = ref.read(albumArtIndexProvider)[
-        '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
-    final hasUri = t.artUri.isNotEmpty || (albumArt != null && albumArt.isNotEmpty);
-    if (hasUri) {
-      _bytes = null;
-      _loadingMediaStoreId = null;
-      return;
-    }
-    if (t.mediaStoreId != null && t.mediaStoreId != _loadingMediaStoreId) {
-      _loadingMediaStoreId = t.mediaStoreId;
-      _bytes = null;
-      _fetchArt(t.mediaStoreId!);
-    } else if (t.mediaStoreId == null) {
-      _bytes = null;
-      _loadingMediaStoreId = null;
-    }
-  }
-
-  Future<void> _fetchArt(int id) async {
-    try {
-      final ms = ref.read(mediaStoreSourceProvider);
-      final bytes = await ms.query.queryArtwork(id, ArtworkType.AUDIO, size: 600);
-      if (mounted && _loadingMediaStoreId == id) {
-        setState(() => _bytes = bytes);
-      }
-    } catch (_) {}
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final t = widget.track;
-    if (t == null) {
-      return _appIconFallback();
-    }
+  Widget build(BuildContext context, WidgetRef ref) {
+    final t = track;
+    if (t == null) return _appIconFallback();
 
     // 1. Track's own artUri
     if (t.artUri.isNotEmpty) {
@@ -403,7 +332,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       );
     }
 
-    // 2. Album artwork fallback
+    // 2. Album artwork fallback (another track in same album with artUri)
     final albumArt = ref.watch(albumArtIndexProvider)[
         '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
     if (albumArt != null && albumArt.isNotEmpty) {
@@ -414,27 +343,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       );
     }
 
-    // 3. Embedded art from MediaStore
-    if (_bytes != null) {
-      return Image.memory(
-        _bytes!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _appIconFallback(),
-      );
-    }
-
-    // 4. Loading state
-    if (t.mediaStoreId != null) {
-      return const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(strokeWidth: 2, color: TubeColors.brass),
-        ),
-      );
-    }
-
-    // 5. Last-resort: app icon
+    // 3. Last-resort: app icon (NO spinner, NO queryArtwork)
     return _appIconFallback();
   }
 

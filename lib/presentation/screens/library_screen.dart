@@ -17,7 +17,8 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 4, vsync: this);
-  bool _autoScanTriggered = false;
+  // NO _autoScanTriggered - we don't auto-scan anymore.
+  // Library starts empty; user picks files/folder to populate.
 
   @override
   void dispose() {
@@ -39,13 +40,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final l = AppLocalizations.of(context);
     final state = ref.watch(libraryStateProvider);
     final playback = ref.watch(playbackServiceProvider);
-
-    if (!_autoScanTriggered && state.isLoading) {
-      _autoScanTriggered = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(libraryStateProvider.notifier).scan();
-      });
-    }
 
     return Scaffold(
       appBar: AppBar(

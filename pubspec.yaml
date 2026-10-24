@@ -1,7 +1,7 @@
 name: pathephon
 description: All-format retro-tube audio player for modern Android x64.
 publish_to: 'none'
-version: 0.8.2+76
+version: 0.8.3+77
 
 environment:
   sdk: '>=3.5.0 <4.0.0'

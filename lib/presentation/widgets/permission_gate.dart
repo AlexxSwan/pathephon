@@ -1,9 +1,13 @@
 // ============================================================================
 //  permission_gate.dart - one-time permission request screen
 //
-//  Shows on first launch. Asks for READ_MEDIA_AUDIO + READ_MEDIA_IMAGES.
-//  Once granted, never asks again ( SharedPreferences flag ).
+//  Logic:
+//   - If "pathephon.permissions.granted" flag is true in SharedPreferences,
+//     skip the gate entirely (user already granted before).
+//   - Otherwise check actual permission statuses. If both granted, set flag
+//     and skip. If not, show the request screen.
 // ============================================================================
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -32,17 +36,29 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
 
   Future<void> _checkPermissions() async {
     final prefs = ref.read(sharedPreferencesProvider);
-    final alreadyGranted = prefs.getBool('pathephon.permissions.granted') ?? false;
-    if (alreadyGranted) {
-      setState(() {
-        _audioGranted = true;
-        _imagesGranted = true;
-        _checking = false;
-      });
-      return;
+    final flagGranted = prefs.getBool('pathephon.permissions.granted') ?? false;
+    debugPrint('[pathephon] PermissionGate: flagGranted=$flagGranted');
+
+    if (flagGranted) {
+      // Verify the actual permissions are still granted (user may have revoked).
+      final audio = await Permission.audio.status;
+      final photos = await Permission.photos.status;
+      debugPrint('[pathephon] PermissionGate: actual audio=$audio, photos=$photos');
+      if (audio.isGranted && photos.isGranted) {
+        setState(() {
+          _audioGranted = true;
+          _imagesGranted = true;
+          _checking = false;
+        });
+        return;
+      }
+      // Permissions revoked by user — clear the flag and show the gate.
+      await prefs.setBool('pathephon.permissions.granted', false);
     }
+
     final audio = await Permission.audio.status;
     final photos = await Permission.photos.status;
+    debugPrint('[pathephon] PermissionGate: actual audio=$audio, photos=$photos');
     setState(() {
       _audioGranted = audio.isGranted;
       _imagesGranted = photos.isGranted;
@@ -54,15 +70,27 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
     setState(() => _checking = true);
     final audio = await Permission.audio.request();
     final photos = await Permission.photos.request();
+    debugPrint('[pathephon] PermissionGate: requested audio=$audio, photos=$photos');
+
     final prefs = ref.read(sharedPreferencesProvider);
     final allGranted = audio.isGranted && photos.isGranted;
     if (allGranted) {
       await prefs.setBool('pathephon.permissions.granted', true);
+      debugPrint('[pathephon] PermissionGate: flag saved');
     }
     setState(() {
       _audioGranted = audio.isGranted;
       _imagesGranted = photos.isGranted;
       _checking = false;
+    });
+  }
+
+  Future<void> _skip() async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setBool('pathephon.permissions.granted', true);
+    setState(() {
+      _audioGranted = true;
+      _imagesGranted = true;
     });
   }
 
@@ -105,7 +133,7 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
               _PermissionRow(
                 icon: Icons.library_music,
                 title: "\u0410\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B\u044B",
-                desc: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0443\u0437\u044B\u043A\u0435",
+                desc: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0443\u0437\u044B\u043A\u0435 \u043D\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435",
                 granted: _audioGranted == true,
               ),
               const SizedBox(height: 12),
@@ -116,45 +144,34 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
                 granted: _imagesGranted == true,
               ),
               const SizedBox(height: 32),
-              if (_audioGranted == false || _imagesGranted == false) ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: _requestAll,
-                    icon: const Icon(Icons.check_circle_outline, color: Color(0xFF1A1410)),
-                    label: const Text(
-                      "\u0420\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044C",
-                      style: TextStyle(color: Color(0xFF1A1410), fontWeight: FontWeight.bold),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: TubeColors.amberHot,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (_audioGranted == false || _imagesGranted == false) ...[
-                TextButton.icon(
-                  onPressed: () => openAppSettings(),
-                  icon: const Icon(Icons.settings, color: TubeColors.brass),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: _requestAll,
+                  icon: const Icon(Icons.check_circle_outline, color: Color(0xFF1A1410)),
                   label: const Text(
-                    "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
-                    style: TextStyle(color: TubeColors.brass),
+                    "\u0420\u0430\u0437\u0440\u0435\u0448\u0438\u0442\u044C",
+                    style: TextStyle(color: Color(0xFF1A1410), fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: TubeColors.amberHot,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                 ),
-                const SizedBox(height: 12),
-              ],
+              ),
+              const SizedBox(height: 12),
+              TextButton.icon(
+                onPressed: () => openAppSettings(),
+                icon: const Icon(Icons.settings, color: TubeColors.brass),
+                label: const Text(
+                  "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
+                  style: TextStyle(color: TubeColors.brass),
+                ),
+              ),
+              const SizedBox(height: 12),
               TextButton(
-                onPressed: () {
-                  final prefs = ref.read(sharedPreferencesProvider);
-                  prefs.setBool('pathephon.permissions.granted', true);
-                  setState(() {
-                    _audioGranted = true;
-                    _imagesGranted = true;
-                  });
-                },
+                onPressed: _skip,
                 child: const Text(
                   "\u041F\u0440\u043E\u043F\u0443\u0441\u0442\u0438\u0442\u044C",
                   style: TextStyle(color: TubeColors.textMuted, fontSize: 13),

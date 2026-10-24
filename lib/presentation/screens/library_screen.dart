@@ -1,3 +1,4 @@
+import "package:flutter/foundation.dart" show debugPrint;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 
@@ -17,7 +18,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 4, vsync: this);
-  bool _autoScanTriggered = false;
+  // NO _autoScanTriggered - library starts empty, user picks files/folder.
 
   @override
   void dispose() {
@@ -27,18 +28,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
   /// Pick files/folder -> set as library -> immediately start playing first track.
   Future<void> _pickAndPlay(Future<List<Track>> Function() picker) async {
+    debugPrint("[pathephon] _pickAndPlay: starting");
     final playback = ref.read(playbackServiceProvider);
-    final tracks = await picker();
-    if (tracks.isEmpty) {
-      debugPrint("[pathephon] _pickAndPlay: no tracks picked");
-      return;
-    }
-    ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
     try {
+      final tracks = await picker();
+      debugPrint("[pathephon] _pickAndPlay: picked ${tracks.length} tracks");
+      if (tracks.isEmpty) {
+        debugPrint("[pathephon] _pickAndPlay: no tracks picked, aborting");
+        return;
+      }
+      ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
+      debugPrint("[pathephon] _pickAndPlay: setPickedTracks done, calling playQueue");
       await playback.playQueue(tracks: tracks, startIndex: 0);
       ref.read(isPlayingProvider.notifier).state = true;
-    } catch (e) {
-      debugPrint("[pathephon] _pickAndPlay playQueue failed: $e");
+      debugPrint("[pathephon] _pickAndPlay: playQueue started");
+    } catch (e, st) {
+      debugPrint("[pathephon] _pickAndPlay FAILED: $e\n$st");
     }
   }
 
@@ -47,13 +52,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final l = AppLocalizations.of(context);
     final state = ref.watch(libraryStateProvider);
     final playback = ref.watch(playbackServiceProvider);
-
-    if (!_autoScanTriggered && state.isLoading) {
-      _autoScanTriggered = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        ref.read(libraryStateProvider.notifier).scan();
-      });
-    }
 
     return Scaffold(
       appBar: AppBar(
@@ -191,7 +189,6 @@ class _AlbumGrid extends ConsumerWidget {
                         color: TubeColors.surfaceVariant,
                         border: Border.all(color: TubeColors.brass),
                       ),
-                      // Album artwork: a.artUri OR fallback to first track's artUri
                       child: _AlbumArt(album: a),
                     ),
                   ),
@@ -210,17 +207,13 @@ class _AlbumGrid extends ConsumerWidget {
   }
 }
 
-/// Album artwork with fallbacks:
-/// 1. album.artUri (set when first track with artUri was grouped)
-/// 2. First track's artUri
-/// 3. Icons.album placeholder
+/// Album artwork with fallbacks.
 class _AlbumArt extends ConsumerWidget {
   const _AlbumArt({required this.album});
   final Album album;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // Try album's own artUri first
     if (album.artUri.isNotEmpty) {
       return Image.network(
         album.artUri,
@@ -228,7 +221,6 @@ class _AlbumArt extends ConsumerWidget {
         errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
       );
     }
-    // Fallback: find first track in this album with non-empty artUri
     String? trackArtUri;
     for (final t in album.tracks) {
       if (t.artUri.isNotEmpty) {

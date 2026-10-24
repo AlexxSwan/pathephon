@@ -1,17 +1,10 @@
 // ============================================================================
-//  mediastore_source.dart - audio discovery
-//
-//  fetchAllTracks(): MediaStore query only - NO folder scanning (that broke
-//  library scan in 0.4.1+). Used for the auto library scan.
-//
-//  pickDirectory()/pickAudioFiles(): SAF-based file picking. Since the user
-//  explicitly granted access to this folder via FilePicker, we can safely
-//  scan it for cover.jpg/folder.jpg/album.jpg without permission issues.
-//  This is the ONLY place folder scanning happens.
+//  mediastore_source.dart - audio discovery with debug logs
 // ============================================================================
 import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:on_audio_query/on_audio_query.dart';
 
 import '../../domain/models/track.dart';
@@ -22,18 +15,9 @@ class MediaStoreSource {
 
   final OnAudioQuery _query;
 
-  /// Standard cover-art filenames (without extension).
-  static const _coverBases = [
-    'cover', 'folder', 'album', 'front',
-    'albumart', 'coverart', 'art',
-  ];
-
-  /// Image extensions to try.
+  static const _coverBases = ['cover', 'folder', 'album', 'front', 'albumart', 'coverart', 'art'];
   static const _coverExts = ['jpg', 'jpeg', 'png', 'webp'];
 
-  /// Look in [dirPath] for a cover image. Returns file:// URI or null.
-  /// NEVER throws - all errors caught and return null.
-  /// Only called from pickDirectory/pickAudioFiles (user-granted folders).
   static String? _findCoverInDir(String dirPath) {
     if (dirPath.isEmpty) return null;
     try {
@@ -50,14 +34,12 @@ class MediaStoreSource {
           continue;
         }
       }
-      // 1. Standard names: cover.jpg, folder.jpg, etc.
       for (final base in _coverBases) {
         for (final ext in _coverExts) {
           final path = byName['$base.$ext'];
           if (path != null) return Uri.file(path).toString();
         }
       }
-      // 2. Files starting with cover/folder/album/front
       for (final name in byName.keys) {
         if ((name.startsWith('cover') ||
              name.startsWith('folder') ||
@@ -66,7 +48,6 @@ class MediaStoreSource {
           return Uri.file(byName[name]!).toString();
         }
       }
-      // 3. Any image file (except artist.*/back.*)
       for (final name in byName.keys) {
         if (_hasImageExt(name) &&
             !name.startsWith('artist') &&
@@ -74,8 +55,8 @@ class MediaStoreSource {
           return Uri.file(byName[name]!).toString();
         }
       }
-    } catch (_) {
-      // Permissions, IO errors - return null, don't crash
+    } catch (e) {
+      debugPrint('[pathephon] _findCoverInDir failed: $e');
     }
     return null;
   }
@@ -92,19 +73,23 @@ class MediaStoreSource {
     return path.substring(0, slash);
   }
 
-  /// MediaStore query - NO folder scanning. Used for auto library scan.
   Future<List<Track>> fetchAllTracks() async {
+    debugPrint('[pathephon] fetchAllTracks: starting');
     if (!await _query.permissionsStatus()) {
       final granted = await _query.permissionsRequest();
-      if (!granted) return const <Track>[];
+      if (!granted) {
+        debugPrint('[pathephon] fetchAllTracks: permission denied');
+        return const <Track>[];
+      }
     }
-
     final songs = await _query.querySongs(
       sortType: SongSortType.DATE_ADDED,
       orderType: OrderType.DESC_OR_GREATER,
     );
-
-    return songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
+    debugPrint('[pathephon] fetchAllTracks: got ${songs.length} songs from MediaStore');
+    final tracks = songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
+    debugPrint('[pathephon] fetchAllTracks: ${tracks.length} tracks after format filter');
+    return tracks;
   }
 
   OnAudioQuery get query => _query;
@@ -115,10 +100,14 @@ class MediaStoreSource {
   Future<bool> hasPermission() async => _query.permissionsStatus();
   Future<bool> requestPermission() async => _query.permissionsRequest();
 
-  /// Pick audio files via SAF. Scans each file's directory for cover art.
   Future<List<Track>> pickAudioFiles() async {
+    debugPrint('[pathephon] pickAudioFiles: starting');
     final result = await FilePicker.pickFiles(type: FileType.audio);
-    if (result == null || result.isEmpty) return const <Track>[];
+    if (result == null || result.isEmpty) {
+      debugPrint('[pathephon] pickAudioFiles: no files picked');
+      return const <Track>[];
+    }
+    debugPrint('[pathephon] pickAudioFiles: got ${result.length} files');
 
     final dirCoverCache = <String, String?>{};
     final tracks = <Track>[];
@@ -142,25 +131,37 @@ class MediaStoreSource {
           filePath: path,
           artUri: artUri,
         ));
-      } catch (_) {
+      } catch (e) {
+        debugPrint('[pathephon] pickAudioFiles: error processing file: $e');
         continue;
       }
     }
+    debugPrint('[pathephon] pickAudioFiles: returning ${tracks.length} tracks');
     return tracks;
   }
 
-  /// Pick a directory via SAF. Scans it ONCE for cover art and applies to all tracks.
   Future<List<Track>> pickDirectory() async {
+    debugPrint('[pathephon] pickDirectory: starting');
     final dirPath = await FilePicker.getDirectoryPath();
-    if (dirPath == null) return const <Track>[];
+    if (dirPath == null) {
+      debugPrint('[pathephon] pickDirectory: user cancelled');
+      return const <Track>[];
+    }
+    debugPrint('[pathephon] pickDirectory: picked dir = $dirPath');
 
     try {
       final dir = Directory(dirPath);
-      if (!await dir.exists()) return const <Track>[];
+      if (!await dir.exists()) {
+        debugPrint('[pathephon] pickDirectory: dir does not exist');
+        return const <Track>[];
+      }
 
       final dirCover = _findCoverInDir(dirPath);
+      debugPrint('[pathephon] pickDirectory: cover art = $dirCover');
+
       final tracks = <Track>[];
       final entities = dir.listSync(recursive: false, followLinks: false);
+      debugPrint('[pathephon] pickDirectory: ${entities.length} entities in dir');
       entities.sort((a, b) => a.path.compareTo(b.path));
       for (final e in entities) {
         if (e is! File) continue;
@@ -180,12 +181,15 @@ class MediaStoreSource {
             filePath: path,
             artUri: dirCover ?? '',
           ));
-        } catch (_) {
+        } catch (e) {
+          debugPrint('[pathephon] pickDirectory: error processing entity: $e');
           continue;
         }
       }
+      debugPrint('[pathephon] pickDirectory: returning ${tracks.length} tracks');
       return tracks;
-    } catch (_) {
+    } catch (e, st) {
+      debugPrint('[pathephon] pickDirectory FAILED: $e\n$st');
       return const <Track>[];
     }
   }

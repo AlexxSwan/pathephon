@@ -6,8 +6,8 @@ import android.util.Log
 import androidx.documentfile.provider.DocumentFile
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.BinaryMessenger
+import java.io.InputStream
 
-/// Native folder scanner using Storage Access Framework (SAF).
 class FolderScannerPlugin(binaryMessenger: BinaryMessenger, private val context: Context) {
     private val methodChannel = MethodChannel(binaryMessenger, "pathephon/folder_scanner")
 
@@ -16,14 +16,21 @@ class FolderScannerPlugin(binaryMessenger: BinaryMessenger, private val context:
             when (call.method) {
                 "scanFolder" -> {
                     val treeUriStr = call.argument<String>("treeUri") ?: ""
-                    Log.i("FolderScanner", "scanFolder called with: '$treeUriStr'")
                     try {
                         val files = scanFolder(treeUriStr)
-                        Log.i("FolderScanner", "returning ${files.size} files")
                         result.success(files)
                     } catch (e: Exception) {
-                        Log.e("FolderScanner", "scanFolder FAILED: ${e.message}", e)
                         result.error("SCAN_FAILED", e.message, null)
+                    }
+                }
+                "readFileBytes" -> {
+                    val uriStr = call.argument<String>("uri") ?: ""
+                    try {
+                        val bytes = readFileBytes(uriStr)
+                        result.success(bytes)
+                    } catch (e: Exception) {
+                        Log.e("FolderScanner", "readFileBytes failed: ${e.message}", e)
+                        result.error("READ_FAILED", e.message, null)
                     }
                 }
                 else -> result.notImplemented()
@@ -42,52 +49,24 @@ class FolderScannerPlugin(binaryMessenger: BinaryMessenger, private val context:
     )
     private val coverExtensions = setOf("jpg", "jpeg", "png", "webp")
 
+    private fun readFileBytes(uriStr: String): ByteArray {
+        val uri = Uri.parse(uriStr)
+        val inputStream: InputStream = context.contentResolver.openInputStream(uri)
+            ?: throw IllegalArgumentException("cannot open input stream for URI: $uriStr")
+        return inputStream.use { it.readBytes() }
+    }
+
     private fun scanFolder(treeUriStr: String): List<Map<String, Any>> {
-        if (treeUriStr.isEmpty()) {
-            throw IllegalArgumentException("treeUri is empty")
-        }
-        Log.i("FolderScanner", "raw treeUri: $treeUriStr")
+        if (treeUriStr.isEmpty()) throw IllegalArgumentException("treeUri is empty")
 
-        // Decode URL-encoded characters (%3A -> :, %2F -> /)
-        val decodedUri = android.net.Uri.decode(treeUriStr)
-        Log.i("FolderScanner", "decoded treeUri: $decodedUri")
-
-        // Parse the URI
-        val treeUri = Uri.parse(decodedUri)
-        Log.i("FolderScanner", "parsed treeUri: $treeUri")
-        Log.i("FolderScanner", "  authority: ${treeUri.authority}")
-        Log.i("FolderScanner", "  scheme: ${treeUri.scheme}")
-
-        // Try fromTreeUri - this is the standard way
+        val treeUri = Uri.parse(treeUriStr)
         val treeDir = DocumentFile.fromTreeUri(context, treeUri)
-        if (treeDir == null) {
-            Log.e("FolderScanner", "DocumentFile.fromTreeUri returned NULL")
-            throw IllegalArgumentException("cannot access tree URI - fromTreeUri returned null")
-        }
-        Log.i("FolderScanner", "treeDir exists: ${treeDir.exists()}, isDirectory: ${treeDir.isDirectory}, canRead: ${treeDir.canRead()}")
+            ?: throw IllegalArgumentException("cannot access tree URI")
 
-        if (!treeDir.isDirectory) {
-            Log.e("FolderScanner", "not a directory")
-            throw IllegalArgumentException("not a directory")
-        }
-        if (!treeDir.canRead()) {
-            Log.e("FolderScanner", "cannot read directory")
-            throw IllegalArgumentException("no read permission")
-        }
+        if (!treeDir.isDirectory) throw IllegalArgumentException("not a directory")
 
         val children = treeDir.listFiles()
-        Log.i("FolderScanner", "found ${children.size} entries")
 
-        // Log first few entries for debugging
-        var logged = 0
-        for (child in children) {
-            if (logged < 5) {
-                Log.i("FolderScanner", "  entry: name='${child.name}', isFile=${child.isFile}, isDirectory=${child.isDirectory}")
-                logged++
-            }
-        }
-
-        // First pass: find cover art
         var coverUri: String? = null
         for (child in children) {
             if (!child.isFile) continue
@@ -101,7 +80,6 @@ class FolderScannerPlugin(binaryMessenger: BinaryMessenger, private val context:
                     base.startsWith("folder") || base.startsWith("album") ||
                     base.startsWith("front")) {
                     coverUri = child.uri.toString()
-                    Log.i("FolderScanner", "found cover: $coverUri")
                     break
                 }
             }
@@ -117,13 +95,11 @@ class FolderScannerPlugin(binaryMessenger: BinaryMessenger, private val context:
                 if (coverExtensions.contains(ext) &&
                     !base.startsWith("artist") && !base.startsWith("back")) {
                     coverUri = child.uri.toString()
-                    Log.i("FolderScanner", "found fallback cover: $coverUri")
                     break
                 }
             }
         }
 
-        // Second pass: collect audio files
         val audioFiles = mutableListOf<Pair<String, DocumentFile>>()
         for (child in children) {
             if (!child.isFile) continue
@@ -135,20 +111,16 @@ class FolderScannerPlugin(binaryMessenger: BinaryMessenger, private val context:
             audioFiles.add(Pair(name, child))
         }
         audioFiles.sortBy { it.first.lowercase() }
-        Log.i("FolderScanner", "found ${audioFiles.size} audio files")
 
         val result = mutableListOf<Map<String, Any>>()
         for ((name, doc) in audioFiles) {
-            val uri = doc.uri.toString()
             val map = mutableMapOf<String, Any>(
-                "uri" to uri,
+                "uri" to doc.uri.toString(),
                 "name" to name,
-                "size" to (doc.length()),
-                "lastModified" to (doc.lastModified())
+                "size" to doc.length(),
+                "lastModified" to doc.lastModified()
             )
-            if (coverUri != null) {
-                map["artUri"] = coverUri
-            }
+            if (coverUri != null) map["artUri"] = coverUri
             result.add(map)
         }
         return result

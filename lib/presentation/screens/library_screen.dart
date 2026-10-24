@@ -2,6 +2,7 @@ import "package:flutter/foundation.dart" show debugPrint;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:io";
+import "dart:typed_data";
 
 import "../../core/l10n/generated/app_localizations.dart";
 import "../../core/theme/tube_colors.dart";
@@ -21,10 +22,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
   late final TabController _tab = TabController(length: 4, vsync: this);
 
   @override
-  void dispose() {
-    _tab.dispose();
-    super.dispose();
-  }
+  void dispose() { _tab.dispose(); super.dispose(); }
 
   Future<void> _pickAndPlayFiles() async {
     final playback = ref.read(playbackServiceProvider);
@@ -34,9 +32,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
       await playback.playQueue(tracks: tracks, startIndex: 0);
       ref.read(isPlayingProvider.notifier).state = true;
-    } catch (e) {
-      debugPrint("[pathephon] _pickAndPlayFiles FAILED: $e");
-    }
+    } catch (e) { debugPrint("[pathephon] _pickAndPlayFiles FAILED: $e"); }
   }
 
   Future<void> _pickAndPlayFolder() async {
@@ -49,21 +45,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             context: context,
             builder: (ctx) => AlertDialog(
               backgroundColor: const Color(0xFF1A1410),
-              title: const Text("\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430",
-                  style: TextStyle(color: Color(0xFFF4E9D2))),
-              content: SizedBox(
-                width: double.maxFinite,
-                child: SingleChildScrollView(
-                  child: Text(result.diagnostic,
-                      style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace')),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text("OK", style: TextStyle(color: Color(0xFFFF6B1A))),
-                ),
-              ],
+              title: const Text("\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430", style: TextStyle(color: Color(0xFFF4E9D2))),
+              content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(
+                child: Text(result.diagnostic, style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace')),
+              )),
+              actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text("OK", style: TextStyle(color: Color(0xFFFF6B1A))))],
             ),
           );
         }
@@ -72,9 +59,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       ref.read(libraryStateProvider.notifier).setPickedTracks(result.tracks);
       await playback.playQueue(tracks: result.tracks, startIndex: 0);
       ref.read(isPlayingProvider.notifier).state = true;
-    } catch (e) {
-      debugPrint("[pathephon] _pickAndPlayFolder FAILED: $e");
-    }
+    } catch (e) { debugPrint("[pathephon] _pickAndPlayFolder FAILED: $e"); }
   }
 
   @override
@@ -86,28 +71,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     return Scaffold(
       appBar: AppBar(
         title: Text(l.navLibrary),
-        bottom: TabBar(
-          controller: _tab,
-          isScrollable: true,
-          tabAlignment: TabAlignment.start,
-          tabs: [
-            Tab(text: l.libraryAllTracks),
-            Tab(text: l.libraryAlbums),
-            Tab(text: l.libraryArtists),
-            Tab(text: l.libraryPlaylists),
-          ],
-        ),
+        bottom: TabBar(controller: _tab, isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
+          Tab(text: l.libraryAllTracks), Tab(text: l.libraryAlbums),
+          Tab(text: l.libraryArtists), Tab(text: l.libraryPlaylists),
+        ]),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.folder_open),
-            onPressed: _pickAndPlayFolder,
-            tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443",
-          ),
-          IconButton(
-            icon: const Icon(Icons.audio_file),
-            onPressed: _pickAndPlayFiles,
-            tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B",
-          ),
+          IconButton(icon: const Icon(Icons.folder_open), onPressed: _pickAndPlayFolder, tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443"),
+          IconButton(icon: const Icon(Icons.audio_file), onPressed: _pickAndPlayFiles, tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B"),
           IconButton(icon: const Icon(Icons.search), onPressed: () {}),
         ],
       ),
@@ -116,48 +86,31 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         error: (e, _) => Center(child: Text("${l.commonError}: $e")),
         data: (tracks) {
           if (tracks.isEmpty) {
-            return Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.library_music, size: 80, color: TubeColors.brass),
-                  const SizedBox(height: 16),
-                  Text("\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.textSecondary)),
-                ],
-              ),
-            );
+            return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Icon(Icons.library_music, size: 80, color: TubeColors.brass),
+              const SizedBox(height: 16),
+              Text("\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.textSecondary)),
+            ]));
           }
-          return TabBarView(
-            controller: _tab,
-            children: [
-              ListView.builder(
-                itemCount: tracks.length,
-                itemBuilder: (_, i) {
-                  final t = tracks[i];
-                  return TrackListTile(
-                    track: t,
-                    index: i,
-                    onTap: () {
-                      playback.playQueue(tracks: tracks, startIndex: i);
-                      ref.read(isPlayingProvider.notifier).state = true;
-                    },
-                  );
-                },
-              ),
-              _AlbumGrid(),
-              _ArtistsList(),
-              const Center(child: Text("No playlists yet")),
-            ],
-          );
+          return TabBarView(controller: _tab, children: [
+            ListView.builder(itemCount: tracks.length, itemBuilder: (_, i) {
+              final t = tracks[i];
+              return TrackListTile(track: t, index: i, onTap: () {
+                playback.playQueue(tracks: tracks, startIndex: i);
+                ref.read(isPlayingProvider.notifier).state = true;
+              });
+            }),
+            _AlbumGrid(),
+            _ArtistsList(),
+            const Center(child: Text("No playlists yet")),
+          ]);
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => ref.read(libraryStateProvider.notifier).scan(),
-        icon: const Icon(Icons.refresh),
-        label: Text(l.libraryScan),
-        backgroundColor: TubeColors.amber,
-        foregroundColor: TubeColors.background,
+        icon: const Icon(Icons.refresh), label: Text(l.libraryScan),
+        backgroundColor: TubeColors.amber, foregroundColor: TubeColors.background,
       ),
     );
   }
@@ -168,47 +121,32 @@ class _AlbumGrid extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final albums = ref.watch(albumsProvider);
     final playback = ref.watch(playbackServiceProvider);
-
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.85,
-      ),
+        crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.85),
       padding: const EdgeInsets.all(12),
       itemCount: albums.length,
       itemBuilder: (_, i) {
         final a = albums[i];
-        return Card(
-          child: InkWell(
-            onTap: () {
-              if (a.tracks.isEmpty) return;
-              playback.playQueue(tracks: a.tracks, startIndex: 0);
-              ref.read(isPlayingProvider.notifier).state = true;
-            },
-            child: Padding(
-              padding: const EdgeInsets.all(10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  AspectRatio(
-                    aspectRatio: 1,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: TubeColors.surfaceVariant,
-                        border: Border.all(color: TubeColors.brass),
-                      ),
-                      child: _AlbumArt(album: a),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleSmall),
-                  Text(a.albumArtist, maxLines: 1, overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.bodySmall),
-                ],
-              ),
-            ),
-          ),
-        );
+        return Card(child: InkWell(
+          onTap: () {
+            if (a.tracks.isEmpty) return;
+            playback.playQueue(tracks: a.tracks, startIndex: 0);
+            ref.read(isPlayingProvider.notifier).state = true;
+          },
+          child: Padding(padding: const EdgeInsets.all(10), child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AspectRatio(aspectRatio: 1, child: Container(
+                decoration: BoxDecoration(color: TubeColors.surfaceVariant, border: Border.all(color: TubeColors.brass)),
+                child: _AlbumArt(album: a),
+              )),
+              const SizedBox(height: 8),
+              Text(a.title, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.titleSmall),
+              Text(a.albumArtist, maxLines: 1, overflow: TextOverflow.ellipsis, style: Theme.of(context).textTheme.bodySmall),
+            ],
+          )),
+        ));
       },
     );
   }
@@ -226,21 +164,19 @@ class _AlbumArt extends ConsumerWidget {
         if (t.artUri.isNotEmpty) { artUri = t.artUri; break; }
       }
     }
-
     if (artUri != null && artUri.isNotEmpty) {
-      if (artUri.startsWith('file://')) {
-        return Image.file(
-          File(Uri.parse(artUri).toFilePath()),
-          fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _fallback(),
-        );
+      final ms = ref.read(mediaStoreSourceProvider);
+      final cachedBytes = ms.getCoverBytes(artUri);
+      if (cachedBytes != null) {
+        return Image.memory(cachedBytes, fit: BoxFit.cover, errorBuilder: (_, e, __) => _fallback());
       }
-      return Image.network(artUri, fit: BoxFit.cover,
-          errorBuilder: (context, error, stackTrace) => _fallback());
+      if (artUri.startsWith('file://')) {
+        return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, errorBuilder: (_, e, __) => _fallback());
+      }
+      return Image.network(artUri, fit: BoxFit.cover, errorBuilder: (_, e, __) => _fallback());
     }
     return _fallback();
   }
-
   Widget _fallback() => const Center(child: Icon(Icons.album, size: 56, color: TubeColors.brass));
 }
 
@@ -249,16 +185,10 @@ class _ArtistsList extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final albums = ref.watch(albumsProvider);
     final artists = <String, List<Album>>{};
-    for (final a in albums) {
-      artists.putIfAbsent(a.albumArtist, () => []).add(a);
-    }
-    return ListView(
-      children: artists.entries.map((e) => ListTile(
-        title: Text(e.key),
-        subtitle: Text("${e.value.length} albums"),
-        leading: const Icon(Icons.person, color: TubeColors.brass),
-        onTap: () {},
-      )).toList(),
-    );
+    for (final a in albums) { artists.putIfAbsent(a.albumArtist, () => []).add(a); }
+    return ListView(children: artists.entries.map((e) => ListTile(
+      title: Text(e.key), subtitle: Text("${e.value.length} albums"),
+      leading: const Icon(Icons.person, color: TubeColors.brass), onTap: () {},
+    )).toList());
   }
 }

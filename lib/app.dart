@@ -24,6 +24,7 @@ class AudioPlayerX64App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
     final themeIndex = ref.watch(themeIndexProvider);
+    final preset = ThemePreset.all[themeIndex];
     ref.watch(libraryRestoreProvider);
     return MaterialApp(
       title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D",
@@ -37,7 +38,12 @@ class AudioPlayerX64App extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const PermissionGate(child: _Shell()),
+      // CRITICAL: wrap in Preset so all children can access theme colors
+      // via Preset.of(context).accent, .brass, etc.
+      home: Preset(
+        preset: preset,
+        child: const PermissionGate(child: _Shell()),
+      ),
     );
   }
 }
@@ -60,13 +66,9 @@ class _Shell extends ConsumerStatefulWidget {
 
 class _ShellState extends ConsumerState<_Shell> {
   int _index = 0;
-
   final _screens = const <Widget>[
-    NowPlayingScreen(),
-    LibraryScreen(),
-    EqualizerScreen(),
-    AudiobooksScreen(),
-    AboutScreen(),
+    NowPlayingScreen(), LibraryScreen(), EqualizerScreen(),
+    AudiobooksScreen(), AboutScreen(),
   ];
 
   void _cycleTheme() {
@@ -98,40 +100,36 @@ class _ShellState extends ConsumerState<_Shell> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    final themeIdx = ref.watch(themeIndexProvider);
-    final preset = ThemePreset.all[themeIdx];
+    final p = Preset.of(context);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleBack(); },
       child: Scaffold(
-        body: Stack(
-          children: [
-            IndexedStack(index: _index, children: _screens),
-            // Theme toggle button - top left, always visible
-            Positioned(
-              top: MediaQuery.of(context).padding.top + 4,
-              left: 4,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
-                  shape: BoxShape.circle,
-                ),
-                child: IconButton(
-                  icon: Icon(Icons.palette, color: preset.accent, size: 20),
-                  tooltip: preset.name,
-                  onPressed: _cycleTheme,
-                  iconSize: 20,
-                  padding: const EdgeInsets.all(8),
-                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-                ),
+        body: Stack(children: [
+          IndexedStack(index: _index, children: _screens),
+          Positioned(
+            top: MediaQuery.of(context).padding.top + 4,
+            left: 4,
+            child: Container(
+              decoration: BoxDecoration(
+                color: p.surface.withOpacity(0.8),
+                shape: BoxShape.circle,
+              ),
+              child: IconButton(
+                icon: Icon(Icons.palette, color: p.accent, size: 20),
+                tooltip: p.name,
+                onPressed: _cycleTheme,
+                iconSize: 20,
+                padding: const EdgeInsets.all(8),
+                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
               ),
             ),
-          ],
-        ),
+          ),
+        ]),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            border: Border(top: BorderSide(color: preset.outline, width: 1)),
+            color: p.surface,
+            border: Border(top: BorderSide(color: p.outline, width: 1)),
           ),
           child: SafeArea(
             top: false,
@@ -157,15 +155,13 @@ class _ShellState extends ConsumerState<_Shell> {
 
 class _NavButton extends StatelessWidget {
   const _NavButton({required this.icon, required this.activeIcon, required this.label, required this.selected, required this.onTap});
-  final IconData icon;
-  final IconData activeIcon;
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
+  final IconData icon; final IconData activeIcon; final String label;
+  final bool selected; final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.secondary;
+    final p = Preset.of(context);
+    final color = selected ? p.accent : p.brass;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -173,9 +169,9 @@ class _NavButton extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: EdgeInsets.symmetric(horizontal: selected ? 12 : 8, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? Theme.of(context).colorScheme.primary.withOpacity(0.12) : Colors.transparent,
+          color: selected ? p.accent.withOpacity(0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: selected ? [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), blurRadius: 8, spreadRadius: 1)] : [],
+          boxShadow: selected ? [BoxShadow(color: p.accent.withOpacity(0.3), blurRadius: 8, spreadRadius: 1)] : [],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

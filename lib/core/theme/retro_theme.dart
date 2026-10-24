@@ -1,5 +1,5 @@
 // ============================================================================
-//  retro_theme.dart — Material 3 ThemeData for the retro-tube look
+//  retro_theme.dart — Material 3 ThemeData + ThemePresetScope
 //  3 presets: Amber (0), Ocean (1), Forest (2)
 // ============================================================================
 import 'package:flutter/material.dart';
@@ -7,22 +7,11 @@ import 'package:google_fonts/google_fonts.dart';
 
 import 'tube_colors.dart';
 
-/// Theme preset definitions.
 class ThemePreset {
   final String name;
-  final Color accent;        // primary
-  final Color accentHot;     // active/play state
-  final Color accentCool;    // passive
-  final Color brass;         // metalwork
-  final Color brassDark;
-  final Color background;
-  final Color surface;
-  final Color surfaceVariant;
-  final Color outline;
-  final Color textPrimary;
-  final Color textSecondary;
-  final Color textMuted;
-  final Color filament;
+  final Color accent, accentHot, accentCool, brass, brassDark;
+  final Color background, surface, surfaceVariant, outline;
+  final Color textPrimary, textSecondary, textMuted, filament;
 
   const ThemePreset({
     required this.name,
@@ -67,49 +56,46 @@ class ThemePreset {
   static const all = [amber, ocean, forest];
 }
 
+/// InheritedWidget that provides the current ThemePreset to all descendants.
+/// Use `Preset.of(context)` to get the current preset's colors.
+class Preset extends InheritedWidget {
+  final ThemePreset preset;
+  const Preset({super.key, required this.preset, required super.child});
+
+  static ThemePreset of(BuildContext context) {
+    return context.dependOnInheritedWidgetOfExactType<Preset>()?.preset ?? ThemePreset.amber;
+  }
+
+  @override
+  bool updateShouldNotify(Preset old) => preset != old.preset;
+}
+
 class RetroTheme {
   RetroTheme._();
-
   static ThemeData forPreset(int index) {
     final p = ThemePreset.all[index.clamp(0, ThemePreset.all.length - 1)];
     return _build(p);
   }
-
   static ThemeData get dark => forPreset(0);
 
   static ThemeData _build(ThemePreset p) {
     final colorScheme = const ColorScheme.dark().copyWith(
-      primary: p.accent,
-      onPrimary: p.background,
-      secondary: p.brass,
-      onSecondary: p.background,
-      tertiary: TubeColors.phosphorGreen,
-      onTertiary: p.background,
-      surface: p.surface,
-      onSurface: p.textPrimary,
-      surfaceContainerHighest: p.surfaceVariant,
-      onSurfaceVariant: p.textSecondary,
-      outline: p.outline,
-      outlineVariant: p.brassDark,
-      error: TubeColors.phosphorRed,
-      onError: p.background,
-      scrim: Colors.black,
+      primary: p.accent, onPrimary: p.background,
+      secondary: p.brass, onSecondary: p.background,
+      tertiary: TubeColors.phosphorGreen, onTertiary: p.background,
+      surface: p.surface, onSurface: p.textPrimary,
+      surfaceContainerHighest: p.surfaceVariant, onSurfaceVariant: p.textSecondary,
+      outline: p.outline, outlineVariant: p.brassDark,
+      error: TubeColors.phosphorRed, onError: p.background, scrim: Colors.black,
     );
-
     final base = ThemeData(
-      useMaterial3: true,
-      brightness: Brightness.dark,
-      colorScheme: colorScheme,
-      scaffoldBackgroundColor: p.background,
-      canvasColor: p.background,
-      splashFactory: InkSparkle.splashFactory,
-      visualDensity: VisualDensity.standard,
+      useMaterial3: true, brightness: Brightness.dark, colorScheme: colorScheme,
+      scaffoldBackgroundColor: p.background, canvasColor: p.background,
+      splashFactory: InkSparkle.splashFactory, visualDensity: VisualDensity.standard,
     );
-
     final vt = GoogleFonts.vt323();
     final stm = GoogleFonts.shareTechMono();
     final crimson = GoogleFonts.crimsonPro();
-
     return base.copyWith(
       textTheme: base.textTheme.copyWith(
         displayLarge: vt.copyWith(fontSize: 64, color: p.textPrimary, letterSpacing: 1.2),
@@ -128,23 +114,16 @@ class RetroTheme {
         labelMedium: stm.copyWith(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.8),
         labelSmall: stm.copyWith(fontSize: 11, fontWeight: FontWeight.w500, letterSpacing: 0.6),
       ),
-      filledButtonTheme: FilledButtonThemeData(
-        style: FilledButton.styleFrom(
-          backgroundColor: p.accent, foregroundColor: p.background,
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        ),
-      ),
-      outlinedButtonTheme: OutlinedButtonThemeData(
-        style: OutlinedButton.styleFrom(
-          foregroundColor: p.accent,
-          side: BorderSide(color: p.brass, width: 1.5),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
-        ),
-      ),
-      iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(foregroundColor: p.accent, iconSize: 24, padding: const EdgeInsets.all(8)),
-      ),
+      filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
+        backgroundColor: p.accent, foregroundColor: p.background,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      )),
+      outlinedButtonTheme: OutlinedButtonThemeData(style: OutlinedButton.styleFrom(
+        foregroundColor: p.accent, side: BorderSide(color: p.brass, width: 1.5),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      )),
+      iconButtonTheme: IconButtonThemeData(style: IconButton.styleFrom(foregroundColor: p.accent, iconSize: 24)),
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.transparent, elevation: 0, centerTitle: false,
         titleTextStyle: stm.copyWith(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 1.4, color: p.accent),
@@ -181,31 +160,20 @@ class RetroTheme {
       ),
     );
   }
-
-  static void setAmbientColor(Color? color) {
-    TubeColors.ambientOverride = color;
-  }
+  static void setAmbientColor(Color? color) { TubeColors.ambientOverride = color; }
 }
 
 class _RetroThumbShape extends SliderComponentShape {
   const _RetroThumbShape(this.p);
   final ThemePreset p;
-
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) => const Size(20, 20);
-
   @override
   void paint(PaintingContext context, Offset center, {
-    required Animation<double> activationAnimation,
-    required Animation<double> enableAnimation,
-    required bool isDiscrete,
-    required TextPainter labelPainter,
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required TextDirection textDirection,
-    required double textScaleFactor,
-    required Size sizeWithOverflow,
-    required double value,
+    required Animation<double> activationAnimation, required Animation<double> enableAnimation,
+    required bool isDiscrete, required TextPainter labelPainter, required RenderBox parentBox,
+    required SliderThemeData sliderTheme, required TextDirection textDirection,
+    required double textScaleFactor, required Size sizeWithOverflow, required double value,
   }) {
     final canvas = context.canvas;
     final r = 8.0;

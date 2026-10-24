@@ -1,10 +1,8 @@
 // ============================================================================
-//  now_playing_screen.dart - Now Playing with simple artwork
+//  now_playing_screen.dart - Now Playing with REAL VU meter
 //
-//  Artwork priority (NO queryArtwork - that was unstable):
-//    1. track.artUri (from MediaStore embedded art OR folder cover.jpg)
-//    2. Album artwork fallback (another track in same album with artUri)
-//    3. App icon (gramophone PNG)
+//  VU amplitude comes from native Android Visualizer (via VisualizerService).
+//  Attached to the player's audio session id automatically.
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -29,6 +27,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   @override
   void initState() {
     super.initState();
+    // Hook visualizer to playback's audio session id stream.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final playback = ref.read(playbackServiceProvider);
       final visualizer = ref.read(visualizerServiceProvider);
@@ -43,16 +42,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final l = AppLocalizations.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
     final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
-    final stereo = ref.watch(stereoAmplitudeProvider).valueOrNull;
+    final amp = ref.watch(amplitudeProvider).valueOrNull ?? 0.0;
     final playback = ref.watch(playbackServiceProvider);
     ref.watch(isPlayingProvider);
 
     final track = snap?.current;
     final duration = snap?.duration ?? Duration.zero;
-    final leftAmp = stereo?.left ?? 0.0;
-    final rightAmp = stereo?.right ?? 0.0;
-    final isPlaying = snap?.isPlaying ?? false;
-    final brightness = isPlaying ? 1.0 : 0.0;
+    final brightness = amp > 0.02 ? 1.0 : 0.0;
 
     return Scaffold(
       body: SafeArea(
@@ -107,11 +103,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               const SizedBox(height: 8),
               CustomPaint(
                 size: Size(MediaQuery.of(context).size.width - 40, 120),
-                painter: VUPainter(
-                  leftAmplitude: leftAmp,
-                  rightAmplitude: rightAmp,
-                  brightness: brightness,
-                ),
+                painter: VUPainter(amplitude: amp, brightness: brightness),
               ),
 
               const SizedBox(height: 12),
@@ -312,8 +304,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Simple artwork widget - NO queryArtwork (was unstable).
-/// Priority: track.artUri -> album fallback -> app icon.
+/// Simple artwork: track.artUri -> album fallback -> app icon. NO spinner.
 class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
@@ -323,7 +314,6 @@ class _ArtworkImage extends ConsumerWidget {
     final t = track;
     if (t == null) return _appIconFallback();
 
-    // 1. Track's own artUri
     if (t.artUri.isNotEmpty) {
       return Image.network(
         t.artUri,
@@ -332,7 +322,6 @@ class _ArtworkImage extends ConsumerWidget {
       );
     }
 
-    // 2. Album artwork fallback (another track in same album with artUri)
     final albumArt = ref.watch(albumArtIndexProvider)[
         '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
     if (albumArt != null && albumArt.isNotEmpty) {
@@ -343,7 +332,6 @@ class _ArtworkImage extends ConsumerWidget {
       );
     }
 
-    // 3. Last-resort: app icon (NO spinner, NO queryArtwork)
     return _appIconFallback();
   }
 

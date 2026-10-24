@@ -1,7 +1,6 @@
 // ============================================================================
-//  playback_service.dart - playback with persistent queue
-//  Plain AudioPlayer (no AudioPipeline) — Visualizer works again.
-//  EQ handled by separate native EqualizerPlugin (see EqualizerPlugin.kt).
+//  playback_service.dart - playback with persistent queue + real VU
+//  Exposes androidAudioSessionIdStream so VisualizerService can attach.
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -19,7 +18,6 @@ import '../domain/models/track.dart';
 abstract class PlaybackService {
   Stream<PlaybackSnapshot> get state;
   Stream<Duration> get positionStream;
-  Stream<double> get amplitudeStream;
   Stream<int> get audioSessionIdStream;
 
   Future<void> playQueue({required List<Track> tracks, required int startIndex});
@@ -88,8 +86,6 @@ class JustAudioPlaybackService implements PlaybackService {
   static const _indexKey = 'pathephon.queue.index.v1';
   static const _positionKey = 'pathephon.queue.position.v1';
 
-  // Plain AudioPlayer — no AudioPipeline. This keeps androidAudioSessionIdStream
-  // working so Visualizer can attach. EQ handled by native plugin.
   final _player = AudioPlayer();
   AudioHandler? _handler;
 
@@ -103,15 +99,12 @@ class JustAudioPlaybackService implements PlaybackService {
   Duration _savedPosition = Duration.zero;
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
-  final _ampController = StreamController<double>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
 
   @override
   Stream<PlaybackSnapshot> get state => _stateController.stream;
   @override
   Stream<Duration> get positionStream => _player.positionStream;
-  @override
-  Stream<double> get amplitudeStream => _ampController.stream;
   @override
   Stream<int> get audioSessionIdStream => _sessionIdController.stream;
 
@@ -151,6 +144,7 @@ class JustAudioPlaybackService implements PlaybackService {
       }
     });
 
+    // Expose audioSessionId for Visualizer
     _player.androidAudioSessionIdStream.listen((id) {
       if (id != null) {
         _sessionIdController.add(id);
@@ -243,7 +237,6 @@ class JustAudioPlaybackService implements PlaybackService {
         repeatMode: _repeat,
         replayGainMode: _rg,
       ));
-      debugPrint('[pathephon] queue restored: ${tracks.length} tracks');
     } catch (e, st) {
       debugPrint('[pathephon] restoreSavedQueue failed: $e\n$st');
     }
@@ -419,7 +412,6 @@ class JustAudioPlaybackService implements PlaybackService {
 
   void dispose() {
     _stateController.close();
-    _ampController.close();
     _sessionIdController.close();
     _player.dispose();
   }

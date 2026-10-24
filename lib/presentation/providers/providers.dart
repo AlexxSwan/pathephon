@@ -1,5 +1,6 @@
 // ============================================================================
 //  providers.dart - central Riverpod wiring
+//  Library starts EMPTY (no auto-scan, no spinner).
 // ============================================================================
 import 'dart:io' show Directory;
 
@@ -63,7 +64,8 @@ final visualizerServiceProvider = Provider<VisualizerService>((ref) {
   return svc;
 });
 
-final stereoAmplitudeProvider = StreamProvider<StereoAmplitude>((ref) {
+// REAL amplitude from native Visualizer (0..1)
+final amplitudeProvider = StreamProvider<double>((ref) {
   return ref.watch(visualizerServiceProvider).amplitudes;
 });
 
@@ -83,13 +85,14 @@ final audioBookServiceProvider = Provider<AudioBookService>((ref) {
   return svc;
 });
 
+// IMPORTANT: starts with EMPTY data, not loading. No auto-scan = no spinner.
 final libraryStateProvider =
     StateNotifierProvider<LibraryNotifier, AsyncValue<List<Track>>>((ref) {
   return LibraryNotifier(ref.watch(libraryRepositoryProvider));
 });
 
 class LibraryNotifier extends StateNotifier<AsyncValue<List<Track>>> {
-  LibraryNotifier(this._repo) : super(const AsyncValue.loading());
+  LibraryNotifier(this._repo) : super(const AsyncValue.data(<Track>[]));
 
   final LibraryRepository _repo;
 
@@ -113,9 +116,7 @@ final albumsProvider = Provider<List<Album>>((ref) {
   return ref.watch(libraryRepositoryProvider).groupAlbums(tracks);
 });
 
-/// Index: (albumArtist || album) -> first track's artUri we found.
-/// Used by Now Playing: if current track has no artUri, fall back to another
-/// track's artUri from the same album.
+/// Index: (albumArtist || album) -> first track's artUri.
 final albumArtIndexProvider = Provider<Map<String, String>>((ref) {
   final tracks = ref.watch(libraryStateProvider).valueOrNull ?? const <Track>[];
   final index = <String, String>{};
@@ -133,10 +134,6 @@ final playbackSnapshotProvider = StreamProvider<PlaybackSnapshot>((ref) {
 
 final playbackPositionProvider = StreamProvider<Duration>((ref) {
   return ref.watch(playbackServiceProvider).positionStream;
-});
-
-final amplitudeProvider = StreamProvider<double>((ref) {
-  return ref.watch(playbackServiceProvider).amplitudeStream;
 });
 
 final eqBandsProvider = StreamProvider<List<double>>((ref) {

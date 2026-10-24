@@ -7,6 +7,9 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel.EventSink
 
+/// Native Android Visualizer bridge.
+/// Attaches to the player's audio session id, captures waveform at 20Hz,
+/// computes RMS amplitude (0..1), streams to Dart.
 class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private val methodChannel = MethodChannel(binaryMessenger, "pathephon/visualizer")
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/visualizer/events")
@@ -46,13 +49,8 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
 
     private fun start(sessionId: Int) {
         stop()
-        // Do NOT fall back to session 0 (global output mix). Session 0
-        // captures ALL audio on the device — system sounds, notifications,
-        // other apps — which makes the VU react to non-music audio.
-        // If we can't attach to the player's own session, VU just stays
-        // at 0 (better silent than wrong).
         if (sessionId == 0) {
-            Log.w("VisualizerPlugin", "sessionId is 0 — refusing to attach to global mix")
+            Log.w("VisualizerPlugin", "sessionId is 0 - cannot attach")
             throw IllegalArgumentException("sessionId 0 not supported")
         }
 
@@ -69,34 +67,30 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             override fun onWaveFormDataCapture(viz: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
                 if (waveform == null || eventSink == null) return
                 eventCount++
-                if (eventCount % 100 == 1) {
+                if (eventCount % 200 == 1) {
                     Log.i("VisualizerPlugin", "captured event #$eventCount, bytes=${waveform.size}")
                 }
                 val n = waveform.size
-                if (n < 4) return
-                val half = n / 2
-                var sumL = 0.0
-                var sumR = 0.0
-                for (i in 0 until half) {
-                    val l = (waveform[i].toInt() and 0xFF) - 128
-                    val r = (waveform[i + half].toInt() and 0xFF) - 128
-                    sumL += (l * l).toDouble()
-                    sumR += (r * r).toDouble()
+                if (n < 2) return
+                // Waveform bytes: unsigned 0..255, centered at 128.
+                // Compute RMS deviation from center.
+                var sumSq = 0.0
+                for (i in 0 until n) {
+                    val sample = (waveform[i].toInt() and 0xFF) - 128
+                    sumSq += (sample * sample).toDouble()
                 }
-                val rmsL = Math.sqrt(sumL / half) / 128.0
-                val rmsR = Math.sqrt(sumR / half) / 128.0
-                // Real RMS values for music are typically 0.1-0.4.
-                // Multiply by 1.8 for visible swing, cap at 0.85 (just below
-                // red zone which starts ~0.85).
-                val scaledL = (rmsL * 1.8).coerceIn(0.0, 0.85)
-                val scaledR = (rmsR * 1.8).coerceIn(0.0, 0.85)
-                eventSink?.success(listOf(scaledL, scaledR))
+                val rms = Math.sqrt(sumSq / n) / 128.0
+                // Real RMS for music is typically 0.1..0.4.
+                // No artificial boost - keep it real.
+                // Clamp to 0..1 for the painter.
+                val amplitude = rms.coerceIn(0.0, 1.0)
+                eventSink?.success(amplitude)
             }
             override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
         }, 20000, true, false)
         v.enabled = true
         visualizer = v
-        Log.i("VisualizerPlugin", "Visualizer attached to player session $sessionId captureSize=$captureSize")
+        Log.i("VisualizerPlugin", "Visualizer attached to session $sessionId captureSize=$captureSize")
     }
 
     private fun stop() {

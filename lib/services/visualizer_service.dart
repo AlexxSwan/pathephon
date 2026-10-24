@@ -1,32 +1,29 @@
 // ============================================================================
-//  visualizer_service.dart - PPM with strict peak hold/decay
-//
-//  Hold: only refresh if rawDb >= peakDb (peak must actually reach current level)
-//  Decay: 12 dB/sec after 1 second hold
+//  visualizer_service.dart - FFT spectrum analyzer
+//  Streams List<double> of 32 frequency bin magnitudes (0..255).
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
 
+class SpectrumData {
+  const SpectrumData(this.bins);
+  final List<double> bins; // 32 bins, each 0..255
+}
+
 class VisualizerService {
   static const _method = MethodChannel('pathephon/visualizer');
   static const _events = EventChannel('pathephon/visualizer/events');
 
   StreamSubscription? _eventSub;
-  final _controller = StreamController<double>.broadcast();
+  final _controller = StreamController<SpectrumData>.broadcast();
 
   int? _activeSessionId;
   bool _permissionGranted = false;
   bool _permissionRequested = false;
 
-  // PPM state in dBFS
-  double _peakDb = -60.0;
-  DateTime _lastPeakTime = DateTime.now();
-  Timer? _decayTimer;
-  int _eventCount = 0;
-
-  Stream<double> get amplitudes => _controller.stream;
+  Stream<SpectrumData> get spectrum => _controller.stream;
 
   Future<bool> _ensurePermission() async {
     if (_permissionGranted) return true;
@@ -53,71 +50,42 @@ class VisualizerService {
 
     final granted = await _ensurePermission();
     if (!granted) {
-      debugPrint('[pathephon] PPM: microphone permission denied');
+      debugPrint('[pathephon] visualizer: microphone permission denied');
       return;
     }
 
     _activeSessionId = sessionId;
-    _peakDb = -60.0;
-    _lastPeakTime = DateTime.now();
-    _eventCount = 0;
     try {
       _eventSub ??= _events.receiveBroadcastStream().listen(
         (data) {
-          if (data is num) {
-            final rawDb = data.toDouble().clamp(-60.0, 0.0);
-            _eventCount++;
-            if (_eventCount % 100 == 1) {
-              debugPrint('[pathephon] PPM event #$_eventCount: raw=$rawDb dBFS, peak=$_peakDb dBFS');
-            }
-            // Attack: instant — if new peak is louder OR equal, jump up.
-            if (rawDb >= _peakDb) {
-              _peakDb = rawDb;
-              _lastPeakTime = DateTime.now();
-            }
-            _controller.add(_peakDb);
+          if (data is List) {
+            final bins = data.map((e) => (e as num).toDouble()).toList();
+            _controller.add(SpectrumData(bins));
           }
         },
-        onError: (Object e) => debugPrint('[pathephon] PPM event error: $e'),
+        onError: (Object e) => debugPrint('[pathephon] visualizer event error: $e'),
       );
       await _method.invokeMethod('start', {'sessionId': sessionId});
-      debugPrint('[pathephon] PPM attached to session $sessionId');
-
-      // Decay timer: every 50ms, decrease peak if hold expired.
-      // 12 dB/sec = 0.6 dB per 50ms.
-      _decayTimer?.cancel();
-      _decayTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-        final holdElapsed = DateTime.now().difference(_lastPeakTime).inMilliseconds;
-        if (holdElapsed > 1000 && _peakDb > -60.0) {
-          _peakDb -= 0.6;
-          if (_peakDb < -60.0) _peakDb = -60.0;
-          _controller.add(_peakDb);
-        }
-      });
+      debugPrint('[pathephon] visualizer attached to session $sessionId');
     } catch (e) {
-      debugPrint('[pathephon] PPM start failed (non-fatal): $e');
+      debugPrint('[pathephon] visualizer start failed (non-fatal): $e');
     }
   }
 
   Future<void> detach() async {
     if (_activeSessionId == null) return;
     _activeSessionId = null;
-    _peakDb = -60.0;
-    _decayTimer?.cancel();
-    _decayTimer = null;
     try {
       await _method.invokeMethod('stop');
     } catch (e) {
-      debugPrint('[pathephon] PPM stop failed (non-fatal): $e');
+      debugPrint('[pathephon] visualizer stop failed (non-fatal): $e');
     }
-    _controller.add(-60.0);
+    _controller.add(const SpectrumData(<double>[]));
   }
 
   void dispose() {
     _eventSub?.cancel();
     _eventSub = null;
-    _decayTimer?.cancel();
-    _decayTimer = null;
     _controller.close();
   }
 }

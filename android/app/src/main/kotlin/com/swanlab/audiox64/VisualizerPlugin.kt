@@ -7,13 +7,8 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel.EventSink
 
-/// Native Android Visualizer bridge - PPM peak detection.
-///
-/// Robust peak detection:
-///   1. Compute DC offset (mean of waveform) and subtract it
-///   2. Peak = max abs deviation from mean
-///   3. Convert to dBFS with calibration offset (-20 dB)
-///      (ExoPlayer output is hotter than expected on most devices)
+/// Native Android Visualizer - FFT spectrum analyzer mode.
+/// Captures FFT data and returns frequency bin magnitudes (0..255 normalized).
 class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private val methodChannel = MethodChannel(binaryMessenger, "pathephon/visualizer")
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/visualizer/events")
@@ -56,59 +51,71 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             throw IllegalArgumentException("sessionId 0 not supported")
         }
 
-        val captureRange = Visualizer.getCaptureSizeRange()
-        val captureSize = if (captureRange != null && captureRange.size >= 2) {
-            captureRange[0]
-        } else {
-            128
-        }
+        // Use captureSize = 256 -> FFT gives 128 bins (we'll take first 32 for display)
+        val captureSize = 256
 
         val v = Visualizer(sessionId)
         v.captureSize = captureSize
+        // Enable FFT data capture (not waveform)
         v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
-            override fun onWaveFormDataCapture(viz: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
-                if (waveform == null || eventSink == null) return
-                val n = waveform.size
+            override fun onWaveFormDataCapture(viz: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
+            override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {
+                if (fft == null || eventSink == null) return
+                val n = fft.size
                 if (n < 4) return
 
-                // Step 1: Compute DC offset (mean of unsigned bytes minus 128).
-                // Some devices have a constant DC bias in the Visualizer output.
-                var sum = 0L
-                for (i in 0 until n) {
-                    sum += (waveform[i].toInt() and 0xFF).toLong()
+                // FFT format from Android Visualizer:
+                // fft[0] = DC, fft[1] = Nyquist
+                // For k >= 2: real part at fft[2k-2], imaginary at fft[2k-1]
+                // We compute magnitude = sqrt(real^2 + imag^2) for each bin.
+                // Number of frequency bins = (n - 2) / 2 + 1 = n/2
+
+                val numBins = n / 2
+                val magnitudes = FloatArray(numBins)
+
+                // DC component (bin 0)
+                magnitudes[0] = Math.abs(fft[0].toFloat())
+                // Nyquist (bin numBins-1)
+                if (numBins > 1) {
+                    magnitudes[numBins - 1] = Math.abs(fft[1].toFloat())
                 }
-                val mean = (sum / n).toInt()  // 0..255, ideally 128
-
-                // Step 2: Peak = max abs deviation from mean.
-                var maxAbsDev = 0
-                for (i in 0 until n) {
-                    val sample = (waveform[i].toInt() and 0xFF) - mean
-                    val abs = if (sample < 0) -sample else sample
-                    if (abs > maxAbsDev) maxAbsDev = abs
+                // Other bins
+                for (k in 1 until numBins - 1) {
+                    val real = fft[2 * k].toFloat()
+                    val imag = fft[2 * k + 1].toFloat()
+                    magnitudes[k] = Math.sqrt((real * real + imag * imag).toDouble()).toFloat()
                 }
 
-                // Step 3: Convert to linear amplitude (0..1).
-                // maxAbsDev range is 0..127 (since mean is in 0..255 and samples too).
-                val linear = maxAbsDev.toDouble() / 127.0
-
-                // Step 4: Convert to dBFS with calibration offset.
-                // -20 dB calibration: ExoPlayer output is typically hotter than
-                //   a pure digital signal, so we shift everything down by 20 dB.
-                //   This puts typical music peaks at -15..-5 dBFS (mark 4-6 on PPM).
-                val rawDbFs = if (linear <= 0.001) {
-                    -60.0
-                } else {
-                    20.0 * Math.log10(linear)
+                // Normalize to 0..255 (byte range)
+                // Find max for normalization, then scale
+                var maxMag = 1f
+                for (m in magnitudes) {
+                    if (m > maxMag) maxMag = m
                 }
-                val calibratedDbFs = (rawDbFs - 20.0).coerceIn(-60.0, 0.0)
+                val scale = 255f / maxMag
 
-                eventSink?.success(calibratedDbFs)
+                // Take first 32 bins (covers ~0 to ~5kHz at 22kHz sample rate)
+                // These are the most musically relevant frequencies
+                val numDisplayBins = Math.min(32, numBins)
+                val result = FloatArray(numDisplayBins)
+                for (i in 0 until numDisplayBins) {
+                    // Apply slight log scaling for better visual response
+                    val norm = (magnitudes[i] * scale / 255f).coerceIn(0f, 1f)
+                    val logScaled = (Math.log10(1.0 + 9.0 * norm) * 255f).toFloat()
+                    result[i] = logScaled
+                }
+
+                // Convert to List<Double> for Flutter
+                val list = ArrayList<Double>(numDisplayBins)
+                for (v in result) {
+                    list.add(v.toDouble())
+                }
+                eventSink?.success(list)
             }
-            override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
-        }, 20000, true, false)
+        }, 20000, false, true)  // waveform=false, fft=true
         v.enabled = true
         visualizer = v
-        Log.i("VisualizerPlugin", "PPM Visualizer attached to session $sessionId (calibrated -20 dB)")
+        Log.i("VisualizerPlugin", "FFT Visualizer attached to session $sessionId")
     }
 
     private fun stop() {

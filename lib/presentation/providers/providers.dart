@@ -1,6 +1,5 @@
 // ============================================================================
 //  providers.dart - central Riverpod wiring
-//  Library starts EMPTY (no auto-scan, no spinner).
 // ============================================================================
 import 'dart:io' show Directory;
 
@@ -64,9 +63,9 @@ final visualizerServiceProvider = Provider<VisualizerService>((ref) {
   return svc;
 });
 
-// REAL amplitude from native Visualizer (0..1)
-final amplitudeProvider = StreamProvider<double>((ref) {
-  return ref.watch(visualizerServiceProvider).amplitudes;
+// Spectrum data stream from native Visualizer (32 frequency bins)
+final spectrumProvider = StreamProvider<SpectrumData>((ref) {
+  return ref.watch(visualizerServiceProvider).spectrum;
 });
 
 final equalizerServiceProvider = Provider<EqualizerService>((ref) {
@@ -85,7 +84,6 @@ final audioBookServiceProvider = Provider<AudioBookService>((ref) {
   return svc;
 });
 
-// IMPORTANT: starts with EMPTY data, not loading. No auto-scan = no spinner.
 final libraryStateProvider =
     StateNotifierProvider<LibraryNotifier, AsyncValue<List<Track>>>((ref) {
   return LibraryNotifier(ref.watch(libraryRepositoryProvider));
@@ -116,7 +114,6 @@ final albumsProvider = Provider<List<Album>>((ref) {
   return ref.watch(libraryRepositoryProvider).groupAlbums(tracks);
 });
 
-/// Index: (albumArtist || album) -> first track's artUri.
 final albumArtIndexProvider = Provider<Map<String, String>>((ref) {
   final tracks = ref.watch(libraryStateProvider).valueOrNull ?? const <Track>[];
   final index = <String, String>{};

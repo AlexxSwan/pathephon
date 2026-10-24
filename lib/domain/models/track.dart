@@ -1,5 +1,5 @@
 // ============================================================================
-//  track.dart - immutable Track model (plain Dart, no Freezed needed)
+//  track.dart - immutable Track model
 // ============================================================================
 import 'package:flutter/foundation.dart';
 
@@ -50,8 +50,6 @@ class Track {
   final String fileExtension;
   final String filePath;
   final String artUri;
-  /// Android MediaStore _id column (for queryArtwork). Null for tracks
-  /// picked via file_picker (no MediaStore row).
   final int? mediaStoreId;
   final double? replayGainTrack;
   final double? replayGainAlbum;

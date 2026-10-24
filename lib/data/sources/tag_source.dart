@@ -1,5 +1,6 @@
 // ============================================================================
 //  tag_source.dart - read-only tag metadata via on_audio_query.
+//  Sets mediaStoreId so UI can lazy-fetch artwork via queryArtwork.
 // ============================================================================
 import 'dart:typed_data';
 
@@ -12,8 +13,6 @@ class TagSource {
 
   final OnAudioQuery _query;
 
-  /// Returns cover-art bytes for a track (decoded from embedded art via
-  /// on_audio_query's MediaStore access).
   Future<Uint8List?> fetchArt(int trackId) async {
     return _query.queryArtwork(trackId, ArtworkType.AUDIO, size: 600);
   }
@@ -33,8 +32,6 @@ class TagSource {
     return double.tryParse(match.group(1)!);
   }
 
-  /// Build a Track from on_audio_query's SongModel.
-  /// mediaStoreId is set so the UI can lazy-fetch artwork via queryArtwork.
   static Track fromSongModel(SongModel s) {
     final path = s.data;
     final ext = path.toLowerCase().substring(path.lastIndexOf('.') + 1);

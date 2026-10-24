@@ -1,10 +1,10 @@
 // ============================================================================
-//  now_playing_screen.dart - full-screen now-playing with stereo VU meter
+//  now_playing_screen.dart - Now Playing with stereo VU + simple artwork
 //
-//  Artwork resolution priority:
-//    1. Track's own artUri
+//  Artwork priority:
+//    1. track.artUri (embedded art URI from MediaStore)
 //    2. Album artwork fallback (another track in same album with artUri)
-//    3. Embedded art via on_audio_query (mediaStoreId)
+//    3. Embedded art via on_audio_query.queryArtwork (mediaStoreId)
 //    4. App icon (gramophone PNG) as last-resort fallback
 // ============================================================================
 import 'dart:typed_data';
@@ -326,7 +326,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Resolves artwork for a track with multiple fallbacks.
+/// Artwork widget with fallbacks.
 class _ArtworkImage extends ConsumerStatefulWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
@@ -358,6 +358,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       _loadingMediaStoreId = null;
       return;
     }
+    // If track has artUri OR album fallback artUri, no need to fetch from MediaStore
     final albumArt = ref.read(albumArtIndexProvider)[
         '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
     final hasUri = t.artUri.isNotEmpty || (albumArt != null && albumArt.isNotEmpty);

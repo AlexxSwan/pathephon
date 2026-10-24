@@ -114,8 +114,8 @@ final albumsProvider = Provider<List<Album>>((ref) {
 });
 
 /// Index: (albumArtist || album) -> first track's artUri we found.
-/// Used by the Now Playing artwork widget: if the current track has no own
-/// artwork, fall back to another track's artwork from the same album.
+/// Used by Now Playing: if current track has no artUri, fall back to another
+/// track's artUri from the same album.
 final albumArtIndexProvider = Provider<Map<String, String>>((ref) {
   final tracks = ref.watch(libraryStateProvider).valueOrNull ?? const <Track>[];
   final index = <String, String>{};

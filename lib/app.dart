@@ -23,12 +23,12 @@ class AudioPlayerX64App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
-    // Trigger library restore on startup
+    final themeIndex = ref.watch(themeIndexProvider);
     ref.watch(libraryRestoreProvider);
     return MaterialApp(
       title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D",
       debugShowCheckedModeBanner: false,
-      theme: RetroTheme.dark,
+      theme: RetroTheme.forPreset(themeIndex),
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
@@ -52,13 +52,13 @@ Locale readInitialLocale(SharedPreferences prefs) {
   return Locale(saved);
 }
 
-class _Shell extends StatefulWidget {
+class _Shell extends ConsumerStatefulWidget {
   const _Shell();
   @override
-  State<_Shell> createState() => _ShellState();
+  ConsumerState<_Shell> createState() => _ShellState();
 }
 
-class _ShellState extends State<_Shell> {
+class _ShellState extends ConsumerState<_Shell> {
   int _index = 0;
 
   final _screens = const <Widget>[
@@ -69,28 +69,26 @@ class _ShellState extends State<_Shell> {
     AboutScreen(),
   ];
 
+  void _cycleTheme() {
+    final current = ref.read(themeIndexProvider);
+    final next = (current + 1) % ThemePreset.all.length;
+    ref.read(themeIndexProvider.notifier).state = next;
+    ref.read(sharedPreferencesProvider).setInt('pathephon.theme', next);
+  }
+
   Future<void> _handleBack() async {
-    if (_index != 0) {
-      setState(() => _index = 0);
-      return;
-    }
+    if (_index != 0) { setState(() => _index = 0); return; }
     final shouldExit = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1410),
-        title: Text(
-          "\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F?",
-          style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 18),
-        ),
+        backgroundColor: Theme.of(ctx).colorScheme.surface,
+        title: Text("\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F?",
+            style: TextStyle(color: Theme.of(ctx).colorScheme.onSurface, fontSize: 18)),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text("\u041E\u0442\u043C\u0435\u043D\u0430", style: TextStyle(color: Color(0xFFB89968))),
-          ),
-          TextButton(
-            onPressed: () { Navigator.of(ctx).pop(true); SystemNavigator.pop(); },
-            child: const Text("\u0412\u044B\u0439\u0442\u0438", style: TextStyle(color: Color(0xFFFF6B1A))),
-          ),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text("\u041E\u0442\u043C\u0435\u043D\u0430", style: TextStyle(color: Theme.of(ctx).colorScheme.secondary))),
+          TextButton(onPressed: () { Navigator.of(ctx).pop(true); SystemNavigator.pop(); },
+              child: Text("\u0412\u044B\u0439\u0442\u0438", style: TextStyle(color: Theme.of(ctx).colorScheme.primary))),
         ],
       ),
     ) ?? false;
@@ -100,15 +98,40 @@ class _ShellState extends State<_Shell> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
+    final themeIdx = ref.watch(themeIndexProvider);
+    final preset = ThemePreset.all[themeIdx];
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleBack(); },
       child: Scaffold(
-        body: IndexedStack(index: _index, children: _screens),
+        body: Stack(
+          children: [
+            IndexedStack(index: _index, children: _screens),
+            // Theme toggle button - top left, always visible
+            Positioned(
+              top: MediaQuery.of(context).padding.top + 4,
+              left: 4,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface.withOpacity(0.8),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.palette, color: preset.accent, size: 20),
+                  tooltip: preset.name,
+                  onPressed: _cycleTheme,
+                  iconSize: 20,
+                  padding: const EdgeInsets.all(8),
+                  constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+                ),
+              ),
+            ),
+          ],
+        ),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(
-            color: const Color(0xFF1A1410),
-            border: Border(top: BorderSide(color: const Color(0xFFB89968).withOpacity(0.3), width: 1)),
+            color: Theme.of(context).colorScheme.surface,
+            border: Border(top: BorderSide(color: preset.outline, width: 1)),
           ),
           child: SafeArea(
             top: false,
@@ -142,7 +165,7 @@ class _NavButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? const Color(0xFFFF6B1A) : const Color(0xFFB89968);
+    final color = selected ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.secondary;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(12),
@@ -150,9 +173,9 @@ class _NavButton extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: EdgeInsets.symmetric(horizontal: selected ? 12 : 8, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? const Color(0xFFFF6B1A).withOpacity(0.12) : Colors.transparent,
+          color: selected ? Theme.of(context).colorScheme.primary.withOpacity(0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: selected ? [BoxShadow(color: const Color(0xFFFF6B1A).withOpacity(0.3), blurRadius: 8, spreadRadius: 1)] : [],
+          boxShadow: selected ? [BoxShadow(color: Theme.of(context).colorScheme.primary.withOpacity(0.3), blurRadius: 8, spreadRadius: 1)] : [],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

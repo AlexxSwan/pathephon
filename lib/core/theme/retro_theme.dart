@@ -1,37 +1,98 @@
 // ============================================================================
 //  retro_theme.dart — Material 3 ThemeData for the retro-tube look
-//
-//  - Dark-only (the player is meant for evening listening; OLED-friendly).
-//  - Custom ColorScheme built on TubeColors.
-//  - VT323 / Share Tech Mono / Crimson Pro typography swap (loaded by
-//    pubspec.yaml `fonts:` block).
+//  3 presets: Amber (0), Ocean (1), Forest (2)
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'tube_colors.dart';
 
+/// Theme preset definitions.
+class ThemePreset {
+  final String name;
+  final Color accent;        // primary
+  final Color accentHot;     // active/play state
+  final Color accentCool;    // passive
+  final Color brass;         // metalwork
+  final Color brassDark;
+  final Color background;
+  final Color surface;
+  final Color surfaceVariant;
+  final Color outline;
+  final Color textPrimary;
+  final Color textSecondary;
+  final Color textMuted;
+  final Color filament;
+
+  const ThemePreset({
+    required this.name,
+    required this.accent, required this.accentHot, required this.accentCool,
+    required this.brass, required this.brassDark,
+    required this.background, required this.surface, required this.surfaceVariant,
+    required this.outline,
+    required this.textPrimary, required this.textSecondary, required this.textMuted,
+    required this.filament,
+  });
+
+  static const amber = ThemePreset(
+    name: 'Янтарь',
+    accent: Color(0xFFFFB347), accentHot: Color(0xFFFF7A00), accentCool: Color(0xFFB0611F),
+    brass: Color(0xFFB08D57), brassDark: Color(0xFF6E5430),
+    background: Color(0xFF0E0B08), surface: Color(0xFF181310), surfaceVariant: Color(0xFF221911),
+    outline: Color(0xFF3A2A1C),
+    textPrimary: Color(0xFFFFE5B4), textSecondary: Color(0xFFC9A77B), textMuted: Color(0xFF7A6347),
+    filament: Color(0xFFFFE5B4),
+  );
+
+  static const ocean = ThemePreset(
+    name: 'Океан',
+    accent: Color(0xFF4FC3F7), accentHot: Color(0xFF0288D1), accentCool: Color(0xFF01579B),
+    brass: Color(0xFF4A90A4), brassDark: Color(0xFF2A5060),
+    background: Color(0xFF060A0E), surface: Color(0xFF0C1419), surfaceVariant: Color(0xFF102028),
+    outline: Color(0xFF1A2A35),
+    textPrimary: Color(0xFFB3E5FC), textSecondary: Color(0xFF7AB8D4), textMuted: Color(0xFF3A6080),
+    filament: Color(0xFFB3E5FC),
+  );
+
+  static const forest = ThemePreset(
+    name: 'Лес',
+    accent: Color(0xFF66BB6A), accentHot: Color(0xFF2E7D32), accentCool: Color(0xFF1B5E20),
+    brass: Color(0xFF558B5A), brassDark: Color(0xFF2E5032),
+    background: Color(0xFF060A06), surface: Color(0xFF0C130C), surfaceVariant: Color(0xFF101A10),
+    outline: Color(0xFF1A2A1A),
+    textPrimary: Color(0xFFC8E6C9), textSecondary: Color(0xFF81C784), textMuted: Color(0xFF3A6040),
+    filament: Color(0xFFC8E6C9),
+  );
+
+  static const all = [amber, ocean, forest];
+}
+
 class RetroTheme {
   RetroTheme._();
 
-  static ThemeData get dark {
-    final amber = TubeColors.ambientOverride ?? TubeColors.amber;
+  static ThemeData forPreset(int index) {
+    final p = ThemePreset.all[index.clamp(0, ThemePreset.all.length - 1)];
+    return _build(p);
+  }
 
+  static ThemeData get dark => forPreset(0);
+
+  static ThemeData _build(ThemePreset p) {
     final colorScheme = const ColorScheme.dark().copyWith(
-      primary: amber,
-      onPrimary: TubeColors.background,
-      secondary: TubeColors.brass,
-      onSecondary: TubeColors.background,
+      primary: p.accent,
+      onPrimary: p.background,
+      secondary: p.brass,
+      onSecondary: p.background,
       tertiary: TubeColors.phosphorGreen,
-      onTertiary: TubeColors.background,
-      surface: TubeColors.surface,
-      onSurface: TubeColors.textPrimary,
-      surfaceContainerHighest: TubeColors.surfaceVariant,
-      onSurfaceVariant: TubeColors.textSecondary,
-      outline: TubeColors.outline,
-      outlineVariant: TubeColors.brassDark,
+      onTertiary: p.background,
+      surface: p.surface,
+      onSurface: p.textPrimary,
+      surfaceContainerHighest: p.surfaceVariant,
+      onSurfaceVariant: p.textSecondary,
+      outline: p.outline,
+      outlineVariant: p.brassDark,
       error: TubeColors.phosphorRed,
-      onError: TubeColors.background,
+      onError: p.background,
       scrim: Colors.black,
     );
 
@@ -39,28 +100,24 @@ class RetroTheme {
       useMaterial3: true,
       brightness: Brightness.dark,
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: TubeColors.background,
-      canvasColor: TubeColors.background,
+      scaffoldBackgroundColor: p.background,
+      canvasColor: p.background,
       splashFactory: InkSparkle.splashFactory,
       visualDensity: VisualDensity.standard,
     );
 
-    // ---- Typography: 3 families -------------------------------------------
-    //   VT323         → display (giant retro headers)
-    //   ShareTechMono → labels, technical readouts (timecode, EQ band Hz)
-    //   CrimsonPro    → body / long-form (album notes, lyrics)
     final vt = GoogleFonts.vt323();
     final stm = GoogleFonts.shareTechMono();
     final crimson = GoogleFonts.crimsonPro();
 
     return base.copyWith(
       textTheme: base.textTheme.copyWith(
-        displayLarge: vt.copyWith(fontSize: 64, color: TubeColors.textPrimary, letterSpacing: 1.2),
-        displayMedium: vt.copyWith(fontSize: 48, color: TubeColors.textPrimary),
-        displaySmall: vt.copyWith(fontSize: 32, color: TubeColors.amber, letterSpacing: 1.0),
-        headlineLarge: vt.copyWith(fontSize: 28, color: TubeColors.textPrimary),
-        headlineMedium: vt.copyWith(fontSize: 22, color: TubeColors.textPrimary),
-        headlineSmall: vt.copyWith(fontSize: 18, color: TubeColors.textSecondary),
+        displayLarge: vt.copyWith(fontSize: 64, color: p.textPrimary, letterSpacing: 1.2),
+        displayMedium: vt.copyWith(fontSize: 48, color: p.textPrimary),
+        displaySmall: vt.copyWith(fontSize: 32, color: p.accent, letterSpacing: 1.0),
+        headlineLarge: vt.copyWith(fontSize: 28, color: p.textPrimary),
+        headlineMedium: vt.copyWith(fontSize: 22, color: p.textPrimary),
+        headlineSmall: vt.copyWith(fontSize: 18, color: p.textSecondary),
         titleLarge: stm.copyWith(fontSize: 18, fontWeight: FontWeight.w600, letterSpacing: 0.8),
         titleMedium: stm.copyWith(fontSize: 15, fontWeight: FontWeight.w500, letterSpacing: 0.6),
         titleSmall: stm.copyWith(fontSize: 13, fontWeight: FontWeight.w500, letterSpacing: 0.5),
@@ -71,135 +128,74 @@ class RetroTheme {
         labelMedium: stm.copyWith(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.8),
         labelSmall: stm.copyWith(fontSize: 11, fontWeight: FontWeight.w500, letterSpacing: 0.6),
       ),
-
-      // ---- Buttons: amber filaments with bronze trim -----------------------
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: amber,
-          foregroundColor: TubeColors.background,
+          backgroundColor: p.accent, foregroundColor: p.background,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-          shape: const RoundedRectangleBorder(
-            borderRadius: BorderRadius.zero, // sharp = chassis look
-          ),
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
-          foregroundColor: amber,
-          side: BorderSide(color: TubeColors.brass, width: 1.5),
+          foregroundColor: p.accent,
+          side: BorderSide(color: p.brass, width: 1.5),
           shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
         ),
       ),
       iconButtonTheme: IconButtonThemeData(
-        style: IconButton.styleFrom(
-          foregroundColor: amber,
-          iconSize: 24,
-          padding: const EdgeInsets.all(8),
-        ),
+        style: IconButton.styleFrom(foregroundColor: p.accent, iconSize: 24, padding: const EdgeInsets.all(8)),
       ),
-
-      // ---- App bars: brass-trimmed chassis --------------------------------
       appBarTheme: AppBarTheme(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: false,
-        titleTextStyle: stm.copyWith(
-          fontSize: 18,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 1.4,
-          color: TubeColors.amber,
-        ),
-        iconTheme: IconThemeData(color: amber, size: 24),
+        backgroundColor: Colors.transparent, elevation: 0, centerTitle: false,
+        titleTextStyle: stm.copyWith(fontSize: 18, fontWeight: FontWeight.w700, letterSpacing: 1.4, color: p.accent),
+        iconTheme: IconThemeData(color: p.accent, size: 24),
       ),
-
-      // ---- Cards: recessed chassis panels ---------------------------------
-      // NOTE: cardTheme API differs across Flutter versions
-      // (CardTheme in <3.27, CardThemeData in 3.27+). We avoid the conflict
-      // by post-mutating base ThemeData via copyWith.
-      // (handled below — see end of method)
-
-      // ---- Sliders: brass track + amber thumb ------------------------------
       sliderTheme: SliderThemeData(
-        activeTrackColor: amber,
-        inactiveTrackColor: TubeColors.brassDark,
-        thumbColor: TubeColors.filament,
-        overlayColor: amber.withOpacity(0.18),
-        trackHeight: 2,
-        thumbShape: const _RetroThumbShape(),
+        activeTrackColor: p.accent, inactiveTrackColor: p.brassDark,
+        thumbColor: p.filament, overlayColor: p.accent.withOpacity(0.18),
+        trackHeight: 2, thumbShape: _RetroThumbShape(p),
       ),
-
-      // ---- Lists: chassis rows --------------------------------------------
       listTileTheme: ListTileThemeData(
-        iconColor: amber,
-        textColor: TubeColors.textPrimary,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(color: TubeColors.outline, width: 0.5),
-        ),
+        iconColor: p.accent, textColor: p.textPrimary,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero, side: BorderSide(color: p.outline, width: 0.5)),
       ),
-
-      // ---- Dividers: hairline bronze --------------------------------------
-      dividerTheme: DividerThemeData(
-        color: TubeColors.outline,
-        thickness: 1,
-        space: 1,
-      ),
-
-      // ---- Bottom nav: brass backplate ------------------------------------
+      dividerTheme: DividerThemeData(color: p.outline, thickness: 1, space: 1),
       navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: TubeColors.surface,
-        indicatorColor: amber,
-        labelTextStyle: WidgetStatePropertyAll(
-          stm.copyWith(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5),
-        ),
+        backgroundColor: p.surface, indicatorColor: p.accent,
+        labelTextStyle: WidgetStatePropertyAll(stm.copyWith(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return IconThemeData(color: selected ? TubeColors.background : amber, size: 24);
+          return IconThemeData(color: selected ? p.background : p.accent, size: 24);
         }),
       ),
-
-      // ---- Snackbars: amber-on-black --------------------------------------
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: TubeColors.surfaceVariant,
-        contentTextStyle: stm.copyWith(fontSize: 13, color: TubeColors.textPrimary),
+        backgroundColor: p.surfaceVariant,
+        contentTextStyle: stm.copyWith(fontSize: 13, color: p.textPrimary),
         behavior: SnackBarBehavior.floating,
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       ),
-    );
-
-    // ---- Cards: applied via copyWith to avoid CardTheme/CardThemeData
-    //      API mismatch across Flutter 3.24 / 3.27+.
-    return base.copyWith(
       cardTheme: base.cardTheme.copyWith(
-        color: TubeColors.surface,
-        elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-          side: BorderSide(color: TubeColors.outline, width: 1),
-        ),
+        color: p.surface, elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.zero, side: BorderSide(color: p.outline, width: 1)),
         margin: const EdgeInsets.symmetric(vertical: 6),
       ),
     );
   }
 
-  /// Toggle the ambient accent color extracted from the current track's
-  /// album art. Pass `null` to revert to default amber.
   static void setAmbientColor(Color? color) {
     TubeColors.ambientOverride = color;
   }
 }
 
-/// Square brass-trimmed slider thumb — mimics a knob.
 class _RetroThumbShape extends SliderComponentShape {
-  const _RetroThumbShape();
+  const _RetroThumbShape(this.p);
+  final ThemePreset p;
 
   @override
   Size getPreferredSize(bool isEnabled, bool isDiscrete) => const Size(20, 20);
 
   @override
-  void paint(
-    PaintingContext context,
-    Offset center, {
+  void paint(PaintingContext context, Offset center, {
     required Animation<double> activationAnimation,
     required Animation<double> enableAnimation,
     required bool isDiscrete,
@@ -213,16 +209,8 @@ class _RetroThumbShape extends SliderComponentShape {
   }) {
     final canvas = context.canvas;
     final r = 8.0;
-    final paint = Paint()
-      ..color = TubeColors.filament
-      ..style = PaintingStyle.fill;
-    final rim = Paint()
-      ..color = TubeColors.brass
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2;
-
-    canvas.drawCircle(center, r, paint);
-    canvas.drawCircle(center, r, rim);
-    canvas.drawCircle(center, r * 0.4, Paint()..color = TubeColors.amberHot);
+    canvas.drawCircle(center, r, Paint()..color = p.filament..style = PaintingStyle.fill);
+    canvas.drawCircle(center, r, Paint()..color = p.brass..style = PaintingStyle.stroke..strokeWidth = 2);
+    canvas.drawCircle(center, r * 0.4, Paint()..color = p.accentHot);
   }
 }

@@ -8,7 +8,6 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel.EventSink
 
 /// Native Android Visualizer - FFT spectrum analyzer mode.
-/// Captures FFT data and returns frequency bin magnitudes (0..255 normalized).
 class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private val methodChannel = MethodChannel(binaryMessenger, "pathephon/visualizer")
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/visualizer/events")
@@ -51,68 +50,57 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             throw IllegalArgumentException("sessionId 0 not supported")
         }
 
-        // Use captureSize = 256 -> FFT gives 128 bins (we'll take first 32 for display)
-        val captureSize = 256
+        // captureSize 512 -> 256 frequency bins available
+        val captureSize = 512
 
         val v = Visualizer(sessionId)
         v.captureSize = captureSize
-        // Enable FFT data capture (not waveform)
         v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
             override fun onWaveFormDataCapture(viz: Visualizer?, waveform: ByteArray?, samplingRate: Int) {}
             override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {
                 if (fft == null || eventSink == null) return
                 val n = fft.size
-                if (n < 4) return
+                if (n < 8) return
 
                 // FFT format from Android Visualizer:
-                // fft[0] = DC, fft[1] = Nyquist
-                // For k >= 2: real part at fft[2k-2], imaginary at fft[2k-1]
-                // We compute magnitude = sqrt(real^2 + imag^2) for each bin.
-                // Number of frequency bins = (n - 2) / 2 + 1 = n/2
-
+                // fft[0] = DC (real), fft[1] = Nyquist (real)
+                // For k >= 1: real at fft[2k], imag at fft[2k+1]
                 val numBins = n / 2
                 val magnitudes = FloatArray(numBins)
-
-                // DC component (bin 0)
-                magnitudes[0] = Math.abs(fft[0].toFloat())
-                // Nyquist (bin numBins-1)
+                magnitudes[0] = Math.abs(fft[0].toFloat())  // DC
                 if (numBins > 1) {
-                    magnitudes[numBins - 1] = Math.abs(fft[1].toFloat())
+                    magnitudes[numBins - 1] = Math.abs(fft[1].toFloat())  // Nyquist
                 }
-                // Other bins
                 for (k in 1 until numBins - 1) {
                     val real = fft[2 * k].toFloat()
                     val imag = fft[2 * k + 1].toFloat()
                     magnitudes[k] = Math.sqrt((real * real + imag * imag).toDouble()).toFloat()
                 }
 
-                // Normalize to 0..255 (byte range)
-                // Find max for normalization, then scale
-                var maxMag = 1f
-                for (m in magnitudes) {
-                    if (m > maxMag) maxMag = m
-                }
-                val scale = 255f / maxMag
-
-                // Take first 32 bins (covers ~0 to ~5kHz at 22kHz sample rate)
-                // These are the most musically relevant frequencies
-                val numDisplayBins = Math.min(32, numBins)
+                // Take bins 3..34 (32 bins), skipping DC/Nyquist and very low rumble.
+                // At 22050 Hz sample rate with 256 bins, each bin = ~86 Hz.
+                // Bin 3 = ~258 Hz, bin 34 = ~2924 Hz - the most musical range.
+                val startBin = 3
+                val numDisplayBins = 32
                 val result = FloatArray(numDisplayBins)
                 for (i in 0 until numDisplayBins) {
-                    // Apply slight log scaling for better visual response
-                    val norm = (magnitudes[i] * scale / 255f).coerceIn(0f, 1f)
-                    val logScaled = (Math.log10(1.0 + 9.0 * norm) * 255f).toFloat()
+                    val srcIdx = startBin + i
+                    val mag = if (srcIdx < magnitudes.size) magnitudes[srcIdx] else 0f
+                    // Normalize to 0..1 using a fixed scale (Visualizer magnitudes
+                    // are typically 0..~50 for music, max ~127)
+                    val norm = (mag / 50f).coerceIn(0f, 1f)
+                    // Apply log scaling for better visual response
+                    val logScaled = (Math.log10(1.0 + 9.0 * norm.toDouble()) * 255f).toFloat()
                     result[i] = logScaled
                 }
 
-                // Convert to List<Double> for Flutter
                 val list = ArrayList<Double>(numDisplayBins)
                 for (v in result) {
                     list.add(v.toDouble())
                 }
                 eventSink?.success(list)
             }
-        }, 20000, false, true)  // waveform=false, fft=true
+        }, 20000, false, true)
         v.enabled = true
         visualizer = v
         Log.i("VisualizerPlugin", "FFT Visualizer attached to session $sessionId")

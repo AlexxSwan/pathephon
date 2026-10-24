@@ -90,22 +90,23 @@ jobs:
           storeFile=upload-keystore.jks
           PROP
 
-      - name: Prepare Android project
-        run: flutter build apk --config-only --no-tree-shake-icons
-
-      - name: Build APK via Gradle (release)
+      # ============================================================
+      # KEY: --split-per-abi generates separate APKs per architecture.
+      # continue-on-error: true because Flutter 3.47.7 has a file
+      # watcher bug ("Already watching path") that throws an exception
+      # AFTER the APKs are already built. The build succeeds, but
+      # flutter tool fails to report the APK paths.
+      # We find the APKs ourselves in the next step.
+      # ============================================================
+      - name: Build release APK (split per ABI)
         if: steps.check_keystore.outputs.has_keystore == 'true'
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon 2>&1 | tee gradle.log
+        continue-on-error: true
+        run: flutter build apk --release --no-tree-shake-icons --split-per-abi
 
-      - name: Build APK via Gradle (debug fallback)
+      - name: Build debug APK (split per ABI fallback)
         if: steps.check_keystore.outputs.has_keystore == 'false'
-        working-directory: android
-        run: |
-          chmod +x gradlew
-          ./gradlew assembleDebug --no-daemon 2>&1 | tee gradle.log
+        continue-on-error: true
+        run: flutter build apk --debug --no-tree-shake-icons --split-per-abi
 
       - name: Find and copy APKs
         run: |
@@ -113,18 +114,40 @@ jobs:
           find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(none)"
           mkdir -p build/app/outputs/flutter-apk/
 
-          ARM64=$(find . -name "app-arm64-v8a-release.apk" 2>/dev/null | head -1)
+          # arm64-v8a
+          ARM64=""
+          for candidate in \
+            "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" \
+            "build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk" \
+            "build/app/outputs/apk/release/app-arm64-v8a-release.apk" \
+            "build/app/outputs/apk/debug/app-arm64-v8a-debug.apk"; do
+            if [ -f "$candidate" ]; then
+              ARM64="$candidate"
+              break
+            fi
+          done
           if [ -z "$ARM64" ]; then
-            ARM64=$(find . -name "app-arm64-v8a-debug.apk" 2>/dev/null | head -1)
+            ARM64=$(find . -name "app-arm64-v8a-*.apk" 2>/dev/null | head -1)
           fi
           if [ -n "$ARM64" ]; then
             cp "$ARM64" build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
             echo "Copied arm64: $ARM64"
           fi
 
-          X64=$(find . -name "app-x86_64-release.apk" 2>/dev/null | head -1)
+          # x86_64
+          X64=""
+          for candidate in \
+            "build/app/outputs/flutter-apk/app-x86_64-release.apk" \
+            "build/app/outputs/flutter-apk/app-x86_64-debug.apk" \
+            "build/app/outputs/apk/release/app-x86_64-release.apk" \
+            "build/app/outputs/apk/debug/app-x86_64-debug.apk"; do
+            if [ -f "$candidate" ]; then
+              X64="$candidate"
+              break
+            fi
+          done
           if [ -z "$X64" ]; then
-            X64=$(find . -name "app-x86_64-debug.apk" 2>/dev/null | head -1)
+            X64=$(find . -name "app-x86_64-*.apk" 2>/dev/null | head -1)
           fi
           if [ -n "$X64" ]; then
             cp "$X64" build/app/outputs/flutter-apk/app-x86_64-release.apk
@@ -132,18 +155,11 @@ jobs:
           fi
 
           if [ -z "$ARM64" ] && [ -z "$X64" ]; then
-            FAT=$(find . -name "app-release.apk" 2>/dev/null | head -1)
-            if [ -z "$FAT" ]; then
-              FAT=$(find . -name "app-debug.apk" 2>/dev/null | head -1)
-            fi
-            if [ -n "$FAT" ]; then
-              cp "$FAT" build/app/outputs/flutter-apk/app-release.apk
-              echo "Copied fat APK: $FAT"
-            fi
+            echo "FATAL: No split APKs found"
+            exit 1
           fi
 
       - name: Upload arm64 APK artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Pathephon-arm64-v8a
@@ -152,20 +168,10 @@ jobs:
           if-no-files-found: warn
 
       - name: Upload x86_64 APK artifact
-        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: Pathephon-x86_64
           path: build/app/outputs/flutter-apk/app-x86_64-release.apk
-          retention-days: 30
-          if-no-files-found: warn
-
-      - name: Upload fat APK artifact (fallback)
-        if: always() && steps.check_keystore.outputs.has_keystore == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Pathephon-release
-          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
           if-no-files-found: warn
 

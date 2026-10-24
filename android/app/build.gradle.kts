@@ -18,6 +18,8 @@ android {
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // arm64-v8a (modern phones) + x86_64 (emulators/tablets) ONLY.
+        // --split-per-abi in CI generates one APK per ABI from this filter.
         ndk {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
@@ -37,15 +39,6 @@ android {
                 storeFile = file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["storePassword"] as String
             }
-        }
-    }
-
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "x86_64")
-            isUniversalApk = false
         }
     }
 

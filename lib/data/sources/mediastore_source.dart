@@ -1,5 +1,5 @@
 // ============================================================================
-//  mediastore_source.dart - audio discovery with diagnostic dialog
+//  mediastore_source.dart - audio discovery with robust extension parsing
 // ============================================================================
 import 'dart:io';
 
@@ -20,10 +20,51 @@ class MediaStoreSource {
   static const _coverBases = ['cover', 'folder', 'album', 'front', 'albumart', 'coverart', 'art'];
   static const _coverExts = ['jpg', 'jpeg', 'png', 'webp'];
 
+  // Audio extensions - case-insensitive matching via .toLowerCase()
+  static const _supportedAudioExts = {
+    'mp3', 'flac', 'wav', 'ogg', 'opus', 'aac', 'm4a', 'alac',
+    'ape', 'wv', 'tta', 'mpc',
+    'mod', 's3m', 'xm', 'it',
+    'dsf', 'dsd', 'dff', 'amr', '3gp', 'm4b', 'mka', 'ofr', 'spx',
+    'mp2', 'mid', 'midi', 'aiff', 'aif', 'wma', 'asf',
+  };
+
   static bool _isContentUri(String path) {
     return path.startsWith('content://') ||
            path.startsWith('content%3A') ||
            path.contains('%2Ftree%2F');
+  }
+
+  /// Robust extension extraction - handles Cyrillic, multiple dots, etc.
+  /// Returns lowercase extension without dot, or '' if no extension.
+  static String _ext(String path) {
+    // URL-decode first (in case path has %2E etc)
+    String decoded;
+    try {
+      decoded = Uri.decodeComponent(path);
+    } catch (_) {
+      decoded = path;
+    }
+    final dot = decoded.lastIndexOf('.');
+    if (dot < 0 || dot >= decoded.length - 1) return '';
+    return decoded.substring(dot + 1).toLowerCase();
+  }
+
+  static String _fileName(String path) {
+    String decoded;
+    try {
+      decoded = Uri.decodeComponent(path);
+    } catch (_) {
+      decoded = path;
+    }
+    final slash = decoded.lastIndexOf('/');
+    if (slash < 0) return decoded;
+    return decoded.substring(slash + 1);
+  }
+
+  static bool _isAudio(String path) {
+    final ext = _ext(path);
+    return _supportedAudioExts.contains(ext);
   }
 
   static String? _findCoverInDir(String dirPath) {
@@ -36,7 +77,7 @@ class MediaStoreSource {
       for (final e in entities) {
         if (e is! File) continue;
         try {
-          final name = e.uri.pathSegments.last.toLowerCase();
+          final name = _fileName(e.path).toLowerCase();
           byName[name] = e.path;
         } catch (_) {
           continue;
@@ -76,13 +117,12 @@ class MediaStoreSource {
     final result = await FilePicker.pickFiles(type: FileType.audio);
     if (result == null || result.isEmpty) return const <Track>[];
 
-    final dirCoverCache = <String, String?>{};
     final tracks = <Track>[];
     for (final f in result) {
       try {
         final path = f.path ?? '';
         if (path.isEmpty) continue;
-        final ext = path.toLowerCase().split('.').last;
+        final ext = _ext(path);
         final uri = Uri.file(path).toString();
         tracks.add(Track(
           id: uri,
@@ -98,37 +138,31 @@ class MediaStoreSource {
     return tracks;
   }
 
-  /// Pick a directory. Returns (tracks, diagnosticInfo).
-  /// The diagnosticInfo is shown to user via dialog if tracks is empty.
   Future<({List<Track> tracks, String diagnostic})> pickDirectoryWithDiagnostic() async {
     final dirPath = await FilePicker.getDirectoryPath();
     if (dirPath == null) {
-      return (tracks: const <Track>[], diagnostic: 'FilePicker.getDirectoryPath() returned null (user cancelled or permission denied)');
+      return (tracks: const <Track>[], diagnostic: 'FilePicker returned null');
     }
 
     final buf = StringBuffer();
     buf.writeln('Raw path: $dirPath');
-    buf.writeln('Starts with content://: ${dirPath.startsWith("content://")}');
-    buf.writeln('Contains %2Ftree%2F: ${dirPath.contains("%2Ftree%2F")}');
-    buf.writeln('Looks like filesystem: ${dirPath.startsWith("/storage/") || dirPath.startsWith("/sdcard/")}');
+    buf.writeln('Is content://: ${_isContentUri(dirPath)}');
 
-    // Try SAF if content URI
     if (_isContentUri(dirPath)) {
       buf.writeln('Trying SAF scan...');
       try {
         final result = await _folderScanner.invokeMethod('scanFolder', {'treeUri': dirPath});
         if (result is! List) {
-          buf.writeln('SAF returned non-list: ${result.runtimeType}');
+          buf.writeln('SAF returned non-list');
           return (tracks: const <Track>[], diagnostic: buf.toString());
         }
-        buf.writeln('SAF returned ${result.length} items');
         final tracks = <Track>[];
         for (final item in result) {
           if (item is! Map) continue;
           final uri = item['uri'] as String;
           final name = item['name'] as String;
           final artUri = (item['artUri'] as String?) ?? '';
-          final ext = name.toLowerCase().split('.').last;
+          final ext = _ext(name);
           tracks.add(Track(
             id: uri,
             uri: uri,
@@ -138,26 +172,39 @@ class MediaStoreSource {
             artUri: artUri,
           ));
         }
-        buf.writeln('Created ${tracks.length} Track objects');
+        buf.writeln('SAF: ${tracks.length} tracks');
         return (tracks: tracks, diagnostic: buf.toString());
-      } catch (e, st) {
-        buf.writeln('SAF scan FAILED: $e');
-        buf.writeln('Stack: $st');
+      } catch (e) {
+        buf.writeln('SAF FAILED: $e');
         return (tracks: const <Track>[], diagnostic: buf.toString());
       }
     }
 
-    // Filesystem path - try dart:io
-    buf.writeln('Trying dart:io Directory.listSync...');
+    buf.writeln('Trying dart:io...');
     try {
       final dir = Directory(dirPath);
       if (!await dir.exists()) {
-        buf.writeln('Directory does not exist: $dirPath');
+        buf.writeln('Directory does not exist');
         return (tracks: const <Track>[], diagnostic: buf.toString());
       }
-      buf.writeln('Directory exists, listing...');
       final entities = dir.listSync(recursive: false, followLinks: false);
       buf.writeln('Found ${entities.length} entities');
+      buf.writeln('--- Entries ---');
+      var listedCount = 0;
+      for (final e in entities) {
+        if (listedCount >= 20) {
+          buf.writeln('... (${entities.length - 20} more)');
+          break;
+        }
+        final isFile = e is File;
+        final name = _fileName(e.path);
+        final ext = isFile ? _ext(e.path) : '(dir)';
+        final isAudio = isFile && _isAudio(e.path);
+        buf.writeln('  ${isAudio ? "[OK]" : "[--]"} "$name" (ext: "$ext", isAudio: $isAudio)');
+        listedCount++;
+      }
+      buf.writeln('---------------');
+
       final dirCover = _findCoverInDir(dirPath);
       final tracks = <Track>[];
       entities.sort((a, b) => a.path.compareTo(b.path));
@@ -165,17 +212,14 @@ class MediaStoreSource {
         if (e is! File) continue;
         try {
           final path = e.path;
-          final dot = path.lastIndexOf('.');
-          if (dot < 0) continue;
-          final ext = path.substring(dot + 1).toLowerCase();
-          if (!_supportedExtensions.contains(ext)) continue;
-          final name = e.uri.pathSegments.last;
+          if (!_isAudio(path)) continue;
+          final name = _fileName(path);
           final uri = Uri.file(path).toString();
           tracks.add(Track(
             id: uri,
             uri: uri,
-            title: Uri.decodeComponent(name),
-            fileExtension: ext,
+            title: name,
+            fileExtension: _ext(path),
             filePath: path,
             artUri: dirCover ?? '',
           ));
@@ -183,7 +227,7 @@ class MediaStoreSource {
           continue;
         }
       }
-      buf.writeln('Created ${tracks.length} tracks from filesystem');
+      buf.writeln('Created ${tracks.length} tracks');
       return (tracks: tracks, diagnostic: buf.toString());
     } catch (e, st) {
       buf.writeln('dart:io FAILED: $e');
@@ -192,24 +236,13 @@ class MediaStoreSource {
     }
   }
 
-  /// Legacy pickDirectory - returns just tracks (uses diagnostic version internally).
   Future<List<Track>> pickDirectory() async {
     final result = await pickDirectoryWithDiagnostic();
     return result.tracks;
   }
 
-  static const _supportedExtensions = {
-    'mp3', 'flac', 'wav', 'ogg', 'opus', 'aac', 'm4a', 'alac',
-    'ape', 'wv', 'tta', 'mpc',
-    'mod', 's3m', 'xm', 'it',
-    'dsf', 'dsd', 'dff', 'amr', '3gp', 'm4b', 'mka', 'ofr', 'spx',
-  };
-
   bool _isSupportedFormat(SongModel s) {
-    final data = s.data.toLowerCase();
-    final dot = data.lastIndexOf('.');
-    if (dot < 0) return false;
-    return _supportedExtensions.contains(data.substring(dot + 1));
+    return _isAudio(s.data);
   }
 }
 

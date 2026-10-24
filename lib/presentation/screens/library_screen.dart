@@ -17,8 +17,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 4, vsync: this);
-  // NO _autoScanTriggered - we don't auto-scan anymore.
-  // Library starts empty; user picks files/folder to populate.
+  bool _autoScanTriggered = false;
 
   @override
   void dispose() {
@@ -26,13 +25,21 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     super.dispose();
   }
 
+  /// Pick files/folder -> set as library -> immediately start playing first track.
   Future<void> _pickAndPlay(Future<List<Track>> Function() picker) async {
     final playback = ref.read(playbackServiceProvider);
     final tracks = await picker();
-    if (tracks.isEmpty) return;
+    if (tracks.isEmpty) {
+      debugPrint("[pathephon] _pickAndPlay: no tracks picked");
+      return;
+    }
     ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
-    await playback.playQueue(tracks: tracks, startIndex: 0);
-    ref.read(isPlayingProvider.notifier).state = true;
+    try {
+      await playback.playQueue(tracks: tracks, startIndex: 0);
+      ref.read(isPlayingProvider.notifier).state = true;
+    } catch (e) {
+      debugPrint("[pathephon] _pickAndPlay playQueue failed: $e");
+    }
   }
 
   @override
@@ -40,6 +47,13 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     final l = AppLocalizations.of(context);
     final state = ref.watch(libraryStateProvider);
     final playback = ref.watch(playbackServiceProvider);
+
+    if (!_autoScanTriggered && state.isLoading) {
+      _autoScanTriggered = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ref.read(libraryStateProvider.notifier).scan();
+      });
+    }
 
     return Scaffold(
       appBar: AppBar(
@@ -82,10 +96,26 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             return Center(
               child: Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text(
-                  l.libraryEmpty,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodyMedium,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.library_music, size: 80, color: TubeColors.brass),
+                    const SizedBox(height: 16),
+                    Text(
+                      "\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: TubeColors.textSecondary,
+                          ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043A\u043D\u043E\u043F\u043A\u0443 \u043F\u0430\u043F\u043A\u0438 \u0438\u043B\u0438 \u0444\u0430\u0439\u043B\u043E\u0432 \u0432\u0432\u0435\u0440\u0445\u0443",
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: TubeColors.textMuted,
+                          ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
                 ),
               ),
             );
@@ -161,11 +191,8 @@ class _AlbumGrid extends ConsumerWidget {
                         color: TubeColors.surfaceVariant,
                         border: Border.all(color: TubeColors.brass),
                       ),
-                      child: a.artUri.isEmpty
-                          ? const Icon(Icons.album, size: 56, color: TubeColors.brass)
-                          : Image.network(a.artUri, fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                                const Icon(Icons.album, size: 56, color: TubeColors.brass)),
+                      // Album artwork: a.artUri OR fallback to first track's artUri
+                      child: _AlbumArt(album: a),
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -179,6 +206,49 @@ class _AlbumGrid extends ConsumerWidget {
           ),
         );
       },
+    );
+  }
+}
+
+/// Album artwork with fallbacks:
+/// 1. album.artUri (set when first track with artUri was grouped)
+/// 2. First track's artUri
+/// 3. Icons.album placeholder
+class _AlbumArt extends ConsumerWidget {
+  const _AlbumArt({required this.album});
+  final Album album;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // Try album's own artUri first
+    if (album.artUri.isNotEmpty) {
+      return Image.network(
+        album.artUri,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
+      );
+    }
+    // Fallback: find first track in this album with non-empty artUri
+    String? trackArtUri;
+    for (final t in album.tracks) {
+      if (t.artUri.isNotEmpty) {
+        trackArtUri = t.artUri;
+        break;
+      }
+    }
+    if (trackArtUri != null) {
+      return Image.network(
+        trackArtUri,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
+      );
+    }
+    return _fallbackIcon();
+  }
+
+  Widget _fallbackIcon() {
+    return const Center(
+      child: Icon(Icons.album, size: 56, color: TubeColors.brass),
     );
   }
 }

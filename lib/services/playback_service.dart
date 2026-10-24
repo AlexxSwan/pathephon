@@ -1,10 +1,9 @@
 // ============================================================================
 //  playback_service.dart - playback with FULL MediaSession integration
 //
-//  - Updates mediaItem stream (lock screen shows current track + art)
-//  - Updates queue stream (lock screen shows queue)
-//  - Handles headset buttons (single tap = play/pause, double = next, triple = prev)
-//  - Lock screen controls work (play/pause/next/prev/seek)
+//  FIX: _PathephonAudioHandler now overrides play/pause/stop/skip/seek
+//  to forward calls to just_audio player. Without this, lock screen
+//  controls and headset buttons did nothing.
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -44,28 +43,16 @@ abstract class PlaybackService {
 
 class PlaybackSnapshot {
   const PlaybackSnapshot({
-    required this.current,
-    required this.queue,
-    required this.index,
-    required this.position,
-    required this.duration,
-    required this.isPlaying,
-    required this.isBuffering,
-    required this.shuffle,
-    required this.repeatMode,
-    required this.replayGainMode,
+    required this.current, required this.queue, required this.index,
+    required this.position, required this.duration, required this.isPlaying,
+    required this.isBuffering, required this.shuffle,
+    required this.repeatMode, required this.replayGainMode,
   });
 
-  final Track? current;
-  final List<Track> queue;
-  final int index;
-  final Duration position;
-  final Duration duration;
-  final bool isPlaying;
-  final bool isBuffering;
-  final bool shuffle;
-  final RepeatMode repeatMode;
-  final ReplayGainMode replayGainMode;
+  final Track? current; final List<Track> queue; final int index;
+  final Duration position; final Duration duration;
+  final bool isPlaying; final bool isBuffering; final bool shuffle;
+  final RepeatMode repeatMode; final ReplayGainMode replayGainMode;
 
   static PlaybackSnapshot empty = PlaybackSnapshot(
     current: null, queue: const [], index: 0, position: Duration.zero,
@@ -106,9 +93,7 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
-    } catch (e) {
-      debugPrint('[pathephon] AudioSession configure failed: $e');
-    }
+    } catch (e) { debugPrint('[pathephon] AudioSession failed: $e'); }
 
     try {
       _handler = await AudioService.init(
@@ -118,12 +103,9 @@ class JustAudioPlaybackService implements PlaybackService {
           androidNotificationChannelName: 'Pathephon Playback',
           androidNotificationOngoing: true,
           androidStopForegroundOnPause: true,
-          androidNotificationIcon: 'mipmap/ic_launcher',
         ),
       );
-    } catch (e) {
-      debugPrint('[pathephon] AudioService.init failed: $e');
-    }
+    } catch (e) { debugPrint('[pathephon] AudioService.init failed: $e'); }
 
     _stateController.add(PlaybackSnapshot.empty);
 
@@ -136,7 +118,6 @@ class JustAudioPlaybackService implements PlaybackService {
       if (seqState != null && seqState.currentIndex >= 0) {
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
-        // Update mediaItem for lock screen
         _updateMediaItem();
       }
     });
@@ -168,30 +149,25 @@ class JustAudioPlaybackService implements PlaybackService {
     ));
   }
 
-  /// Update mediaItem stream so lock screen shows current track + art.
   void _updateMediaItem() {
     if (_handler == null || _queue.isEmpty) return;
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
     final t = _queue[idx];
+    // NOTE: artUri omitted for now. file:// URIs are not accessible by
+    // the system UI process on Android 11+ (scoped storage).
     final mediaItem = MediaItem(
-      id: t.id,
-      album: t.album,
-      title: t.title,
-      artist: t.artist,
+      id: t.id, album: t.album, title: t.title, artist: t.artist,
       duration: Duration(milliseconds: t.durationMs),
-      artUri: t.artUri.isEmpty ? null : Uri.parse(t.artUri),
     );
     (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
   }
 
-  /// Update queue stream so lock screen shows queue.
   void _updateQueueStream() {
     if (_handler == null) return;
     final items = _queue.map((t) => MediaItem(
       id: t.id, album: t.album, title: t.title, artist: t.artist,
       duration: Duration(milliseconds: t.durationMs),
-      artUri: t.artUri.isEmpty ? null : Uri.parse(t.artUri),
     )).toList();
     (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
   }
@@ -239,9 +215,7 @@ class JustAudioPlaybackService implements PlaybackService {
         isPlaying: false, isBuffering: false,
         shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
       ));
-    } catch (e) {
-      debugPrint('[pathephon] restoreSavedQueue failed: $e');
-    }
+    } catch (e) { debugPrint('[pathephon] restoreSavedQueue failed: $e'); }
   }
 
   @override
@@ -284,7 +258,6 @@ class JustAudioPlaybackService implements PlaybackService {
     return AudioSource.uri(uri, tag: MediaItem(
       id: t.id, album: t.album, title: t.title, artist: t.artist,
       duration: Duration(milliseconds: t.durationMs),
-      artUri: t.artUri.isEmpty ? null : Uri.parse(t.artUri),
     ));
   }
 
@@ -376,20 +349,28 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 }
 
-/// AudioHandler with FULL MediaSession support.
-/// - Updates mediaItem + queue streams (lock screen display)
-/// - Handles headset button events (click patterns)
-/// - Handles Bluetooth media buttons
+/// AudioHandler that forwards all calls to just_audio player.
+/// Without these overrides, lock screen controls and headset buttons do nothing.
 class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
   _PathephonAudioHandler(this._player) {
     _player.playbackEventStream.listen(_broadcastState);
-    // Handle media button events (headset buttons, Bluetooth, car controls)
-    playbackState.listen((state) {
-      debugPrint('[pathephon] MediaSession state: playing=${state.playing}, pos=${state.updatePosition}');
-    });
   }
 
   final AudioPlayer _player;
+
+  @override
+  Future<void> play() => _player.play();
+  @override
+  Future<void> pause() => _player.pause();
+  @override
+  Future<void> stop() async { await _player.stop(); await super.stop(); }
+  @override
+  Future<void> skipToNext() => _player.seekToNext();
+  @override
+  Future<void> skipToPrevious() => _player.seekToPrevious();
+  // seek() is provided by SeekHandler mixin, but we override to ensure it works
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
 
   void _broadcastState(PlaybackEvent event) {
     final state = _player.playerState;

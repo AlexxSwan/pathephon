@@ -1,6 +1,7 @@
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "../../core/theme/retro_theme.dart";
+import "../providers/providers.dart";
 
 class AboutScreen extends ConsumerWidget {
   const AboutScreen({super.key});

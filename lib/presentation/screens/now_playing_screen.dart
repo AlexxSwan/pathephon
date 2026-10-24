@@ -1,8 +1,5 @@
 // ============================================================================
-//  now_playing_screen.dart - Now Playing with REAL VU meter
-//
-//  VU amplitude comes from native Android Visualizer (via VisualizerService).
-//  Attached to the player's audio session id automatically.
+//  now_playing_screen.dart - Now Playing with REAL PPM meter
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,7 +24,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   @override
   void initState() {
     super.initState();
-    // Hook visualizer to playback's audio session id stream.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final playback = ref.read(playbackServiceProvider);
       final visualizer = ref.read(visualizerServiceProvider);
@@ -103,7 +99,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               const SizedBox(height: 8),
               CustomPaint(
                 size: Size(MediaQuery.of(context).size.width - 40, 120),
-                painter: VUPainter(amplitude: amp, brightness: brightness),
+                painter: PPMPainter(amplitude: amp, brightness: brightness),
               ),
 
               const SizedBox(height: 12),
@@ -304,7 +300,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Simple artwork: track.artUri -> album fallback -> app icon. NO spinner.
+/// Simple artwork: track.artUri -> album fallback -> app icon.
 class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;

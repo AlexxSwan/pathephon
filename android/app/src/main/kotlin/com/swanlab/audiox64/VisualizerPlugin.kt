@@ -7,15 +7,14 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel.EventSink
 
-/// Native Android Visualizer bridge.
-/// Attaches to the player's audio session id, captures waveform at 20Hz,
-/// computes RMS amplitude (0..1), streams to Dart.
+/// Native Android Visualizer bridge - PEAK PROGRAM METER mode.
+/// Captures waveform, returns peak amplitude (max abs deviation from center)
+/// normalized to 0..1. PPM uses peak (not RMS) for fast transient response.
 class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private val methodChannel = MethodChannel(binaryMessenger, "pathephon/visualizer")
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/visualizer/events")
     private var visualizer: Visualizer? = null
     private var eventSink: EventSink? = null
-    private var eventCount: Int = 0
 
     init {
         methodChannel.setMethodCallHandler { call, result ->
@@ -50,7 +49,6 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private fun start(sessionId: Int) {
         stop()
         if (sessionId == 0) {
-            Log.w("VisualizerPlugin", "sessionId is 0 - cannot attach")
             throw IllegalArgumentException("sessionId 0 not supported")
         }
 
@@ -66,31 +64,25 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
         v.setDataCaptureListener(object : Visualizer.OnDataCaptureListener {
             override fun onWaveFormDataCapture(viz: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
                 if (waveform == null || eventSink == null) return
-                eventCount++
-                if (eventCount % 200 == 1) {
-                    Log.i("VisualizerPlugin", "captured event #$eventCount, bytes=${waveform.size}")
-                }
                 val n = waveform.size
                 if (n < 2) return
-                // Waveform bytes: unsigned 0..255, centered at 128.
-                // Compute RMS deviation from center.
-                var sumSq = 0.0
+                // PEAK: max absolute deviation from center (128).
+                // PPM tracks peaks, not average power (RMS).
+                var maxAbs = 0
                 for (i in 0 until n) {
                     val sample = (waveform[i].toInt() and 0xFF) - 128
-                    sumSq += (sample * sample).toDouble()
+                    val abs = if (sample < 0) -sample else sample
+                    if (abs > maxAbs) maxAbs = abs
                 }
-                val rms = Math.sqrt(sumSq / n) / 128.0
-                // Real RMS for music is typically 0.1..0.4.
-                // No artificial boost - keep it real.
-                // Clamp to 0..1 for the painter.
-                val amplitude = rms.coerceIn(0.0, 1.0)
-                eventSink?.success(amplitude)
+                // Normalize: 128 = full scale -> 1.0
+                val peak = (maxAbs.toDouble() / 128.0).coerceIn(0.0, 1.0)
+                eventSink?.success(peak)
             }
             override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
         }, 20000, true, false)
         v.enabled = true
         visualizer = v
-        Log.i("VisualizerPlugin", "Visualizer attached to session $sessionId captureSize=$captureSize")
+        Log.i("VisualizerPlugin", "PPM Visualizer attached to session $sessionId")
     }
 
     private fun stop() {
@@ -103,7 +95,6 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             Log.w("VisualizerPlugin", "stop: ${e.message}")
         }
         visualizer = null
-        eventCount = 0
     }
 
     fun dispose() {

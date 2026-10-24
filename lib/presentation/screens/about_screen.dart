@@ -23,47 +23,20 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
 
   Future<void> _checkDiagnostics() async {
     final buf = StringBuffer();
-    final p = Preset.of(context);
-
-    // 1. Notification permission
     final notifStatus = await Permission.notification.status;
-    buf.writeln("Notification permission: $notifStatus");
-
-    // 2. Audio permission
+    buf.writeln("Notification: $notifStatus");
     final audioStatus = await Permission.audio.status;
-    buf.writeln("Audio permission: $audioStatus");
-
-    // 3. Photos permission
-    final photosStatus = await Permission.photos.status;
-    buf.writeln("Photos permission: $photosStatus");
-
-    // 4. PlaybackService type
+    buf.writeln("Audio: $audioStatus");
     final playback = ref.read(playbackServiceProvider);
-    buf.writeln("PlaybackService type: ${playback.runtimeType}");
-
-    // 5. Check if JustAudioPlaybackService has handler
-    if (playback is JustAudioPlaybackService) {
-      // Can't access _handler directly, but we can check if playback works
-      buf.writeln("PlaybackService: JustAudioPlaybackService (OK)");
-    } else {
-      buf.writeln("PlaybackService: ${playback.runtimeType} (UNEXPECTED)");
-    }
-
-    // 6. SharedPreferences flag
+    buf.writeln("Service: ${playback.runtimeType}");
     final prefs = ref.read(sharedPreferencesProvider);
     final flagGranted = prefs.getBool('pathephon.permissions.granted') ?? false;
-    buf.writeln("Permissions flag: $flagGranted");
-
-    // 7. Queue info
+    buf.writeln("Perms flag: $flagGranted");
     final snap = ref.read(playbackSnapshotProvider).valueOrNull;
-    buf.writeln("Queue length: ${snap?.queue.length ?? 0}");
-    buf.writeln("Current track: ${snap?.current?.title ?? 'none'}");
-    buf.writeln("Is playing: ${snap?.isPlaying ?? false}");
-
-    setState(() {
-      _diag = buf.toString();
-      _checking = false;
-    });
+    buf.writeln("Queue: ${snap?.queue.length ?? 0}");
+    buf.writeln("Track: ${snap?.current?.title ?? 'none'}");
+    buf.writeln("Playing: ${snap?.isPlaying ?? false}");
+    setState(() { _diag = buf.toString(); _checking = false; });
   }
 
   @override
@@ -71,7 +44,6 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     final themeModeIdx = ref.watch(themeModeProvider);
     final p = Preset.of(context);
     const modeNames = ['Тёмная', 'Светлая', 'Системная'];
-
     return Scaffold(
       appBar: AppBar(title: const Text("\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435")),
       body: Center(child: SingleChildScrollView(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -79,7 +51,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
         const SizedBox(height: 24),
         Text("\u041F\u0430\u0442\u0435\u0444\u043E\u043D", style: Theme.of(context).textTheme.displaySmall),
         const SizedBox(height: 8),
-        Text("\u0412\u0435\u0440\u0441\u0438\u044F: 0.10.1 (95)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: p.textSecondary)),
+        Text("\u0412\u0435\u0440\u0441\u0438\u044F: 0.10.2 (96)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: p.textSecondary)),
         const SizedBox(height: 8),
         Text("\u0422\u0435\u043C\u0430: ${modeNames[themeModeIdx]}", style: Theme.of(context).textTheme.bodySmall?.copyWith(color: p.textMuted)),
         const SizedBox(height: 24),
@@ -87,7 +59,6 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
         const SizedBox(height: 8),
         Text("github.com/AlexxSwan/pathephon", style: TextStyle(color: p.textMuted)),
         const SizedBox(height: 32),
-        // Diagnostic info
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 24),
           padding: const EdgeInsets.all(12),
@@ -104,17 +75,13 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
             else
               Text(_diag, style: TextStyle(color: p.textPrimary, fontSize: 11, fontFamily: 'monospace', height: 1.5)),
             const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () { setState(() => _checking = true); _checkDiagnostics(); },
-                child: const Text("Обновить"),
-              ),
-            ),
+            SizedBox(width: double.infinity, child: ElevatedButton(
+              onPressed: () { setState(() => _checking = true); _checkDiagnostics(); },
+              child: const Text("Обновить"),
+            )),
           ]),
         ),
-      ])),
-      ),
+      ]))),
     );
   }
 }

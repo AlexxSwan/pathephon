@@ -1,11 +1,10 @@
 // ============================================================================
-//  playback_service.dart - audio_service + _player.play() + MediaSession metadata
+//  playback_service.dart - audio_service + _player.play() + handler.play()
 //
-//  - _player.play() for playback (always works, proven in 0.8.7)
-//  - AudioService.init() for foreground service + notification
-//  - _broadcastState auto-updates MediaSession (triggers lock screen notification)
-//  - _updateMediaItem sets title/artist/album for lock screen display
-//  - Handler overrides for headset/Bluetooth/lock screen button events
+//  KEY FIX: _player.play() starts audio. THEN _handler.play() starts the
+//  foreground service (notification + lock screen). The handler's play()
+//  override calls _player.play() again (no-op if already playing) but
+//  triggers audio_service to show the notification.
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -105,9 +104,7 @@ class JustAudioPlaybackService implements PlaybackService {
         ),
       );
       debugPrint('[pathephon] AudioService.init OK');
-    } catch (e) {
-      debugPrint('[pathephon] AudioService.init FAILED: $e');
-    }
+    } catch (e) { debugPrint('[pathephon] AudioService.init FAILED: $e'); }
 
     _stateController.add(PlaybackSnapshot.empty);
 
@@ -159,9 +156,7 @@ class JustAudioPlaybackService implements PlaybackService {
     );
     try {
       (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
-    } catch (e) {
-      debugPrint('[pathephon] _updateMediaItem: $e');
-    }
+    } catch (e) { debugPrint('[pathephon] _updateMediaItem: $e'); }
   }
 
   void _updateQueueStream() {
@@ -172,8 +167,27 @@ class JustAudioPlaybackService implements PlaybackService {
     )).toList();
     try {
       (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
-    } catch (e) {
-      debugPrint('[pathephon] _updateQueueStream: $e');
+    } catch (e) { debugPrint('[pathephon] _updateQueueStream: $e'); }
+  }
+
+  /// CRITICAL: This is the key method.
+  /// 1. _player.play() starts audio playback (always works)
+  /// 2. _handler.play() triggers audio_service to start foreground service
+  ///    (notification + lock screen + headset support)
+  /// The handler's play() override calls _player.play() again (no-op if already
+  /// playing), but the side effect is that audio_service shows the notification.
+  Future<void> _startPlayback() async {
+    // Step 1: Start audio (guaranteed)
+    await _player.play();
+    // Step 2: Start foreground service via handler
+    // This is what makes the notification + lock screen widget appear.
+    if (_handler != null) {
+      try {
+        await _handler!.play();
+        debugPrint('[pathephon] _handler.play() called - foreground service should start');
+      } catch (e) {
+        debugPrint('[pathephon] _handler.play() failed: $e');
+      }
     }
   }
 
@@ -234,7 +248,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _player.seek(Duration.zero, index: initial);
       _updateQueueStream();
       _updateMediaItem();
-      await _player.play();
+      await _startPlayback();
       await _saveQueue();
     } catch (e) {
       debugPrint('[pathephon] playQueue FAILED: $e');
@@ -260,9 +274,22 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   @override
-  Future<void> play() async { await _initCompleter.future; await _player.play(); }
+  Future<void> play() async {
+    await _initCompleter.future;
+    await _startPlayback();
+  }
+
   @override
-  Future<void> pause() async { await _initCompleter.future; await _player.pause(); await _savePosition(); }
+  Future<void> pause() async {
+    await _initCompleter.future;
+    await _player.pause();
+    // Also notify handler (updates notification to show "play" button)
+    if (_handler != null) {
+      try { await _handler!.pause(); } catch (_) {}
+    }
+    await _savePosition();
+  }
+
   @override
   Future<void> stop() async {
     await _initCompleter.future;
@@ -271,6 +298,7 @@ class JustAudioPlaybackService implements PlaybackService {
     await _savePosition();
     _emitState(_player.playerState);
   }
+
   @override
   Future<void> clearQueue() async {
     await _initCompleter.future;
@@ -283,8 +311,10 @@ class JustAudioPlaybackService implements PlaybackService {
     await _prefs.remove(_positionKey);
     _stateController.add(PlaybackSnapshot.empty);
   }
+
   @override
   Future<void> seekTo(Duration position) async { await _initCompleter.future; await _player.seek(position); await _savePosition(); }
+
   @override
   Future<void> skipToNext() async {
     await _initCompleter.future;
@@ -296,6 +326,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _saveQueue();
     }
   }
+
   @override
   Future<void> skipToPrevious() async {
     await _initCompleter.future;
@@ -307,6 +338,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _saveQueue();
     }
   }
+
   @override
   Future<void> setShuffle(bool enabled) async { await _initCompleter.future; _shuffle = enabled; await _player.setShuffleModeEnabled(enabled); }
   @override
@@ -318,6 +350,7 @@ class JustAudioPlaybackService implements PlaybackService {
     };
     await _player.setLoopMode(am);
   }
+
   @override
   Future<void> setVolume(double volume) => _player.setVolume(volume.clamp(0.0, 1.0));
   @override
@@ -332,6 +365,7 @@ class JustAudioPlaybackService implements PlaybackService {
   }
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
+
   void dispose() {
     _stateController.close();
     _sessionIdController.close();
@@ -339,8 +373,6 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 }
 
-/// AudioHandler: _broadcastState auto-updates MediaSession (triggers notification).
-/// Overrides handle EXTERNAL events (headset, Bluetooth, lock screen buttons).
 class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
   _PathephonAudioHandler(this._player) {
     _player.playbackEventStream.listen(_broadcastState);

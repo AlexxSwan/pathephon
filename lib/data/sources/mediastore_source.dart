@@ -1,5 +1,8 @@
 // ============================================================================
-//  mediastore_source.dart - audio discovery (permissions handled by gate)
+//  mediastore_source.dart - RECURSIVE folder scan with per-folder cover art
+//
+//  When picking a folder, scans ALL subfolders. Each audio file gets its own
+//  cover URI from its parent folder, so different albums show different covers.
 // ============================================================================
 import 'dart:io';
 import 'dart:typed_data';
@@ -51,6 +54,14 @@ class MediaStoreSource {
     return decoded.substring(slash + 1);
   }
 
+  static String _dirOf(String path) {
+    String decoded;
+    try { decoded = Uri.decodeComponent(path); } catch (_) { decoded = path; }
+    final slash = decoded.lastIndexOf('/');
+    if (slash < 0) return '';
+    return decoded.substring(0, slash);
+  }
+
   static bool _isAudio(String path) => _supportedAudioExts.contains(_ext(path));
   static bool _hasImageExt(String name) {
     final dot = name.lastIndexOf('.');
@@ -58,27 +69,7 @@ class MediaStoreSource {
     return _coverExts.contains(name.substring(dot + 1));
   }
 
-  Future<void> _cacheCoverBytes(String artUri) async {
-    if (artUri.isEmpty || _coverBytesCache.containsKey(artUri)) return;
-    try {
-      if (artUri.startsWith('file://')) {
-        final path = Uri.parse(artUri).toFilePath();
-        final bytes = await File(path).readAsBytes();
-        _coverBytesCache[artUri] = bytes;
-      } else if (artUri.startsWith('content://')) {
-        final result = await _folderScanner.invokeMethod('readFileBytes', {'uri': artUri});
-        if (result is Uint8List) _coverBytesCache[artUri] = result;
-      }
-    } catch (e) {
-      debugPrint('[pathephon] cacheCoverBytes FAILED: $e (uri: $artUri)');
-    }
-  }
-
-  Uint8List? getCoverBytes(String? artUri) {
-    if (artUri == null || artUri.isEmpty) return null;
-    return _coverBytesCache[artUri];
-  }
-
+  /// Find cover art in a filesystem directory.
   static String? _findCoverInDir(String dirPath) {
     if (dirPath.isEmpty || _isContentUri(dirPath)) return null;
     try {
@@ -114,10 +105,25 @@ class MediaStoreSource {
     return null;
   }
 
-  static String _dirOf(String path) {
-    final slash = path.lastIndexOf('/');
-    if (slash < 0) return '';
-    return path.substring(0, slash);
+  Future<void> _cacheCoverBytes(String artUri) async {
+    if (artUri.isEmpty || _coverBytesCache.containsKey(artUri)) return;
+    try {
+      if (artUri.startsWith('file://')) {
+        final path = Uri.parse(artUri).toFilePath();
+        final bytes = await File(path).readAsBytes();
+        _coverBytesCache[artUri] = bytes;
+      } else if (artUri.startsWith('content://')) {
+        final result = await _folderScanner.invokeMethod('readFileBytes', {'uri': artUri});
+        if (result is Uint8List) _coverBytesCache[artUri] = result;
+      }
+    } catch (e) {
+      debugPrint('[pathephon] cacheCoverBytes FAILED: $e');
+    }
+  }
+
+  Uint8List? getCoverBytes(String? artUri) {
+    if (artUri == null || artUri.isEmpty) return null;
+    return _coverBytesCache[artUri];
   }
 
   Future<List<Track>> fetchAllTracks() async {
@@ -138,17 +144,14 @@ class MediaStoreSource {
   Future<List<Track>> pickAudioFiles() async {
     final result = await FilePicker.pickFiles(type: FileType.audio);
     if (result == null || result.isEmpty) return const <Track>[];
-
     final dirCoverCache = <String, String?>{};
     final tracks = <Track>[];
     for (final f in result) {
       try {
         final path = f.path ?? '';
         if (path.isEmpty) continue;
-        final ext = _ext(path);
-        final uri = Uri.file(path).toString();
-        var artUri = '';
         final dir = _dirOf(path);
+        String artUri = '';
         if (dir.isNotEmpty && !_isContentUri(dir)) {
           final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
           if (cover != null) {
@@ -156,12 +159,15 @@ class MediaStoreSource {
             await _cacheCoverBytes(cover);
           }
         }
-        tracks.add(Track(id: uri, uri: uri, title: f.name, fileExtension: ext, filePath: path, artUri: artUri));
+        tracks.add(Track(id: Uri.file(path).toString(), uri: Uri.file(path).toString(),
+            title: f.name, fileExtension: _ext(path), filePath: path, artUri: artUri));
       } catch (_) { continue; }
     }
     return tracks;
   }
 
+  /// Pick a directory and RECURSIVELY scan all subfolders.
+  /// Each audio file gets its own cover URI from its parent folder.
   Future<({List<Track> tracks, String diagnostic})> pickDirectoryWithDiagnostic() async {
     final dirPath = await FilePicker.getDirectoryPath();
     if (dirPath == null) return (tracks: const <Track>[], diagnostic: 'FilePicker returned null');
@@ -169,8 +175,9 @@ class MediaStoreSource {
     final buf = StringBuffer();
     buf.writeln('Raw path: $dirPath');
 
+    // SAF path - use native recursive scan
     if (_isContentUri(dirPath)) {
-      buf.writeln('Trying SAF scan...');
+      buf.writeln('Trying SAF recursive scan...');
       try {
         final result = await _folderScanner.invokeMethod('scanFolder', {'treeUri': dirPath});
         if (result is! List) {
@@ -178,19 +185,20 @@ class MediaStoreSource {
           return (tracks: const <Track>[], diagnostic: buf.toString());
         }
         final tracks = <Track>[];
-        String? cachedCoverUri;
+        final uniqueCovers = <String>{};
         for (final item in result) {
           if (item is! Map) continue;
           final uri = item['uri'] as String;
           final name = item['name'] as String;
           final artUri = (item['artUri'] as String?) ?? '';
-          if (artUri.isNotEmpty && cachedCoverUri != artUri) {
-            cachedCoverUri = artUri;
+          if (artUri.isNotEmpty && !uniqueCovers.contains(artUri)) {
+            uniqueCovers.add(artUri);
             await _cacheCoverBytes(artUri);
           }
-          tracks.add(Track(id: uri, uri: uri, title: name, fileExtension: _ext(name), filePath: dirPath, artUri: artUri));
+          tracks.add(Track(id: uri, uri: uri, title: name,
+              fileExtension: _ext(name), filePath: dirPath, artUri: artUri));
         }
-        buf.writeln('SAF: ${tracks.length} tracks');
+        buf.writeln('SAF recursive: ${tracks.length} tracks, ${uniqueCovers.length} unique covers');
         return (tracks: tracks, diagnostic: buf.toString());
       } catch (e) {
         buf.writeln('SAF FAILED: $e');
@@ -198,36 +206,51 @@ class MediaStoreSource {
       }
     }
 
-    buf.writeln('Trying dart:io...');
+    // Filesystem path - recursive dart:io scan
+    buf.writeln('Trying dart:io recursive scan...');
     try {
-      final dir = Directory(dirPath);
-      if (!await dir.exists()) {
+      final rootDir = Directory(dirPath);
+      if (!await rootDir.exists()) {
         buf.writeln('Directory does not exist');
         return (tracks: const <Track>[], diagnostic: buf.toString());
       }
-      final entities = dir.listSync(recursive: false, followLinks: false);
-      buf.writeln('Found ${entities.length} entities');
-
-      final dirCover = _findCoverInDir(dirPath);
-      buf.writeln('Cover art: $dirCover');
-      if (dirCover != null) {
-        await _cacheCoverBytes(dirCover);
-        buf.writeln('Cover bytes cached: ${_coverBytesCache.containsKey(dirCover)}');
-      }
 
       final tracks = <Track>[];
-      entities.sort((a, b) => a.path.compareTo(b.path));
-      for (final e in entities) {
-        if (e is! File) continue;
-        try {
-          final path = e.path;
-          if (!_isAudio(path)) continue;
-          final name = _fileName(path);
-          final uri = Uri.file(path).toString();
-          tracks.add(Track(id: uri, uri: uri, title: name, fileExtension: _ext(path), filePath: path, artUri: dirCover ?? ''));
-        } catch (_) { continue; }
+      final dirCoverCache = <String, String?>{};
+      int folderCount = 0;
+
+      // Recursive walk
+      Future<void> walkDir(Directory dir) async {
+        folderCount++;
+        final entities = dir.listSync(recursive: false, followLinks: false);
+        final dirPath = dir.path;
+        final coverUri = dirCoverCache.putIfAbsent(dirPath, () => _findCoverInDir(dirPath));
+        if (coverUri != null) await _cacheCoverBytes(coverUri);
+
+        for (final e in entities) {
+          if (e is Directory) {
+            await walkDir(e);
+          } else if (e is File) {
+            try {
+              final path = e.path;
+              if (!_isAudio(path)) continue;
+              final name = _fileName(path);
+              tracks.add(Track(
+                id: Uri.file(path).toString(),
+                uri: Uri.file(path).toString(),
+                title: name,
+                fileExtension: _ext(path),
+                filePath: path,
+                artUri: coverUri ?? '',
+              ));
+            } catch (_) { continue; }
+          }
+        }
       }
-      buf.writeln('Created ${tracks.length} tracks');
+
+      await walkDir(rootDir);
+      tracks.sort((a, b) => a.filePath.compareTo(b.filePath));
+      buf.writeln('Recursive: ${tracks.length} tracks in $folderCount folders');
       return (tracks: tracks, diagnostic: buf.toString());
     } catch (e, st) {
       buf.writeln('dart:io FAILED: $e\n$st');

@@ -45,17 +45,10 @@ jobs:
       - name: Generate l10n
         run: flutter gen-l10n
 
-      # ============================================================
-      # CRITICAL: Run analyze and FAIL on errors only.
-      # This will show the EXACT Dart error before Gradle runs.
-      # ============================================================
-      - name: Analyze (fail on errors only)
+      - name: Analyze (errors only)
         run: |
-          echo "=== Running flutter analyze ==="
           flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings 2>&1 | tee analyze.log
-          # Check if there are any "error •" lines
           if grep -E "^\s*error\s" analyze.log; then
-            echo ""
             echo "=== DART ERRORS FOUND - see above ==="
             exit 1
           fi
@@ -97,11 +90,9 @@ jobs:
           storeFile=upload-keystore.jks
           PROP
 
-      # Step 1: Prepare Android project (config-only — no Gradle)
       - name: Prepare Android project
         run: flutter build apk --config-only --no-tree-shake-icons
 
-      # Step 2: Run Gradle directly with verbose output
       - name: Build APK via Gradle (release)
         if: steps.check_keystore.outputs.has_keystore == 'true'
         working-directory: android
@@ -116,44 +107,64 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon 2>&1 | tee gradle.log
 
-      - name: Show errors on failure
-        if: failure()
-        run: |
-          echo "=== ERROR LINES FROM GRADLE LOG ==="
-          grep -iE "error:|Error:|exception|FAILED|undefined|isn" gradle.log 2>/dev/null || echo "(no gradle.log)"
-          echo ""
-          echo "=== ANALYZE LOG ==="
-          cat analyze.log 2>/dev/null | grep -E "error|warning" | head -30 || echo "(no analyze.log)"
-
-      - name: Find and copy APK
-        if: always()
+      - name: Find and copy APKs
         run: |
           echo "=== All APK files ==="
           find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(none)"
           mkdir -p build/app/outputs/flutter-apk/
-          APK=""
-          for candidate in \
-            "build/app/outputs/apk/release/app-release.apk" \
-            "build/app/outputs/apk/debug/app-debug.apk" \
-            "build/app/outputs/flutter-apk/app-release.apk"; do
-            if [ -f "$candidate" ]; then
-              APK="$candidate"
-              break
-            fi
-          done
-          if [ -z "$APK" ]; then
-            APK=$(find . -name "*.apk" 2>/dev/null | head -1)
+
+          ARM64=$(find . -name "app-arm64-v8a-release.apk" 2>/dev/null | head -1)
+          if [ -z "$ARM64" ]; then
+            ARM64=$(find . -name "app-arm64-v8a-debug.apk" 2>/dev/null | head -1)
           fi
-          if [ -n "$APK" ]; then
-            cp "$APK" build/app/outputs/flutter-apk/app-release.apk
-            echo "Copied: $APK"
+          if [ -n "$ARM64" ]; then
+            cp "$ARM64" build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            echo "Copied arm64: $ARM64"
           fi
 
-      - name: Upload APK artifact
+          X64=$(find . -name "app-x86_64-release.apk" 2>/dev/null | head -1)
+          if [ -z "$X64" ]; then
+            X64=$(find . -name "app-x86_64-debug.apk" 2>/dev/null | head -1)
+          fi
+          if [ -n "$X64" ]; then
+            cp "$X64" build/app/outputs/flutter-apk/app-x86_64-release.apk
+            echo "Copied x86_64: $X64"
+          fi
+
+          if [ -z "$ARM64" ] && [ -z "$X64" ]; then
+            FAT=$(find . -name "app-release.apk" 2>/dev/null | head -1)
+            if [ -z "$FAT" ]; then
+              FAT=$(find . -name "app-debug.apk" 2>/dev/null | head -1)
+            fi
+            if [ -n "$FAT" ]; then
+              cp "$FAT" build/app/outputs/flutter-apk/app-release.apk
+              echo "Copied fat APK: $FAT"
+            fi
+          fi
+
+      - name: Upload arm64 APK artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Pathephon-arm64
+          name: Pathephon-arm64-v8a
+          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload x86_64 APK artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pathephon-x86_64
+          path: build/app/outputs/flutter-apk/app-x86_64-release.apk
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Upload fat APK artifact (fallback)
+        if: always() && steps.check_keystore.outputs.has_keystore == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pathephon-release
           path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
           if-no-files-found: warn
@@ -165,4 +176,5 @@ jobs:
           name: Pathephon ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk

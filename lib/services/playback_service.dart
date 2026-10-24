@@ -1,10 +1,11 @@
 // ============================================================================
-//  playback_service.dart - playback service (WORKING playback, no MediaSession)
+//  playback_service.dart - playback with MediaSession integration
 //
-//  This is the version from 0.8.1+75 where playback worked correctly.
-//  We use _player directly (not _handler) for play/pause/skip to avoid
-//  the race condition where _handler.play() doesn't start playback.
-//  Lock screen widget does NOT work in this version - will be fixed later.
+//  KEY FIX: _player.play() is used for app-initiated playback (always works).
+//  _PathephonAudioHandler overrides play/pause/skip for EXTERNAL events only
+//  (headset buttons, lock screen controls, Bluetooth).
+//  _broadcastState keeps MediaSession in sync automatically.
+//  _updateMediaItem updates lock screen metadata (title/artist/album).
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -13,6 +14,7 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:just_audio/just_audio.dart';
+import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/replaygain.dart';
@@ -105,7 +107,10 @@ class JustAudioPlaybackService implements PlaybackService {
           androidStopForegroundOnPause: true,
         ),
       );
-    } catch (e) { debugPrint('[pathephon] AudioService.init failed: $e'); }
+      debugPrint('[pathephon] AudioService.init OK');
+    } catch (e) {
+      debugPrint('[pathephon] AudioService.init FAILED (non-fatal): $e');
+    }
 
     _stateController.add(PlaybackSnapshot.empty);
 
@@ -118,6 +123,7 @@ class JustAudioPlaybackService implements PlaybackService {
       if (seqState != null && seqState.currentIndex >= 0) {
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
+        _updateMediaItem();
       }
     });
 
@@ -146,6 +152,37 @@ class JustAudioPlaybackService implements PlaybackService {
       isBuffering: st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering,
       shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
     ));
+  }
+
+  /// Update mediaItem stream for lock screen display.
+  void _updateMediaItem() {
+    if (_handler == null || _queue.isEmpty) return;
+    final idx = _player.currentIndex ?? _index;
+    if (idx < 0 || idx >= _queue.length) return;
+    final t = _queue[idx];
+    final mediaItem = MediaItem(
+      id: t.id, album: t.album, title: t.title, artist: t.artist,
+      duration: Duration(milliseconds: t.durationMs),
+    );
+    try {
+      (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
+    } catch (e) {
+      debugPrint('[pathephon] _updateMediaItem failed: $e');
+    }
+  }
+
+  /// Update queue stream for lock screen queue display.
+  void _updateQueueStream() {
+    if (_handler == null) return;
+    final items = _queue.map((t) => MediaItem(
+      id: t.id, album: t.album, title: t.title, artist: t.artist,
+      duration: Duration(milliseconds: t.durationMs),
+    )).toList();
+    try {
+      (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
+    } catch (e) {
+      debugPrint('[pathephon] _updateQueueStream failed: $e');
+    }
   }
 
   Future<void> _saveQueue() async {
@@ -182,6 +219,9 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: savedPos, initialIndex: initial,
       );
 
+      _updateQueueStream();
+      _updateMediaItem();
+
       _stateController.add(PlaybackSnapshot(
         current: _queue[initial], queue: _queue, index: initial,
         position: savedPos, duration: _player.duration ?? Duration.zero,
@@ -207,8 +247,15 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: Duration.zero, initialIndex: initial,
       );
       await _player.seek(Duration.zero, index: initial);
+      // CRITICAL: use _player.play() directly, NOT _handler.play().
+      // If AudioService.init failed, _handler is null and _handler?.play()
+      // would silently do nothing = no playback.
       await _player.play();
+      // Update MediaSession metadata for lock screen
+      _updateQueueStream();
+      _updateMediaItem();
       await _saveQueue();
+      debugPrint('[pathephon] playQueue: started playback');
     } catch (e) {
       debugPrint('[pathephon] playQueue FAILED: $e');
       _stateController.add(PlaybackSnapshot.empty);
@@ -269,6 +316,7 @@ class JustAudioPlaybackService implements PlaybackService {
     if (_player.hasNext) {
       await _player.seekToNext();
       _index = _player.currentIndex ?? _index;
+      _updateMediaItem();
       await _saveQueue();
     }
   }
@@ -280,6 +328,7 @@ class JustAudioPlaybackService implements PlaybackService {
     if (_player.hasPrevious) {
       await _player.seekToPrevious();
       _index = _player.currentIndex ?? _index;
+      _updateMediaItem();
       await _saveQueue();
     }
   }
@@ -318,12 +367,34 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 }
 
+/// AudioHandler that forwards EXTERNAL events (headset buttons, lock screen)
+/// to just_audio player. App-initiated playback uses _player directly.
 class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
   _PathephonAudioHandler(this._player) {
+    // _broadcastState is called automatically when player emits events.
+    // This keeps MediaSession + notification in sync with player state.
     _player.playbackEventStream.listen(_broadcastState);
   }
 
   final AudioPlayer _player;
+
+  // These overrides handle EXTERNAL media button events:
+  // - Headset button (single click = play/pause)
+  // - Lock screen controls
+  // - Bluetooth media buttons
+  // - Car steering wheel controls
+  @override
+  Future<void> play() => _player.play();
+  @override
+  Future<void> pause() => _player.pause();
+  @override
+  Future<void> stop() async { await _player.stop(); await super.stop(); }
+  @override
+  Future<void> skipToNext() => _player.seekToNext();
+  @override
+  Future<void> skipToPrevious() => _player.seekToPrevious();
+  @override
+  Future<void> seek(Duration position) => _player.seek(position);
 
   void _broadcastState(PlaybackEvent event) {
     final state = _player.playerState;

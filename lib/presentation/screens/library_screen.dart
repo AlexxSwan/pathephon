@@ -1,6 +1,7 @@
 import "package:flutter/foundation.dart" show debugPrint;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "dart:io";
 
 import "../../core/l10n/generated/app_localizations.dart";
 import "../../core/theme/tube_colors.dart";
@@ -43,23 +44,18 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     try {
       final result = await ref.read(mediaStoreSourceProvider).pickDirectoryWithDiagnostic();
       if (result.tracks.isEmpty) {
-        // Show diagnostic dialog
         if (mounted) {
           await showDialog<void>(
             context: context,
             builder: (ctx) => AlertDialog(
               backgroundColor: const Color(0xFF1A1410),
-              title: const Text(
-                "\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430",
-                style: TextStyle(color: Color(0xFFF4E9D2)),
-              ),
+              title: const Text("\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430",
+                  style: TextStyle(color: Color(0xFFF4E9D2))),
               content: SizedBox(
                 width: double.maxFinite,
                 child: SingleChildScrollView(
-                  child: Text(
-                    result.diagnostic,
-                    style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace'),
-                  ),
+                  child: Text(result.diagnostic,
+                      style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace')),
                 ),
               ),
               actions: [
@@ -76,8 +72,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       ref.read(libraryStateProvider.notifier).setPickedTracks(result.tracks);
       await playback.playQueue(tracks: result.tracks, startIndex: 0);
       ref.read(isPlayingProvider.notifier).state = true;
-    } catch (e, st) {
-      debugPrint("[pathephon] _pickAndPlayFolder FAILED: $e\n$st");
+    } catch (e) {
+      debugPrint("[pathephon] _pickAndPlayFolder FAILED: $e");
     }
   }
 
@@ -112,10 +108,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             onPressed: _pickAndPlayFiles,
             tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B",
           ),
-          IconButton(
-            icon: const Icon(Icons.search),
-            onPressed: () {},
-          ),
+          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
         ],
       ),
       body: state.when(
@@ -124,29 +117,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         data: (tracks) {
           if (tracks.isEmpty) {
             return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Icon(Icons.library_music, size: 80, color: TubeColors.brass),
-                    const SizedBox(height: 16),
-                    Text(
-                      "\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: TubeColors.textSecondary,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      "\u041D\u0430\u0436\u043C\u0438\u0442\u0435 \u043A\u043D\u043E\u043F\u043A\u0443 \u043F\u0430\u043F\u043A\u0438 \u0438\u043B\u0438 \u0444\u0430\u0439\u043B\u043E\u0432 \u0432\u0432\u0435\u0440\u0445\u0443",
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: TubeColors.textMuted,
-                          ),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.library_music, size: 80, color: TubeColors.brass),
+                  const SizedBox(height: 16),
+                  Text("\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.textSecondary)),
+                ],
               ),
             );
           }
@@ -193,10 +171,7 @@ class _AlbumGrid extends ConsumerWidget {
 
     return GridView.builder(
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 2,
-        mainAxisSpacing: 12,
-        crossAxisSpacing: 12,
-        childAspectRatio: 0.85,
+        crossAxisCount: 2, mainAxisSpacing: 12, crossAxisSpacing: 12, childAspectRatio: 0.85,
       ),
       padding: const EdgeInsets.all(12),
       itemCount: albums.length,
@@ -245,35 +220,28 @@ class _AlbumArt extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    if (album.artUri.isNotEmpty) {
-      return Image.network(
-        album.artUri,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
-      );
-    }
-    String? trackArtUri;
-    for (final t in album.tracks) {
-      if (t.artUri.isNotEmpty) {
-        trackArtUri = t.artUri;
-        break;
+    String? artUri = album.artUri;
+    if (artUri.isEmpty) {
+      for (final t in album.tracks) {
+        if (t.artUri.isNotEmpty) { artUri = t.artUri; break; }
       }
     }
-    if (trackArtUri != null) {
-      return Image.network(
-        trackArtUri,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _fallbackIcon(),
-      );
+
+    if (artUri != null && artUri.isNotEmpty) {
+      if (artUri.startsWith('file://')) {
+        return Image.file(
+          File(Uri.parse(artUri).toFilePath()),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _fallback(),
+        );
+      }
+      return Image.network(artUri, fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _fallback());
     }
-    return _fallbackIcon();
+    return _fallback();
   }
 
-  Widget _fallbackIcon() {
-    return const Center(
-      child: Icon(Icons.album, size: 56, color: TubeColors.brass),
-    );
-  }
+  Widget _fallback() => const Center(child: Icon(Icons.album, size: 56, color: TubeColors.brass));
 }
 
 class _ArtistsList extends ConsumerWidget {
@@ -285,14 +253,12 @@ class _ArtistsList extends ConsumerWidget {
       artists.putIfAbsent(a.albumArtist, () => []).add(a);
     }
     return ListView(
-      children: artists.entries.map((e) {
-        return ListTile(
-          title: Text(e.key),
-          subtitle: Text("${e.value.length} albums"),
-          leading: const Icon(Icons.person, color: TubeColors.brass),
-          onTap: () {},
-        );
-      }).toList(),
+      children: artists.entries.map((e) => ListTile(
+        title: Text(e.key),
+        subtitle: Text("${e.value.length} albums"),
+        leading: const Icon(Icons.person, color: TubeColors.brass),
+        onTap: () {},
+      )).toList(),
     );
   }
 }

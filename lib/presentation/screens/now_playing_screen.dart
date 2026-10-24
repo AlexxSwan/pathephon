@@ -1,14 +1,11 @@
 // ============================================================================
-//  now_playing_screen.dart - Now Playing with spectrum analyzer
+//  now_playing_screen.dart - Now Playing with spectrum + FIXED artwork loading
 //
-//  Layout:
-//    1. Top bar: exit | title
-//    2. Album art (flex 3)
-//    3. Track title + artist
-//    4. Seek bar
-//    5. Playback controls
-//    6. Spectrum bars (flex 2) - 32 frequency bins with gradient
+//  CRITICAL FIX: Image.network cannot load file:// URIs. Use Image.file
+//  for local files, Image.network for http(s):// only.
 // ============================================================================
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -121,15 +118,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (track != null && track.isHiRes) ...[
-                const SizedBox(height: 4),
-                Text(
-                  track.qualityLabel,
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: TubeColors.phosphorGreen,
-                      ),
-                ),
-              ],
 
               const SizedBox(height: 8),
 
@@ -157,7 +145,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
               const SizedBox(height: 12),
 
-              // ---- Spectrum bars (flex 2) ----
               Expanded(
                 flex: 2,
                 child: Container(
@@ -210,7 +197,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   }
 }
 
-/// Simple artwork: track.artUri -> album fallback -> app icon.
+/// Artwork widget - CRITICAL: uses Image.file for file:// URIs, Image.network for http(s).
 class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
@@ -220,22 +207,39 @@ class _ArtworkImage extends ConsumerWidget {
     final t = track;
     if (t == null) return _appIconFallback();
 
-    if (t.artUri.isNotEmpty) {
-      return Image.network(
-        t.artUri,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _appIconFallback(),
-      );
+    // Resolve artUri: track's own, or album fallback
+    String? artUri = t.artUri;
+    if (artUri.isEmpty) {
+      artUri = ref.watch(albumArtIndexProvider)[
+          '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
     }
 
-    final albumArt = ref.watch(albumArtIndexProvider)[
-        '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
-    if (albumArt != null && albumArt.isNotEmpty) {
-      return Image.network(
-        albumArt,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) => _appIconFallback(),
-      );
+    if (artUri != null && artUri.isNotEmpty) {
+      // file:// URI -> use Image.file
+      if (artUri.startsWith('file://')) {
+        final filePath = Uri.parse(artUri).toFilePath();
+        return Image.file(
+          File(filePath),
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _appIconFallback(),
+        );
+      }
+      // content:// URI -> use Image.network (Flutter can load content URIs this way on Android)
+      if (artUri.startsWith('content://')) {
+        return Image.network(
+          artUri,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _appIconFallback(),
+        );
+      }
+      // http(s):// URI -> Image.network
+      if (artUri.startsWith('http://') || artUri.startsWith('https://')) {
+        return Image.network(
+          artUri,
+          fit: BoxFit.cover,
+          errorBuilder: (context, error, stackTrace) => _appIconFallback(),
+        );
+      }
     }
 
     return _appIconFallback();

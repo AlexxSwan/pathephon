@@ -1,6 +1,5 @@
 // ============================================================================
-//  visualizer_service.dart - FFT spectrum analyzer
-//  Streams List<double> of 32 frequency bin magnitudes (0..255).
+//  visualizer_service.dart - FFT spectrum with temporal smoothing
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -9,7 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 
 class SpectrumData {
   const SpectrumData(this.bins);
-  final List<double> bins; // 32 bins, each 0..255
+  final List<double> bins;
 }
 
 class VisualizerService {
@@ -23,6 +22,9 @@ class VisualizerService {
   bool _permissionGranted = false;
   bool _permissionRequested = false;
 
+  // Smoothing: each bin eases toward its target value
+  final List<double> _smoothed = List.filled(32, 0.0);
+
   Stream<SpectrumData> get spectrum => _controller.stream;
 
   Future<bool> _ensurePermission() async {
@@ -35,9 +37,7 @@ class VisualizerService {
           status = await Permission.microphone.request();
         }
         _permissionGranted = status.isGranted;
-        debugPrint('[pathephon] microphone permission: $status (granted=$_permissionGranted)');
       } catch (e) {
-        debugPrint('[pathephon] permission request failed: $e');
         _permissionGranted = false;
       }
     }
@@ -49,26 +49,30 @@ class VisualizerService {
     if (sessionId == _activeSessionId) return;
 
     final granted = await _ensurePermission();
-    if (!granted) {
-      debugPrint('[pathephon] visualizer: microphone permission denied');
-      return;
-    }
+    if (!granted) return;
 
     _activeSessionId = sessionId;
+    for (var i = 0; i < _smoothed.length; i++) {
+      _smoothed[i] = 0.0;
+    }
     try {
       _eventSub ??= _events.receiveBroadcastStream().listen(
         (data) {
           if (data is List) {
-            final bins = data.map((e) => (e as num).toDouble()).toList();
-            _controller.add(SpectrumData(bins));
+            final raw = data.map((e) => (e as num).toDouble()).toList();
+            // Exponential smoothing: each bin eases toward target
+            // factor 0.3 = smooth but responsive
+            for (var i = 0; i < _smoothed.length && i < raw.length; i++) {
+              _smoothed[i] += (raw[i] - _smoothed[i]) * 0.3;
+            }
+            _controller.add(SpectrumData(List.from(_smoothed)));
           }
         },
-        onError: (Object e) => debugPrint('[pathephon] visualizer event error: $e'),
+        onError: (Object e) => debugPrint('[pathephon] visualizer error: $e'),
       );
       await _method.invokeMethod('start', {'sessionId': sessionId});
-      debugPrint('[pathephon] visualizer attached to session $sessionId');
     } catch (e) {
-      debugPrint('[pathephon] visualizer start failed (non-fatal): $e');
+      debugPrint('[pathephon] visualizer start failed: $e');
     }
   }
 
@@ -77,9 +81,7 @@ class VisualizerService {
     _activeSessionId = null;
     try {
       await _method.invokeMethod('stop');
-    } catch (e) {
-      debugPrint('[pathephon] visualizer stop failed (non-fatal): $e');
-    }
+    } catch (_) {}
     _controller.add(const SpectrumData(<double>[]));
   }
 

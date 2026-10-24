@@ -1,12 +1,8 @@
 // ============================================================================
-//  visualizer_service.dart - PPM with proper dB-domain peak hold/decay
+//  visualizer_service.dart - PPM with strict peak hold/decay
 //
-//  Receives peak in dBFS (-60..0) from native Visualizer.
-//  Implements BBC PPM integration:
-//    - Attack: 10ms to reach peak (instant for our 50ms capture rate)
-//    - Hold: 1 second at peak
-//    - Decay: 12 dB per second after hold
-//  Output: stream of double in dBFS, mapped later to needle position.
+//  Hold: only refresh if rawDb >= peakDb (peak must actually reach current level)
+//  Decay: 12 dB/sec after 1 second hold
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -25,9 +21,10 @@ class VisualizerService {
   bool _permissionRequested = false;
 
   // PPM state in dBFS
-  double _peakDb = -60.0;        // current displayed peak (after decay)
+  double _peakDb = -60.0;
   DateTime _lastPeakTime = DateTime.now();
   Timer? _decayTimer;
+  int _eventCount = 0;
 
   Stream<double> get amplitudes => _controller.stream;
 
@@ -63,17 +60,19 @@ class VisualizerService {
     _activeSessionId = sessionId;
     _peakDb = -60.0;
     _lastPeakTime = DateTime.now();
+    _eventCount = 0;
     try {
       _eventSub ??= _events.receiveBroadcastStream().listen(
         (data) {
           if (data is num) {
             final rawDb = data.toDouble().clamp(-60.0, 0.0);
-            // Attack: instant — if new peak is louder, jump up immediately.
-            if (rawDb > _peakDb) {
+            _eventCount++;
+            if (_eventCount % 100 == 1) {
+              debugPrint('[pathephon] PPM event #$_eventCount: raw=$rawDb dBFS, peak=$_peakDb dBFS');
+            }
+            // Attack: instant — if new peak is louder OR equal, jump up.
+            if (rawDb >= _peakDb) {
               _peakDb = rawDb;
-              _lastPeakTime = DateTime.now();
-            } else if (rawDb > _peakDb - 1.0) {
-              // Hold refresh: if peak is within 1 dB, refresh hold time
               _lastPeakTime = DateTime.now();
             }
             _controller.add(_peakDb);
@@ -85,12 +84,12 @@ class VisualizerService {
       debugPrint('[pathephon] PPM attached to session $sessionId');
 
       // Decay timer: every 50ms, decrease peak if hold expired.
-      // BBC PPM: ~12 dB/sec decay = 0.6 dB per 50ms.
+      // 12 dB/sec = 0.6 dB per 50ms.
       _decayTimer?.cancel();
       _decayTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
         final holdElapsed = DateTime.now().difference(_lastPeakTime).inMilliseconds;
         if (holdElapsed > 1000 && _peakDb > -60.0) {
-          _peakDb -= 0.6;  // 12 dB/sec
+          _peakDb -= 0.6;
           if (_peakDb < -60.0) _peakDb = -60.0;
           _controller.add(_peakDb);
         }

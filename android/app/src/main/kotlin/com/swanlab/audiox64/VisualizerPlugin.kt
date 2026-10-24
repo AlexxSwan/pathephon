@@ -8,10 +8,12 @@ import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel.EventSink
 
 /// Native Android Visualizer bridge - PPM peak detection.
-/// Returns peak in dBFS (decibels relative to full scale):
-///   0 dBFS  = full scale (digital max)
-///   -60 dBFS = silence
-/// The Dart side maps dBFS to the PPM needle position.
+///
+/// Robust peak detection:
+///   1. Compute DC offset (mean of waveform) and subtract it
+///   2. Peak = max abs deviation from mean
+///   3. Convert to dBFS with calibration offset (-20 dB)
+///      (ExoPlayer output is hotter than expected on most devices)
 class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private val methodChannel = MethodChannel(binaryMessenger, "pathephon/visualizer")
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/visualizer/events")
@@ -67,35 +69,46 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
             override fun onWaveFormDataCapture(viz: Visualizer?, waveform: ByteArray?, samplingRate: Int) {
                 if (waveform == null || eventSink == null) return
                 val n = waveform.size
-                if (n < 2) return
+                if (n < 4) return
 
-                // Peak: max absolute deviation from center (128).
-                var maxAbs = 0
+                // Step 1: Compute DC offset (mean of unsigned bytes minus 128).
+                // Some devices have a constant DC bias in the Visualizer output.
+                var sum = 0L
                 for (i in 0 until n) {
-                    val sample = (waveform[i].toInt() and 0xFF) - 128
+                    sum += (waveform[i].toInt() and 0xFF).toLong()
+                }
+                val mean = (sum / n).toInt()  // 0..255, ideally 128
+
+                // Step 2: Peak = max abs deviation from mean.
+                var maxAbsDev = 0
+                for (i in 0 until n) {
+                    val sample = (waveform[i].toInt() and 0xFF) - mean
                     val abs = if (sample < 0) -sample else sample
-                    if (abs > maxAbs) maxAbs = abs
+                    if (abs > maxAbsDev) maxAbsDev = abs
                 }
 
-                // Convert peak (0..128) to dBFS:
-                //   peak/128 = linear amplitude (0..1)
-                //   dBFS = 20 * log10(linear)
-                //   0 dBFS = full scale, -inf = silence
-                val linear = maxAbs.toDouble() / 128.0
-                val dbFs = if (linear <= 0.001) {
-                    -60.0  // floor at -60 dBFS (silence)
+                // Step 3: Convert to linear amplitude (0..1).
+                // maxAbsDev range is 0..127 (since mean is in 0..255 and samples too).
+                val linear = maxAbsDev.toDouble() / 127.0
+
+                // Step 4: Convert to dBFS with calibration offset.
+                // -20 dB calibration: ExoPlayer output is typically hotter than
+                //   a pure digital signal, so we shift everything down by 20 dB.
+                //   This puts typical music peaks at -15..-5 dBFS (mark 4-6 on PPM).
+                val rawDbFs = if (linear <= 0.001) {
+                    -60.0
                 } else {
                     20.0 * Math.log10(linear)
                 }
+                val calibratedDbFs = (rawDbFs - 20.0).coerceIn(-60.0, 0.0)
 
-                // Return dBFS as a number (-60..0)
-                eventSink?.success(dbFs)
+                eventSink?.success(calibratedDbFs)
             }
             override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
         }, 20000, true, false)
         v.enabled = true
         visualizer = v
-        Log.i("VisualizerPlugin", "PPM Visualizer attached to session $sessionId")
+        Log.i("VisualizerPlugin", "PPM Visualizer attached to session $sessionId (calibrated -20 dB)")
     }
 
     private fun stop() {

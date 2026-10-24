@@ -172,9 +172,9 @@ final replayGainModeProvider = StateProvider<ReplayGainMode>((ref) {
 
 final isPlayingProvider = StateProvider<bool>((ref) => false);
 
-// Theme index: 0=Amber, 1=Ocean, 2=Forest
-final themeIndexProvider = StateProvider<int>((ref) {
-  return ref.watch(sharedPreferencesProvider).getInt('pathephon.theme') ?? 0;
+// Theme mode: 0=dark, 1=light, 2=system
+final themeModeProvider = StateProvider<int>((ref) {
+  return ref.watch(sharedPreferencesProvider).getInt('pathephon.theme_mode') ?? 0;
 });
 
 final repeatModeProvider = StateProvider<RepeatMode>((ref) => RepeatMode.off);

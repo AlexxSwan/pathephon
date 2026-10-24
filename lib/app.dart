@@ -23,13 +23,28 @@ class AudioPlayerX64App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
-    final themeIndex = ref.watch(themeIndexProvider);
-    final preset = ThemePreset.all[themeIndex];
+    final themeModeIdx = ref.watch(themeModeProvider);
     ref.watch(libraryRestoreProvider);
+
+    // Map index to ThemeMode: 0=dark, 1=light, 2=system
+    final themeMode = switch (themeModeIdx) {
+      0 => ThemeMode.dark,
+      1 => ThemeMode.light,
+      _ => ThemeMode.system,
+    };
+
+    // Determine effective brightness
+    final isDark = themeMode == ThemeMode.dark ||
+        (themeMode == ThemeMode.system &&
+            View.of(context).platformDispatcher.platformBrightness == Brightness.dark);
+    final preset = isDark ? ThemePreset.dark : ThemePreset.light;
+
     return MaterialApp(
       title: "\u041F\u0430\u0442\u0435\u0444\u043E\u043D",
       debugShowCheckedModeBanner: false,
-      theme: RetroTheme.forPreset(themeIndex),
+      theme: RetroTheme.lightTheme,
+      darkTheme: RetroTheme.darkTheme,
+      themeMode: themeMode,
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
@@ -38,12 +53,13 @@ class AudioPlayerX64App extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      // CRITICAL: wrap in Preset so all children can access theme colors
-      // via Preset.of(context).accent, .brass, etc.
-      home: Preset(
-        preset: preset,
-        child: const PermissionGate(child: _Shell()),
-      ),
+      builder: (context, child) {
+        // Re-evaluate brightness in case system changed
+        final brightness = Theme.of(context).brightness;
+        final p = brightness == Brightness.dark ? ThemePreset.dark : ThemePreset.light;
+        return Preset(preset: p, child: child!);
+      },
+      home: const PermissionGate(child: _Shell()),
     );
   }
 }
@@ -71,11 +87,14 @@ class _ShellState extends ConsumerState<_Shell> {
     AudiobooksScreen(), AboutScreen(),
   ];
 
+  static const _themeModeNames = ['Тёмная', 'Светлая', 'Системная'];
+  static const _themeModeIcons = [Icons.dark_mode, Icons.light_mode, Icons.brightness_auto];
+
   void _cycleTheme() {
-    final current = ref.read(themeIndexProvider);
-    final next = (current + 1) % ThemePreset.all.length;
-    ref.read(themeIndexProvider.notifier).state = next;
-    ref.read(sharedPreferencesProvider).setInt('pathephon.theme', next);
+    final current = ref.read(themeModeProvider);
+    final next = (current + 1) % 3;
+    ref.read(themeModeProvider.notifier).state = next;
+    ref.read(sharedPreferencesProvider).setInt('pathephon.theme_mode', next);
   }
 
   Future<void> _handleBack() async {
@@ -101,6 +120,7 @@ class _ShellState extends ConsumerState<_Shell> {
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
     final p = Preset.of(context);
+    final themeModeIdx = ref.watch(themeModeProvider);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleBack(); },
@@ -116,8 +136,8 @@ class _ShellState extends ConsumerState<_Shell> {
                 shape: BoxShape.circle,
               ),
               child: IconButton(
-                icon: Icon(Icons.palette, color: p.accent, size: 20),
-                tooltip: p.name,
+                icon: Icon(_themeModeIcons[themeModeIdx], color: p.accent, size: 20),
+                tooltip: _themeModeNames[themeModeIdx],
                 onPressed: _cycleTheme,
                 iconSize: 20,
                 padding: const EdgeInsets.all(8),

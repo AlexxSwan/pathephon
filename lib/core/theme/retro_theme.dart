@@ -1,12 +1,12 @@
 // ============================================================================
-//  retro_theme.dart — Material 3 ThemeData + ThemePresetScope
-//  3 presets: Amber (0), Ocean (1), Forest (2)
+//  retro_theme.dart — Dark + Light themes with ThemePresetScope
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'tube_colors.dart';
 
+/// Color preset for one brightness mode (dark or light).
 class ThemePreset {
   final String name;
   final Color accent, accentHot, accentCool, brass, brassDark;
@@ -23,8 +23,9 @@ class ThemePreset {
     required this.filament,
   });
 
-  static const amber = ThemePreset(
-    name: 'Янтарь',
+  /// Dark theme: amber on near-black (OLED-friendly).
+  static const dark = ThemePreset(
+    name: 'Тёмная',
     accent: Color(0xFFFFB347), accentHot: Color(0xFFFF7A00), accentCool: Color(0xFFB0611F),
     brass: Color(0xFFB08D57), brassDark: Color(0xFF6E5430),
     background: Color(0xFF0E0B08), surface: Color(0xFF181310), surfaceVariant: Color(0xFF221911),
@@ -33,37 +34,28 @@ class ThemePreset {
     filament: Color(0xFFFFE5B4),
   );
 
-  static const ocean = ThemePreset(
-    name: 'Океан',
-    accent: Color(0xFF4FC3F7), accentHot: Color(0xFF0288D1), accentCool: Color(0xFF01579B),
-    brass: Color(0xFF4A90A4), brassDark: Color(0xFF2A5060),
-    background: Color(0xFF060A0E), surface: Color(0xFF0C1419), surfaceVariant: Color(0xFF102028),
-    outline: Color(0xFF1A2A35),
-    textPrimary: Color(0xFFB3E5FC), textSecondary: Color(0xFF7AB8D4), textMuted: Color(0xFF3A6080),
-    filament: Color(0xFFB3E5FC),
+  /// Light theme: amber on cream paper (vintage radio look).
+  static const light = ThemePreset(
+    name: 'Светлая',
+    accent: Color(0xFFD97706), accentHot: Color(0xFFB45309), accentCool: Color(0xFF92400E),
+    brass: Color(0xFF92400E), brassDark: Color(0xFF6B2810),
+    background: Color(0xFFF5F0E8), surface: Color(0xFFFAF6F0), surfaceVariant: Color(0xFFEDE5D8),
+    outline: Color(0xFFD6CBB8),
+    textPrimary: Color(0xFF2E1F12), textSecondary: Color(0xFF6B5A45), textMuted: Color(0xFF9A8B76),
+    filament: Color(0xFF4A3520),
   );
 
-  static const forest = ThemePreset(
-    name: 'Лес',
-    accent: Color(0xFF66BB6A), accentHot: Color(0xFF2E7D32), accentCool: Color(0xFF1B5E20),
-    brass: Color(0xFF558B5A), brassDark: Color(0xFF2E5032),
-    background: Color(0xFF060A06), surface: Color(0xFF0C130C), surfaceVariant: Color(0xFF101A10),
-    outline: Color(0xFF1A2A1A),
-    textPrimary: Color(0xFFC8E6C9), textSecondary: Color(0xFF81C784), textMuted: Color(0xFF3A6040),
-    filament: Color(0xFFC8E6C9),
-  );
-
-  static const all = [amber, ocean, forest];
+  static ThemePreset forBrightness(Brightness b) =>
+      b == Brightness.dark ? dark : light;
 }
 
-/// InheritedWidget that provides the current ThemePreset to all descendants.
-/// Use `Preset.of(context)` to get the current preset's colors.
+/// InheritedWidget that provides the current ThemePreset.
 class Preset extends InheritedWidget {
   final ThemePreset preset;
   const Preset({super.key, required this.preset, required super.child});
 
   static ThemePreset of(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<Preset>()?.preset ?? ThemePreset.amber;
+    return context.dependOnInheritedWidgetOfExactType<Preset>()?.preset ?? ThemePreset.dark;
   }
 
   @override
@@ -72,30 +64,34 @@ class Preset extends InheritedWidget {
 
 class RetroTheme {
   RetroTheme._();
-  static ThemeData forPreset(int index) {
-    final p = ThemePreset.all[index.clamp(0, ThemePreset.all.length - 1)];
-    return _build(p);
-  }
-  static ThemeData get dark => forPreset(0);
 
-  static ThemeData _build(ThemePreset p) {
-    final colorScheme = const ColorScheme.dark().copyWith(
-      primary: p.accent, onPrimary: p.background,
-      secondary: p.brass, onSecondary: p.background,
+  static ThemeData darkTheme = _build(ThemePreset.dark, Brightness.dark);
+  static ThemeData lightTheme = _build(ThemePreset.light, Brightness.light);
+
+  static ThemeData _build(ThemePreset p, Brightness brightness) {
+    final colorScheme = (brightness == Brightness.dark
+            ? const ColorScheme.dark()
+            : const ColorScheme.light())
+        .copyWith(
+      primary: p.accent, onPrimary: brightness == Brightness.dark ? p.background : Colors.white,
+      secondary: p.brass, onSecondary: Colors.white,
       tertiary: TubeColors.phosphorGreen, onTertiary: p.background,
       surface: p.surface, onSurface: p.textPrimary,
       surfaceContainerHighest: p.surfaceVariant, onSurfaceVariant: p.textSecondary,
       outline: p.outline, outlineVariant: p.brassDark,
-      error: TubeColors.phosphorRed, onError: p.background, scrim: Colors.black,
+      error: TubeColors.phosphorRed, onError: Colors.white, scrim: Colors.black,
     );
+
     final base = ThemeData(
-      useMaterial3: true, brightness: Brightness.dark, colorScheme: colorScheme,
+      useMaterial3: true, brightness: brightness, colorScheme: colorScheme,
       scaffoldBackgroundColor: p.background, canvasColor: p.background,
       splashFactory: InkSparkle.splashFactory, visualDensity: VisualDensity.standard,
     );
+
     final vt = GoogleFonts.vt323();
     final stm = GoogleFonts.shareTechMono();
     final crimson = GoogleFonts.crimsonPro();
+
     return base.copyWith(
       textTheme: base.textTheme.copyWith(
         displayLarge: vt.copyWith(fontSize: 64, color: p.textPrimary, letterSpacing: 1.2),
@@ -115,7 +111,7 @@ class RetroTheme {
         labelSmall: stm.copyWith(fontSize: 11, fontWeight: FontWeight.w500, letterSpacing: 0.6),
       ),
       filledButtonTheme: FilledButtonThemeData(style: FilledButton.styleFrom(
-        backgroundColor: p.accent, foregroundColor: p.background,
+        backgroundColor: p.accent, foregroundColor: brightness == Brightness.dark ? p.background : Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
         shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
       )),
@@ -144,7 +140,7 @@ class RetroTheme {
         labelTextStyle: WidgetStatePropertyAll(stm.copyWith(fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.5)),
         iconTheme: WidgetStateProperty.resolveWith((states) {
           final selected = states.contains(WidgetState.selected);
-          return IconThemeData(color: selected ? p.background : p.accent, size: 24);
+          return IconThemeData(color: selected ? (brightness == Brightness.dark ? p.background : Colors.white) : p.accent, size: 24);
         }),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -160,6 +156,7 @@ class RetroTheme {
       ),
     );
   }
+
   static void setAmbientColor(Color? color) { TubeColors.ambientOverride = color; }
 }
 

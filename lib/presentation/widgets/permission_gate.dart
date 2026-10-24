@@ -1,11 +1,9 @@
 // ============================================================================
 //  permission_gate.dart - one-time permission request screen
 //
-//  Logic:
-//   - If "pathephon.permissions.granted" flag is true in SharedPreferences,
-//     skip the gate entirely (user already granted before).
-//   - Otherwise check actual permission statuses. If both granted, set flag
-//     and skip. If not, show the request screen.
+//  Requests: audio + photos + notification
+//  Notification is REQUIRED on Android 13+ for audio_service to show
+//  lock screen widget and notification controls.
 // ============================================================================
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/material.dart';
@@ -26,6 +24,7 @@ class PermissionGate extends ConsumerStatefulWidget {
 class _PermissionGateState extends ConsumerState<PermissionGate> {
   bool? _audioGranted;
   bool? _imagesGranted;
+  bool? _notifGranted;
   bool _checking = true;
 
   @override
@@ -39,29 +38,25 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
     final flagGranted = prefs.getBool('pathephon.permissions.granted') ?? false;
     debugPrint('[pathephon] PermissionGate: flagGranted=$flagGranted');
 
-    if (flagGranted) {
-      // Verify the actual permissions are still granted (user may have revoked).
-      final audio = await Permission.audio.status;
-      final photos = await Permission.photos.status;
-      debugPrint('[pathephon] PermissionGate: actual audio=$audio, photos=$photos');
-      if (audio.isGranted && photos.isGranted) {
-        setState(() {
-          _audioGranted = true;
-          _imagesGranted = true;
-          _checking = false;
-        });
-        return;
-      }
-      // Permissions revoked by user — clear the flag and show the gate.
-      await prefs.setBool('pathephon.permissions.granted', false);
-    }
-
     final audio = await Permission.audio.status;
     final photos = await Permission.photos.status;
-    debugPrint('[pathephon] PermissionGate: actual audio=$audio, photos=$photos');
+    final notif = await Permission.notification.status;
+    debugPrint('[pathephon] PermissionGate: audio=$audio, photos=$photos, notif=$notif');
+
+    if (flagGranted && audio.isGranted && photos.isGranted && notif.isGranted) {
+      setState(() {
+        _audioGranted = true;
+        _imagesGranted = true;
+        _notifGranted = true;
+        _checking = false;
+      });
+      return;
+    }
+
     setState(() {
       _audioGranted = audio.isGranted;
       _imagesGranted = photos.isGranted;
+      _notifGranted = notif.isGranted;
       _checking = false;
     });
   }
@@ -70,17 +65,18 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
     setState(() => _checking = true);
     final audio = await Permission.audio.request();
     final photos = await Permission.photos.request();
-    debugPrint('[pathephon] PermissionGate: requested audio=$audio, photos=$photos');
+    final notif = await Permission.notification.request();
+    debugPrint('[pathephon] PermissionGate: requested audio=$audio, photos=$photos, notif=$notif');
 
     final prefs = ref.read(sharedPreferencesProvider);
-    final allGranted = audio.isGranted && photos.isGranted;
+    final allGranted = audio.isGranted && photos.isGranted && notif.isGranted;
     if (allGranted) {
       await prefs.setBool('pathephon.permissions.granted', true);
-      debugPrint('[pathephon] PermissionGate: flag saved');
     }
     setState(() {
       _audioGranted = audio.isGranted;
       _imagesGranted = photos.isGranted;
+      _notifGranted = notif.isGranted;
       _checking = false;
     });
   }
@@ -91,6 +87,7 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
     setState(() {
       _audioGranted = true;
       _imagesGranted = true;
+      _notifGranted = true;
     });
   }
 
@@ -103,7 +100,7 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
       );
     }
 
-    final allOk = _audioGranted == true && _imagesGranted == true;
+    final allOk = _audioGranted == true && _imagesGranted == true && _notifGranted == true;
     if (allOk) {
       return widget.child;
     }
@@ -133,15 +130,22 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
               _PermissionRow(
                 icon: Icons.library_music,
                 title: "\u0410\u0443\u0434\u0438\u043E\u0444\u0430\u0439\u043B\u044B",
-                desc: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0443\u0437\u044B\u043A\u0435 \u043D\u0430 \u0443\u0441\u0442\u0440\u043E\u0439\u0441\u0442\u0432\u0435",
+                desc: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043C\u0443\u0437\u044B\u043A\u0435",
                 granted: _audioGranted == true,
               ),
               const SizedBox(height: 12),
               _PermissionRow(
                 icon: Icons.image,
                 title: "\u0418\u0437\u043E\u0431\u0440\u0430\u0436\u0435\u043D\u0438\u044F",
-                desc: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043E\u0431\u043B\u043E\u0436\u043A\u0430\u043C \u0430\u043B\u044C\u0431\u043E\u043C\u043E\u0432",
+                desc: "\u0414\u043E\u0441\u0442\u0443\u043F \u043A \u043E\u0431\u043B\u043E\u0436\u043A\u0430\u043C",
                 granted: _imagesGranted == true,
+              ),
+              const SizedBox(height: 12),
+              _PermissionRow(
+                icon: Icons.notifications,
+                title: "\u0423\u0432\u0435\u0434\u043E\u043C\u043B\u0435\u043D\u0438\u044F",
+                desc: "\u0423\u043F\u0440\u0430\u0432\u043B\u0435\u043D\u0438\u0435 \u043D\u0430 \u044D\u043A\u0440\u0430\u043D\u0435 \u0431\u043B\u043E\u043A\u0438\u0440\u043E\u0432\u043A\u0438",
+                granted: _notifGranted == true,
               ),
               const SizedBox(height: 32),
               SizedBox(
@@ -165,7 +169,7 @@ class _PermissionGateState extends ConsumerState<PermissionGate> {
                 onPressed: () => openAppSettings(),
                 icon: const Icon(Icons.settings, color: TubeColors.brass),
                 label: const Text(
-                  "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F",
+                  "\u041E\u0442\u043A\u0440\u044B\u0442\u044C \u043D\u0430\u0441\u0442\u0440\u043E\u0439\u043A\u0438",
                   style: TextStyle(color: TubeColors.brass),
                 ),
               ),

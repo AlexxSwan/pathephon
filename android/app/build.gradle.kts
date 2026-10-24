@@ -18,10 +18,11 @@ android {
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // arm64-v8a (modern phones) + x86_64 (emulators/tablets) ONLY.
-        // --split-per-abi in CI generates one APK per ABI from this filter.
+        // arm64-v8a ONLY - modern phones. No x86, no armeabi-v7a.
+        // Combined with --target-platform android-arm64 in CI,
+        // this produces a compact ~20-25MB APK.
         ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
     }
 

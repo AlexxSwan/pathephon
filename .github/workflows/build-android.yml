@@ -61,10 +61,8 @@ jobs:
         run: |
           if [ -n "$KEYSTORE_BASE64" ]; then
             echo "has_keystore=true" >> $GITHUB_OUTPUT
-            echo "Keystore secret is set"
           else
             echo "has_keystore=false" >> $GITHUB_OUTPUT
-            echo "Keystore secret is EMPTY"
           fi
 
       - name: Decode keystore from secrets
@@ -74,7 +72,6 @@ jobs:
         run: |
           echo "$KEYSTORE_BASE64" | base64 --decode > android/app/upload-keystore.jks
           ls -lh android/app/upload-keystore.jks
-          file android/app/upload-keystore.jks
 
       - name: Create key.properties
         if: steps.check_keystore.outputs.has_keystore == 'true'
@@ -91,89 +88,90 @@ jobs:
           PROP
 
       # ============================================================
-      # KEY: --split-per-abi generates separate APKs per architecture.
+      # Build arm64-only APK. --target-platform android-arm64
+      # restricts native libs to arm64-v8a only (~20-25MB).
       # continue-on-error: true because Flutter 3.47.7 has a file
-      # watcher bug ("Already watching path") that throws an exception
-      # AFTER the APKs are already built. The build succeeds, but
-      # flutter tool fails to report the APK paths.
-      # We find the APKs ourselves in the next step.
+      # watcher bug that throws AFTER the APK is built.
       # ============================================================
-      - name: Build release APK (split per ABI)
+      - name: Build release APK (arm64 only)
         if: steps.check_keystore.outputs.has_keystore == 'true'
         continue-on-error: true
-        run: flutter build apk --release --no-tree-shake-icons --split-per-abi
+        run: flutter build apk --release --no-tree-shake-icons --target-platform android-arm64 2>&1 | tee build.log || true
 
-      - name: Build debug APK (split per ABI fallback)
+      - name: Build debug APK fallback
         if: steps.check_keystore.outputs.has_keystore == 'false'
         continue-on-error: true
-        run: flutter build apk --debug --no-tree-shake-icons --split-per-abi
+        run: flutter build apk --debug --no-tree-shake-icons --target-platform android-arm64 2>&1 | tee build.log || true
 
-      - name: Find and copy APKs
+      # ============================================================
+      # Search EVERYWHERE for ANY .apk file. Copy to standard path.
+      # ============================================================
+      - name: Find and copy APK
         run: |
-          echo "=== All APK files ==="
-          find . -name "*.apk" -exec ls -lh {} \; 2>/dev/null || echo "(none)"
+          echo "=== Searching for APK files everywhere ==="
+          find / -name "*.apk" -not -path "*/\.git/*" 2>/dev/null || echo "(none found anywhere)"
+
+          echo ""
+          echo "=== build/ directory tree ==="
+          find build -type f -name "*.apk" 2>/dev/null || echo "(none in build/)"
+
+          echo ""
+          echo "=== flutter-apk dir ==="
+          ls -lh build/app/outputs/flutter-apk/ 2>/dev/null || echo "(flutter-apk dir missing)"
+
+          echo ""
+          echo "=== apk/release dir ==="
+          ls -lh build/app/outputs/apk/release/ 2>/dev/null || echo "(apk/release dir missing)"
+
           mkdir -p build/app/outputs/flutter-apk/
 
-          # arm64-v8a
-          ARM64=""
+          # Try standard locations
+          APK=""
           for candidate in \
-            "build/app/outputs/flutter-apk/app-arm64-v8a-release.apk" \
-            "build/app/outputs/flutter-apk/app-arm64-v8a-debug.apk" \
-            "build/app/outputs/apk/release/app-arm64-v8a-release.apk" \
-            "build/app/outputs/apk/debug/app-arm64-v8a-debug.apk"; do
+            "build/app/outputs/flutter-apk/app-release.apk" \
+            "build/app/outputs/flutter-apk/app-debug.apk" \
+            "build/app/outputs/apk/release/app-release.apk" \
+            "build/app/outputs/apk/debug/app-debug.apk"; do
             if [ -f "$candidate" ]; then
-              ARM64="$candidate"
+              APK="$candidate"
+              echo "Found at: $candidate"
               break
             fi
           done
-          if [ -z "$ARM64" ]; then
-            ARM64=$(find . -name "app-arm64-v8a-*.apk" 2>/dev/null | head -1)
-          fi
-          if [ -n "$ARM64" ]; then
-            cp "$ARM64" build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            echo "Copied arm64: $ARM64"
-          fi
 
-          # x86_64
-          X64=""
-          for candidate in \
-            "build/app/outputs/flutter-apk/app-x86_64-release.apk" \
-            "build/app/outputs/flutter-apk/app-x86_64-debug.apk" \
-            "build/app/outputs/apk/release/app-x86_64-release.apk" \
-            "build/app/outputs/apk/debug/app-x86_64-debug.apk"; do
-            if [ -f "$candidate" ]; then
-              X64="$candidate"
-              break
+          # Last resort: find ANY apk
+          if [ -z "$APK" ]; then
+            APK=$(find / -name "app-release.apk" -o -name "app-debug.apk" 2>/dev/null | head -1)
+            if [ -n "$APK" ]; then
+              echo "Found via global search: $APK"
             fi
-          done
-          if [ -z "$X64" ]; then
-            X64=$(find . -name "app-x86_64-*.apk" 2>/dev/null | head -1)
-          fi
-          if [ -n "$X64" ]; then
-            cp "$X64" build/app/outputs/flutter-apk/app-x86_64-release.apk
-            echo "Copied x86_64: $X64"
           fi
 
-          if [ -z "$ARM64" ] && [ -z "$X64" ]; then
-            echo "FATAL: No split APKs found"
+          if [ -z "$APK" ]; then
+            APK=$(find / -name "*.apk" -not -path "*/\.git/*" 2>/dev/null | head -1)
+            if [ -n "$APK" ]; then
+              echo "Found via wildcard search: $APK"
+            fi
+          fi
+
+          if [ -z "$APK" ]; then
+            echo "FATAL: No APK found anywhere on the filesystem"
+            echo "=== Last 50 lines of build.log ==="
+            tail -50 build.log 2>/dev/null || echo "(no build.log)"
             exit 1
           fi
 
-      - name: Upload arm64 APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Pathephon-arm64-v8a
-          path: build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-          retention-days: 30
-          if-no-files-found: warn
+          cp "$APK" build/app/outputs/flutter-apk/app-release.apk
+          echo "Copied: $APK -> build/app/outputs/flutter-apk/app-release.apk"
+          ls -lh build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Upload x86_64 APK artifact
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Pathephon-x86_64
-          path: build/app/outputs/flutter-apk/app-x86_64-release.apk
+          name: Pathephon-arm64
+          path: build/app/outputs/flutter-apk/app-release.apk
           retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') && steps.check_keystore.outputs.has_keystore == 'true'
@@ -182,5 +180,4 @@ jobs:
           name: Pathephon ${{ github.ref_name }}
           generate_release_notes: true
           files: |
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-x86_64-release.apk
+            build/app/outputs/flutter-apk/app-release.apk

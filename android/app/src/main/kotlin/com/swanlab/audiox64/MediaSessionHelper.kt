@@ -8,21 +8,20 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
-import android.content.pm.PackageManager
-import android.media.session.MediaSession
-import android.media.session.PlaybackState
+import android.media.MediaMetadata
 import android.os.Build
+import android.support.v4.media.MediaMetadataCompat
+import android.support.v4.media.session.MediaSessionCompat
+import android.support.v4.media.session.PlaybackStateCompat
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.media.app.NotificationCompat.MediaStyle
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel
 
 /// Native MediaSession + notification for lock screen controls.
-///
-/// Creates a MediaSession, updates metadata + playback state, shows a
-/// notification with transport controls, and handles media button events
-/// (headset, Bluetooth, lock screen).
+/// Uses MediaSessionCompat (androidx) for full compatibility with MediaStyle.
 class MediaSessionHelper(
     binaryMessenger: BinaryMessenger,
     private val context: Context
@@ -31,7 +30,7 @@ class MediaSessionHelper(
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/media_session/events")
     private var eventSink: EventChannel.EventSink? = null
 
-    private var mediaSession: MediaSession? = null
+    private var mediaSession: MediaSessionCompat? = null
     private var notificationManager: NotificationManager? = null
     private var isRegistered = false
 
@@ -48,10 +47,7 @@ class MediaSessionHelper(
     init {
         methodChannel.setMethodCallHandler { call, result ->
             when (call.method) {
-                "start" -> {
-                    startSession()
-                    result.success(true)
-                }
+                "start" -> { startSession(); result.success(true) }
                 "updateMetadata" -> {
                     val title = call.argument<String>("title") ?: ""
                     val artist = call.argument<String>("artist") ?: ""
@@ -66,36 +62,24 @@ class MediaSessionHelper(
                     updatePlaybackState(state, positionMs)
                     result.success(null)
                 }
-                "stop" -> {
-                    stopSession()
-                    result.success(null)
-                }
+                "stop" -> { stopSession(); result.success(null) }
                 else -> result.notImplemented()
             }
         }
 
         eventChannel.setStreamHandler(object : EventChannel.StreamHandler {
-            override fun onListen(arguments: Any?, sink: EventChannel.EventSink) {
-                eventSink = sink
-            }
-            override fun onCancel(arguments: Any?) {
-                eventSink = null
-            }
+            override fun onListen(arguments: Any?, sink: EventChannel.EventSink) { eventSink = sink }
+            override fun onCancel(arguments: Any?) { eventSink = null }
         })
     }
 
     private fun startSession() {
         try {
-            // Create notification channel (required Android 8+)
             if (notificationManager == null) {
                 notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(
-                    CHANNEL_ID,
-                    "Pathephon Playback",
-                    NotificationManager.IMPORTANCE_LOW
-                ).apply {
+                val channel = NotificationChannel(CHANNEL_ID, "Pathephon Playback", NotificationManager.IMPORTANCE_LOW).apply {
                     description = "Media playback controls"
                     setShowBadge(false)
                     lockscreenVisibility = Notification.VISIBILITY_PUBLIC
@@ -103,58 +87,32 @@ class MediaSessionHelper(
                 notificationManager?.createNotificationChannel(channel)
             }
 
-            // Create MediaSession
-            mediaSession = MediaSession(context, "Pathephon").apply {
-                setFlags(
-                    MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
-                    MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
-                )
-
-                // Handle transport callbacks from headset/Bluetooth/lock screen
-                setCallback(object : MediaSession.Callback() {
-                    override fun onPlay() {
-                        Log.i("MediaSession", "onPlay (from headset/lockscreen)")
-                        eventSink?.success("play")
-                    }
-                    override fun onPause() {
-                        Log.i("MediaSession", "onPause (from headset/lockscreen)")
-                        eventSink?.success("pause")
-                    }
-                    override fun onSkipToNext() {
-                        Log.i("MediaSession", "onSkipToNext")
-                        eventSink?.success("next")
-                    }
-                    override fun onSkipToPrevious() {
-                        Log.i("MediaSession", "onSkipToPrevious")
-                        eventSink?.success("prev")
-                    }
-                    override fun onStop() {
-                        Log.i("MediaSession", "onStop")
-                        eventSink?.success("stop")
-                    }
-                    override fun onSeekTo(pos: Long) {
-                        Log.i("MediaSession", "onSeekTo $pos")
-                        eventSink?.success("seek:$pos")
-                    }
+            // Use MediaSessionCompat (androidx) — required by MediaStyle
+            val sessionIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+            val pi = PendingIntent.getActivity(context, 0, sessionIntent, PendingIntent.FLAG_IMMUTABLE)
+            mediaSession = MediaSessionCompat(context, "Pathephon", null, pi).apply {
+                setFlags(MediaSessionCompat.FLAG_HANDLES_MEDIA_BUTTONS or MediaSessionCompat.FLAG_HANDLES_TRANSPORT_CONTROLS)
+                setCallback(object : MediaSessionCompat.Callback() {
+                    override fun onPlay() { Log.i("MediaSession", "onPlay"); eventSink?.success("play") }
+                    override fun onPause() { Log.i("MediaSession", "onPause"); eventSink?.success("pause") }
+                    override fun onSkipToNext() { Log.i("MediaSession", "onSkipToNext"); eventSink?.success("next") }
+                    override fun onSkipToPrevious() { Log.i("MediaSession", "onSkipToPrevious"); eventSink?.success("prev") }
+                    override fun onStop() { Log.i("MediaSession", "onStop"); eventSink?.success("stop") }
+                    override fun onSeekTo(pos: Long) { Log.i("MediaSession", "onSeekTo $pos"); eventSink?.success("seek:$pos") }
                 })
-
                 isActive = true
             }
 
-            // Register broadcast receiver for media button actions
             if (!isRegistered) {
                 val filter = IntentFilter().apply {
-                    addAction(ACTION_PLAY)
-                    addAction(ACTION_PAUSE)
-                    addAction(ACTION_NEXT)
-                    addAction(ACTION_PREV)
-                    addAction(ACTION_STOP)
+                    addAction(ACTION_PLAY); addAction(ACTION_PAUSE)
+                    addAction(ACTION_NEXT); addAction(ACTION_PREV); addAction(ACTION_STOP)
                 }
                 context.registerReceiver(mediaButtonReceiver, filter)
                 isRegistered = true
             }
 
-            Log.i("MediaSession", "Session started successfully")
+            Log.i("MediaSession", "Session started successfully (MediaSessionCompat)")
         } catch (e: Exception) {
             Log.e("MediaSession", "startSession failed: ${e.message}", e)
         }
@@ -162,11 +120,11 @@ class MediaSessionHelper(
 
     private fun updateMetadata(title: String, artist: String, album: String, durationMs: Long) {
         try {
-            val metadata = android.media.MediaMetadata.Builder()
-                .putString(android.media.MediaMetadata.METADATA_KEY_TITLE, title)
-                .putString(android.media.MediaMetadata.METADATA_KEY_ARTIST, artist)
-                .putString(android.media.MediaMetadata.METADATA_KEY_ALBUM, album)
-                .putLong(android.media.MediaMetadata.METADATA_KEY_DURATION, durationMs)
+            val metadata = MediaMetadataCompat.Builder()
+                .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
+                .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
+                .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+                .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationMs)
                 .build()
             mediaSession?.setMetadata(metadata)
             Log.i("MediaSession", "Metadata updated: $title - $artist")
@@ -177,88 +135,57 @@ class MediaSessionHelper(
 
     private fun updatePlaybackState(state: String, positionMs: Long) {
         try {
-            val playbackState = when (state) {
-                "playing" -> PlaybackState.Builder()
-                    .setState(PlaybackState.STATE_PLAYING, positionMs, 1.0f)
-                    .setActions(
-                        PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
-                        PlaybackState.ACTION_PLAY_PAUSE or
-                        PlaybackState.ACTION_SKIP_TO_NEXT or
-                        PlaybackState.ACTION_SKIP_TO_PREVIOUS or
-                        PlaybackState.ACTION_STOP or
-                        PlaybackState.ACTION_SEEK_TO
-                    )
-                "paused" -> PlaybackState.Builder()
-                    .setState(PlaybackState.STATE_PAUSED, positionMs, 1.0f)
-                    .setActions(
-                        PlaybackState.ACTION_PLAY or PlaybackState.ACTION_PAUSE or
-                        PlaybackState.ACTION_PLAY_PAUSE or
-                        PlaybackState.ACTION_SKIP_TO_NEXT or
-                        PlaybackState.ACTION_SKIP_TO_PREVIOUS or
-                        PlaybackState.ACTION_STOP or
-                        PlaybackState.ACTION_SEEK_TO
-                    )
-                else -> PlaybackState.Builder()
-                    .setState(PlaybackState.STATE_STOPPED, positionMs, 1.0f)
-                    .setActions(0L)
+            val actions = PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or
+                PlaybackStateCompat.ACTION_PLAY_PAUSE or PlaybackStateCompat.ACTION_SKIP_TO_NEXT or
+                PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or PlaybackStateCompat.ACTION_STOP or
+                PlaybackStateCompat.ACTION_SEEK_TO
+
+            val pbState = when (state) {
+                "playing" -> PlaybackStateCompat.STATE_PLAYING
+                "paused" -> PlaybackStateCompat.STATE_PAUSED
+                else -> PlaybackStateCompat.STATE_STOPPED
             }
-            mediaSession?.setPlaybackState(playbackState.build())
-            showNotification(state, positionMs)
+
+            val playbackState = PlaybackStateCompat.Builder()
+                .setState(pbState, positionMs, 1.0f)
+                .setActions(actions)
+                .build()
+            mediaSession?.setPlaybackState(playbackState)
+            showNotification(state)
             Log.i("MediaSession", "PlaybackState updated: $state, pos=$positionMs")
         } catch (e: Exception) {
             Log.e("MediaSession", "updatePlaybackState failed: ${e.message}", e)
         }
     }
 
-    private fun showNotification(state: String, positionMs: Long) {
+    private fun showNotification(state: String) {
         try {
             val isPlaying = state == "playing"
-
-            // Build notification with media controls
             val builder = NotificationCompat.Builder(context, CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentTitle("Pathephon")
-                .setContentText("Playing")
                 .setOngoing(true)
                 .setShowWhen(false)
                 .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
                 .setOnlyAlertOnce(true)
 
-            // Add transport control actions
-            builder.addAction(
-                android.R.drawable.ic_media_previous,
-                "Previous",
-                createPendingIntent(ACTION_PREV, 1)
-            )
+            builder.addAction(android.R.drawable.ic_media_previous, "Previous", createPendingIntent(ACTION_PREV, 1))
 
             if (isPlaying) {
-                builder.addAction(
-                    android.R.drawable.ic_media_pause,
-                    "Pause",
-                    createPendingIntent(ACTION_PAUSE, 2)
-                )
+                builder.addAction(android.R.drawable.ic_media_pause, "Pause", createPendingIntent(ACTION_PAUSE, 2))
                 builder.setContentText("Now Playing")
             } else {
-                builder.addAction(
-                    android.R.drawable.ic_media_play,
-                    "Play",
-                    createPendingIntent(ACTION_PLAY, 3)
-                )
+                builder.addAction(android.R.drawable.ic_media_play, "Play", createPendingIntent(ACTION_PLAY, 3))
                 builder.setContentText("Paused")
             }
 
-            builder.addAction(
-                android.R.drawable.ic_media_next,
-                "Next",
-                createPendingIntent(ACTION_NEXT, 4)
-            )
+            builder.addAction(android.R.drawable.ic_media_next, "Next", createPendingIntent(ACTION_NEXT, 4))
 
-            // Link to MediaSession
-            val token = mediaSession?.sessionToken
-            if (token != null) {
+            // MediaStyle — links notification to MediaSession
+            mediaSession?.let { session ->
                 builder.setStyle(
-                    androidx.media.app.NotificationCompat.MediaStyle()
-                        .setMediaSession(token)
+                    MediaStyle()
+                        .setMediaSession(session.sessionToken)
                         .setShowActionsInCompactView(0, 1, 2)
                 )
             }

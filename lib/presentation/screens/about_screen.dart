@@ -15,7 +15,7 @@ class AboutScreen extends ConsumerWidget {
         const SizedBox(height: 24),
         Text("\u041F\u0430\u0442\u0435\u0444\u043E\u043D", style: Theme.of(context).textTheme.displaySmall),
         const SizedBox(height: 8),
-        Text("\u0412\u0435\u0440\u0441\u0438\u044F: 0.9.0 (82)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: preset.textSecondary)),
+        Text("\u0412\u0435\u0440\u0441\u0438\u044F: 0.9.1 (83)", style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: preset.textSecondary)),
         const SizedBox(height: 8),
         Text("\u0422\u0435\u043C\u0430: ${preset.name}", style: Theme.of(context).textTheme.bodySmall?.copyWith(color: preset.textMuted)),
         const SizedBox(height: 24),

@@ -7,9 +7,11 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.BinaryMessenger
 import io.flutter.plugin.common.EventChannel.EventSink
 
-/// Native Android Visualizer bridge - PEAK PROGRAM METER mode.
-/// Captures waveform, returns peak amplitude (max abs deviation from center)
-/// normalized to 0..1. PPM uses peak (not RMS) for fast transient response.
+/// Native Android Visualizer bridge - PPM peak detection.
+/// Returns peak in dBFS (decibels relative to full scale):
+///   0 dBFS  = full scale (digital max)
+///   -60 dBFS = silence
+/// The Dart side maps dBFS to the PPM needle position.
 class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
     private val methodChannel = MethodChannel(binaryMessenger, "pathephon/visualizer")
     private val eventChannel = EventChannel(binaryMessenger, "pathephon/visualizer/events")
@@ -66,17 +68,28 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                 if (waveform == null || eventSink == null) return
                 val n = waveform.size
                 if (n < 2) return
-                // PEAK: max absolute deviation from center (128).
-                // PPM tracks peaks, not average power (RMS).
+
+                // Peak: max absolute deviation from center (128).
                 var maxAbs = 0
                 for (i in 0 until n) {
                     val sample = (waveform[i].toInt() and 0xFF) - 128
                     val abs = if (sample < 0) -sample else sample
                     if (abs > maxAbs) maxAbs = abs
                 }
-                // Normalize: 128 = full scale -> 1.0
-                val peak = (maxAbs.toDouble() / 128.0).coerceIn(0.0, 1.0)
-                eventSink?.success(peak)
+
+                // Convert peak (0..128) to dBFS:
+                //   peak/128 = linear amplitude (0..1)
+                //   dBFS = 20 * log10(linear)
+                //   0 dBFS = full scale, -inf = silence
+                val linear = maxAbs.toDouble() / 128.0
+                val dbFs = if (linear <= 0.001) {
+                    -60.0  // floor at -60 dBFS (silence)
+                } else {
+                    20.0 * Math.log10(linear)
+                }
+
+                // Return dBFS as a number (-60..0)
+                eventSink?.success(dbFs)
             }
             override fun onFftDataCapture(viz: Visualizer?, fft: ByteArray?, samplingRate: Int) {}
         }, 20000, true, false)

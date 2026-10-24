@@ -1,19 +1,12 @@
 // ============================================================================
-//  pp_painter.dart - Peak Program Meter dial
+//  pp_painter.dart - Peak Program Meter dial (BBC PPM style)
 //
-//  Classic BBC PPM styling:
-//   - Cream dial face with equidistant marks 1..7
-//   - Mark 4 = "0 dB" reference (center-up)
-//   - Mark 6 = "+6 dB" (yellow)
-//   - Mark 7 = "+9 dB" (red PEAK)
-//   - Black needle pivoting from bottom-center
-//   - Needle has fast attack, slow decay (handled in VisualizerService)
-//
-//  amplitude (0..1) maps linearly to needle position:
-//   0.0 -> mark 1 (leftmost, -28 dB)
-//   0.5 -> mark 4 (center, 0 dB)
-//   0.85 -> mark 6 (+6 dB)
-//   1.0 -> mark 7 (rightmost, +9 dB PEAK)
+//  amplitude is in dBFS (-60..0):
+//    -60 dBFS -> mark 1 (silence)
+//    -18 dBFS -> mark 4 (PPM 0 dB reference)
+//    -6 dBFS  -> mark 6 (+6 dB, yellow)
+//     0 dBFS  -> mark 7 (PEAK, red)
+//  Needle position is LINEAR between these calibration points.
 // ============================================================================
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
@@ -26,8 +19,35 @@ class PPMPainter extends CustomPainter {
     required this.brightness,
   });
 
+  /// Peak level in dBFS (-60..0).
   final double amplitude;
   final double brightness;
+
+  /// Map dBFS to needle position (0..1) across the 7-mark scale.
+  /// Calibration points (BBC PPM standard, mapped to digital dBFS):
+  ///   PPM 1 = -28 dBFS  -> 0.0
+  ///   PPM 4 = -18 dBFS  -> 0.5  (reference, 0 dB)
+  ///   PPM 6 = -6 dBFS   -> 0.83
+  ///   PPM 7 = 0 dBFS    -> 1.0  (PEAK)
+  double _dbToPosition(double db) {
+    if (db <= -60) return 0.0;
+    if (db >= 0) return 1.0;
+    // Linear interpolation between calibration points.
+    // Using a piecewise curve so the needle moves naturally:
+    //   -60..-18 dBFS -> 0..0.5 (silent to reference, half the arc)
+    //   -18..-6 dBFS  -> 0.5..0.83 (reference to +6)
+    //   -6..0 dBFS    -> 0.83..1.0 (+6 to PEAK)
+    if (db <= -18) {
+      // -60..-18 -> 0..0.5
+      return ((db - (-60)) / (-18 - (-60))) * 0.5;
+    } else if (db <= -6) {
+      // -18..-6 -> 0.5..0.83
+      return 0.5 + ((db - (-18)) / (-6 - (-18))) * 0.33;
+    } else {
+      // -6..0 -> 0.83..1.0
+      return 0.83 + ((db - (-6)) / (0 - (-6))) * 0.17;
+    }
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -59,31 +79,31 @@ class PPMPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     canvas.drawCircle(Offset(cx, cy), r - 4, face);
 
-    // ---- Arc zones (PPM standard: green 1-4, yellow 4-6, red 6-7) ------
+    // ---- Arc zones -------------------------------------------------------
     const startAngle = -math.pi * 0.85;
     const sweepAngle = math.pi * 0.70;
     final tickArea = Rect.fromCircle(center: Offset(cx, cy), radius: r - 10);
 
-    // Green zone: marks 1-4 (0% to ~57% of sweep)
+    // Green zone: marks 1-4 (0% to 50% of sweep)
     final greenArc = Paint()
       ..color = TubeColors.phosphorGreen
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4;
-    canvas.drawArc(tickArea, startAngle, sweepAngle * 0.57, false, greenArc);
+    canvas.drawArc(tickArea, startAngle, sweepAngle * 0.5, false, greenArc);
 
-    // Yellow zone: marks 4-6 (~57% to ~85%)
+    // Yellow zone: marks 4-6 (50% to 83%)
     final yellowArc = Paint()
       ..color = const Color(0xFFE8C547)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4;
-    canvas.drawArc(tickArea, startAngle + sweepAngle * 0.57, sweepAngle * 0.28, false, yellowArc);
+    canvas.drawArc(tickArea, startAngle + sweepAngle * 0.5, sweepAngle * 0.33, false, yellowArc);
 
-    // Red zone: marks 6-7 (~85% to 100%)
+    // Red zone: marks 6-7 (83% to 100%)
     final redArc = Paint()
       ..color = TubeColors.phosphorRed
       ..style = PaintingStyle.stroke
       ..strokeWidth = 4;
-    canvas.drawArc(tickArea, startAngle + sweepAngle * 0.85, sweepAngle * 0.15, false, redArc);
+    canvas.drawArc(tickArea, startAngle + sweepAngle * 0.83, sweepAngle * 0.17, false, redArc);
 
     // ---- PPM marks 1..7 with numbers ------------------------------------
     final tickPaint = Paint()
@@ -122,9 +142,8 @@ class PPMPainter extends CustomPainter {
       );
     }
 
-    // ---- Needle ----------------------------------------------------------
-    // LINEAR mapping: amplitude 0..1 -> angle 0..1 across the sweep.
-    final normalized = amplitude.clamp(0.0, 1.0);
+    // ---- Needle (mapped from dBFS) --------------------------------------
+    final normalized = _dbToPosition(amplitude);
     final needleAngle = startAngle + sweepAngle * normalized;
 
     final needleLen = r - 14;
@@ -141,7 +160,7 @@ class PPMPainter extends CustomPainter {
       canvas.drawCircle(tip, 4 + 4 * brightness, halo);
     }
 
-    // Black needle (PPM uses black needle, not colored)
+    // Black needle
     final needlePaint = Paint()
       ..color = const Color(0xFF1A1410)
       ..style = PaintingStyle.stroke

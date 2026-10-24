@@ -1,11 +1,12 @@
 // ============================================================================
-//  visualizer_service.dart - PPM bridge with peak hold + decay
+//  visualizer_service.dart - PPM with proper dB-domain peak hold/decay
 //
-//  PPM behavior:
-//   - Attack: instant (peak caught immediately)
-//   - Hold: 1 second at peak level
-//   - Decay: 12 dB per second (smooth fall after hold)
-//  This produces the characteristic PPM needle movement: fast up, slow down.
+//  Receives peak in dBFS (-60..0) from native Visualizer.
+//  Implements BBC PPM integration:
+//    - Attack: 10ms to reach peak (instant for our 50ms capture rate)
+//    - Hold: 1 second at peak
+//    - Decay: 12 dB per second after hold
+//  Output: stream of double in dBFS, mapped later to needle position.
 // ============================================================================
 import 'dart:async';
 import 'package:flutter/foundation.dart' show debugPrint;
@@ -23,10 +24,9 @@ class VisualizerService {
   bool _permissionGranted = false;
   bool _permissionRequested = false;
 
-  // PPM state
-  double _peak = 0;           // current displayed peak (with decay)
-  double _rawPeak = 0;        // last raw peak from Visualizer
-  DateTime _lastPeakTime = DateTime.fromMillisecondsSinceEpoch(0);
+  // PPM state in dBFS
+  double _peakDb = -60.0;        // current displayed peak (after decay)
+  DateTime _lastPeakTime = DateTime.now();
   Timer? _decayTimer;
 
   Stream<double> get amplitudes => _controller.stream;
@@ -61,41 +61,38 @@ class VisualizerService {
     }
 
     _activeSessionId = sessionId;
-    _peak = 0;
-    _rawPeak = 0;
+    _peakDb = -60.0;
+    _lastPeakTime = DateTime.now();
     try {
       _eventSub ??= _events.receiveBroadcastStream().listen(
         (data) {
           if (data is num) {
-            final rawPeak = data.toDouble();
-            _rawPeak = rawPeak;
-            // Attack: instant. If new peak is higher, jump up immediately.
-            if (rawPeak > _peak) {
-              _peak = rawPeak;
+            final rawDb = data.toDouble().clamp(-60.0, 0.0);
+            // Attack: instant — if new peak is louder, jump up immediately.
+            if (rawDb > _peakDb) {
+              _peakDb = rawDb;
               _lastPeakTime = DateTime.now();
-            } else if (rawPeak >= _peak * 0.95) {
-              // Hold: refresh hold time if peak is sustained
+            } else if (rawDb > _peakDb - 1.0) {
+              // Hold refresh: if peak is within 1 dB, refresh hold time
               _lastPeakTime = DateTime.now();
             }
-            _controller.add(_peak);
+            _controller.add(_peakDb);
           }
         },
-        onError: (e) => debugPrint('[pathephon] PPM event error: $e'),
+        onError: (Object e) => debugPrint('[pathephon] PPM event error: $e'),
       );
       await _method.invokeMethod('start', {'sessionId': sessionId});
       debugPrint('[pathephon] PPM attached to session $sessionId');
 
-      // Decay timer: every 50ms, decrease peak if hold time expired
+      // Decay timer: every 50ms, decrease peak if hold expired.
+      // BBC PPM: ~12 dB/sec decay = 0.6 dB per 50ms.
       _decayTimer?.cancel();
       _decayTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
-        final now = DateTime.now();
-        final holdElapsed = now.difference(_lastPeakTime).inMilliseconds;
-        if (holdElapsed > 1000 && _peak > 0) {
-          // Decay: ~12 dB/sec. In linear: factor of ~4 per second,
-          // so per 50ms: ~0.97 multiplier (slow exponential decay).
-          _peak *= 0.97;
-          if (_peak < 0.005) _peak = 0;
-          _controller.add(_peak);
+        final holdElapsed = DateTime.now().difference(_lastPeakTime).inMilliseconds;
+        if (holdElapsed > 1000 && _peakDb > -60.0) {
+          _peakDb -= 0.6;  // 12 dB/sec
+          if (_peakDb < -60.0) _peakDb = -60.0;
+          _controller.add(_peakDb);
         }
       });
     } catch (e) {
@@ -106,8 +103,7 @@ class VisualizerService {
   Future<void> detach() async {
     if (_activeSessionId == null) return;
     _activeSessionId = null;
-    _peak = 0;
-    _rawPeak = 0;
+    _peakDb = -60.0;
     _decayTimer?.cancel();
     _decayTimer = null;
     try {
@@ -115,7 +111,7 @@ class VisualizerService {
     } catch (e) {
       debugPrint('[pathephon] PPM stop failed (non-fatal): $e');
     }
-    _controller.add(0);
+    _controller.add(-60.0);
   }
 
   void dispose() {

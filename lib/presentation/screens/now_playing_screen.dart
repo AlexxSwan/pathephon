@@ -1,5 +1,6 @@
 // ============================================================================
 //  now_playing_screen.dart - Now Playing with REAL PPM meter
+//  amplitude from Visualizer is in dBFS (-60..0).
 // ============================================================================
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -38,13 +39,14 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final l = AppLocalizations.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
     final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
-    final amp = ref.watch(amplitudeProvider).valueOrNull ?? 0.0;
+    // amplitude is dBFS (-60..0). Default -60 (silence) when no data.
+    final amp = ref.watch(amplitudeProvider).valueOrNull ?? -60.0;
     final playback = ref.watch(playbackServiceProvider);
     ref.watch(isPlayingProvider);
 
     final track = snap?.current;
     final duration = snap?.duration ?? Duration.zero;
-    final brightness = amp > 0.02 ? 1.0 : 0.0;
+    final brightness = amp > -50 ? 1.0 : 0.0;
 
     return Scaffold(
       body: SafeArea(

@@ -1,9 +1,10 @@
 // ============================================================================
-//  playback_service.dart - playback with FULL MediaSession integration
+//  playback_service.dart - playback service (WORKING playback, no MediaSession)
 //
-//  FIX: playQueue/play/pause/skip now route through _handler (not _player
-//  directly). audio_service only starts the foreground service + notification
-//  when the handler methods are called. Without this, no lock screen widget.
+//  This is the version from 0.8.1+75 where playback worked correctly.
+//  We use _player directly (not _handler) for play/pause/skip to avoid
+//  the race condition where _handler.play() doesn't start playback.
+//  Lock screen widget does NOT work in this version - will be fixed later.
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -12,7 +13,6 @@ import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:just_audio/just_audio.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/replaygain.dart';
@@ -103,12 +103,9 @@ class JustAudioPlaybackService implements PlaybackService {
           androidNotificationChannelName: 'Pathephon Playback',
           androidNotificationOngoing: true,
           androidStopForegroundOnPause: true,
-          // Use notification icon (white silhouette)
-          androidNotificationIcon: 'drawable/ic_notification',
         ),
       );
-      debugPrint('[pathephon] AudioService.init OK');
-    } catch (e) { debugPrint('[pathephon] AudioService.init FAILED: $e'); }
+    } catch (e) { debugPrint('[pathephon] AudioService.init failed: $e'); }
 
     _stateController.add(PlaybackSnapshot.empty);
 
@@ -121,7 +118,6 @@ class JustAudioPlaybackService implements PlaybackService {
       if (seqState != null && seqState.currentIndex >= 0) {
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
-        _updateMediaItem();
       }
     });
 
@@ -150,27 +146,6 @@ class JustAudioPlaybackService implements PlaybackService {
       isBuffering: st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering,
       shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
     ));
-  }
-
-  void _updateMediaItem() {
-    if (_handler == null || _queue.isEmpty) return;
-    final idx = _player.currentIndex ?? _index;
-    if (idx < 0 || idx >= _queue.length) return;
-    final t = _queue[idx];
-    final mediaItem = MediaItem(
-      id: t.id, album: t.album, title: t.title, artist: t.artist,
-      duration: Duration(milliseconds: t.durationMs),
-    );
-    (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
-  }
-
-  void _updateQueueStream() {
-    if (_handler == null) return;
-    final items = _queue.map((t) => MediaItem(
-      id: t.id, album: t.album, title: t.title, artist: t.artist,
-      duration: Duration(milliseconds: t.durationMs),
-    )).toList();
-    (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
   }
 
   Future<void> _saveQueue() async {
@@ -207,9 +182,6 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: savedPos, initialIndex: initial,
       );
 
-      _updateQueueStream();
-      _updateMediaItem();
-
       _stateController.add(PlaybackSnapshot(
         current: _queue[initial], queue: _queue, index: initial,
         position: savedPos, duration: _player.duration ?? Duration.zero,
@@ -235,12 +207,8 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: Duration.zero, initialIndex: initial,
       );
       await _player.seek(Duration.zero, index: initial);
-      _updateQueueStream();
-      _updateMediaItem();
-      // CRITICAL: route through handler so audio_service starts foreground service
-      await _handler?.play();
+      await _player.play();
       await _saveQueue();
-      debugPrint('[pathephon] playQueue: started via handler');
     } catch (e) {
       debugPrint('[pathephon] playQueue FAILED: $e');
       _stateController.add(PlaybackSnapshot.empty);
@@ -265,14 +233,15 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   @override
-  Future<void> play() async { await _initCompleter.future; await _handler?.play(); }
+  Future<void> play() async { await _initCompleter.future; await _player.play(); }
   @override
-  Future<void> pause() async { await _initCompleter.future; await _handler?.pause(); await _savePosition(); }
+  Future<void> pause() async { await _initCompleter.future; await _player.pause(); await _savePosition(); }
 
   @override
   Future<void> stop() async {
     await _initCompleter.future;
-    await _handler?.stop();
+    await _player.pause();
+    await _player.seek(Duration.zero);
     await _savePosition();
     _emitState(_player.playerState);
   }
@@ -297,22 +266,22 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> skipToNext() async {
     await _initCompleter.future;
     if (_queue.isEmpty) return;
-    // Route through handler
-    await _handler?.skipToNext();
-    _index = _player.currentIndex ?? _index;
-    _updateMediaItem();
-    await _saveQueue();
+    if (_player.hasNext) {
+      await _player.seekToNext();
+      _index = _player.currentIndex ?? _index;
+      await _saveQueue();
+    }
   }
 
   @override
   Future<void> skipToPrevious() async {
     await _initCompleter.future;
     if (_queue.isEmpty) return;
-    // Route through handler
-    await _handler?.skipToPrevious();
-    _index = _player.currentIndex ?? _index;
-    _updateMediaItem();
-    await _saveQueue();
+    if (_player.hasPrevious) {
+      await _player.seekToPrevious();
+      _index = _player.currentIndex ?? _index;
+      await _saveQueue();
+    }
   }
 
   @override
@@ -349,26 +318,12 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 }
 
-/// AudioHandler that forwards all calls to just_audio player.
 class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
   _PathephonAudioHandler(this._player) {
     _player.playbackEventStream.listen(_broadcastState);
   }
 
   final AudioPlayer _player;
-
-  @override
-  Future<void> play() => _player.play();
-  @override
-  Future<void> pause() => _player.pause();
-  @override
-  Future<void> stop() async { await _player.stop(); await super.stop(); }
-  @override
-  Future<void> skipToNext() => _player.seekToNext();
-  @override
-  Future<void> skipToPrevious() => _player.seekToPrevious();
-  @override
-  Future<void> seek(Duration position) => _player.seek(position);
 
   void _broadcastState(PlaybackEvent event) {
     final state = _player.playerState;

@@ -11,6 +11,7 @@ import '../../core/theme/spectrum_painter.dart';
 import '../../core/utils/duration_format.dart';
 import '../../domain/models/track.dart';
 import '../providers/providers.dart';
+import '../../services/playback_service.dart';
 import '../widgets/playback_controls.dart';
 
 class NowPlayingScreen extends ConsumerStatefulWidget {

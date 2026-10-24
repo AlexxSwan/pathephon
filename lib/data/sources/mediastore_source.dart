@@ -1,5 +1,11 @@
 // ============================================================================
-//  mediastore_source.dart - audio discovery with debug logs
+//  mediastore_source.dart - audio discovery
+//
+//  IMPORTANT: FilePicker.getDirectoryPath() on Android 11+ returns a SAF
+//  tree URI like "content://com.android.externalstorage.documents/tree/...".
+//  dart:io Directory cannot list such URIs. We detect this case and fall
+//  back to MediaStore query filtered by the parent folder, OR show a clear
+//  error so the user knows to use "files" picker instead.
 // ============================================================================
 import 'dart:io';
 
@@ -18,8 +24,15 @@ class MediaStoreSource {
   static const _coverBases = ['cover', 'folder', 'album', 'front', 'albumart', 'coverart', 'art'];
   static const _coverExts = ['jpg', 'jpeg', 'png', 'webp'];
 
+  /// Detect if path is a SAF content URI (cannot be listed via Directory).
+  static bool _isContentUri(String path) {
+    return path.startsWith('content://') ||
+           path.startsWith('content%3A') ||
+           path.contains('%2Ftree%2F');
+  }
+
   static String? _findCoverInDir(String dirPath) {
-    if (dirPath.isEmpty) return null;
+    if (dirPath.isEmpty || _isContentUri(dirPath)) return null;
     try {
       final dir = Directory(dirPath);
       if (!dir.existsSync()) return null;
@@ -86,10 +99,8 @@ class MediaStoreSource {
       sortType: SongSortType.DATE_ADDED,
       orderType: OrderType.DESC_OR_GREATER,
     );
-    debugPrint('[pathephon] fetchAllTracks: got ${songs.length} songs from MediaStore');
-    final tracks = songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
-    debugPrint('[pathephon] fetchAllTracks: ${tracks.length} tracks after format filter');
-    return tracks;
+    debugPrint('[pathephon] fetchAllTracks: got ${songs.length} songs');
+    return songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
   }
 
   OnAudioQuery get query => _query;
@@ -115,11 +126,12 @@ class MediaStoreSource {
       try {
         final path = f.path ?? '';
         if (path.isEmpty) continue;
+        debugPrint('[pathephon] pickAudioFiles: file path = $path');
         final ext = path.toLowerCase().split('.').last;
         final uri = Uri.file(path).toString();
         var artUri = '';
         final dir = _dirOf(path);
-        if (dir.isNotEmpty) {
+        if (dir.isNotEmpty && !_isContentUri(dir)) {
           final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
           if (cover != null) artUri = cover;
         }
@@ -132,7 +144,7 @@ class MediaStoreSource {
           artUri: artUri,
         ));
       } catch (e) {
-        debugPrint('[pathephon] pickAudioFiles: error processing file: $e');
+        debugPrint('[pathephon] pickAudioFiles: error: $e');
         continue;
       }
     }
@@ -147,7 +159,17 @@ class MediaStoreSource {
       debugPrint('[pathephon] pickDirectory: user cancelled');
       return const <Track>[];
     }
-    debugPrint('[pathephon] pickDirectory: picked dir = $dirPath');
+    debugPrint('[pathephon] pickDirectory: picked path = $dirPath');
+
+    // Check if this is a SAF content URI (Android 11+)
+    if (_isContentUri(dirPath)) {
+      debugPrint('[pathephon] pickDirectory: SAF content URI detected, cannot list directly');
+      debugPrint('[pathephon] pickDirectory: returning empty - user should use "files" picker');
+      // We cannot list a SAF tree URI from Dart. The user should use
+      // "files" picker (pickAudioFiles) which uses SAF file picker that
+      // grants per-file access.
+      return const <Track>[];
+    }
 
     try {
       final dir = Directory(dirPath);
@@ -161,7 +183,7 @@ class MediaStoreSource {
 
       final tracks = <Track>[];
       final entities = dir.listSync(recursive: false, followLinks: false);
-      debugPrint('[pathephon] pickDirectory: ${entities.length} entities in dir');
+      debugPrint('[pathephon] pickDirectory: ${entities.length} entities');
       entities.sort((a, b) => a.path.compareTo(b.path));
       for (final e in entities) {
         if (e is! File) continue;
@@ -182,7 +204,7 @@ class MediaStoreSource {
             artUri: dirCover ?? '',
           ));
         } catch (e) {
-          debugPrint('[pathephon] pickDirectory: error processing entity: $e');
+          debugPrint('[pathephon] pickDirectory: entity error: $e');
           continue;
         }
       }

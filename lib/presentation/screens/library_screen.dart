@@ -18,7 +18,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 4, vsync: this);
-  // NO _autoScanTriggered - library starts empty, user picks files/folder.
+  String? _lastError;
 
   @override
   void dispose() {
@@ -26,24 +26,29 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     super.dispose();
   }
 
-  /// Pick files/folder -> set as library -> immediately start playing first track.
   Future<void> _pickAndPlay(Future<List<Track>> Function() picker) async {
     debugPrint("[pathephon] _pickAndPlay: starting");
+    setState(() => _lastError = null);
     final playback = ref.read(playbackServiceProvider);
     try {
       final tracks = await picker();
       debugPrint("[pathephon] _pickAndPlay: picked ${tracks.length} tracks");
       if (tracks.isEmpty) {
-        debugPrint("[pathephon] _pickAndPlay: no tracks picked, aborting");
+        debugPrint("[pathephon] _pickAndPlay: no tracks picked");
+        setState(() => _lastError =
+            "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443. "
+            "\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u043E Android \u0432\u0435\u0440\u043D\u0443\u043B SAF URI \u0432\u043C\u0435\u0441\u0442\u043E \u043F\u0443\u0442\u0438 \u0444\u0430\u0439\u043B\u043E\u0432\u043E\u0439 \u0441\u0438\u0441\u0442\u0435\u043C\u044B. "
+            "\u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439\u0442\u0435 \u043A\u043D\u043E\u043F\u043A\u0443 \u00AB\u0444\u0430\u0439\u043B\u044B\u00BB.");
         return;
       }
       ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
-      debugPrint("[pathephon] _pickAndPlay: setPickedTracks done, calling playQueue");
+      debugPrint("[pathephon] _pickAndPlay: setPickedTracks done");
       await playback.playQueue(tracks: tracks, startIndex: 0);
       ref.read(isPlayingProvider.notifier).state = true;
       debugPrint("[pathephon] _pickAndPlay: playQueue started");
     } catch (e, st) {
       debugPrint("[pathephon] _pickAndPlay FAILED: $e\n$st");
+      setState(() => _lastError = e.toString());
     }
   }
 
@@ -113,6 +118,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                           ),
                       textAlign: TextAlign.center,
                     ),
+                    if (_lastError != null) ...[
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFFF6B1A).withOpacity(0.1),
+                          border: Border.all(color: TubeColors.amberHot),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Text(
+                          _lastError!,
+                          style: const TextStyle(color: TubeColors.amberHot, fontSize: 12),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -207,7 +228,6 @@ class _AlbumGrid extends ConsumerWidget {
   }
 }
 
-/// Album artwork with fallbacks.
 class _AlbumArt extends ConsumerWidget {
   const _AlbumArt({required this.album});
   final Album album;

@@ -18,7 +18,6 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 4, vsync: this);
-  String? _lastError;
 
   @override
   void dispose() {
@@ -26,29 +25,59 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     super.dispose();
   }
 
-  Future<void> _pickAndPlay(Future<List<Track>> Function() picker) async {
-    debugPrint("[pathephon] _pickAndPlay: starting");
-    setState(() => _lastError = null);
+  Future<void> _pickAndPlayFiles() async {
     final playback = ref.read(playbackServiceProvider);
     try {
-      final tracks = await picker();
-      debugPrint("[pathephon] _pickAndPlay: picked ${tracks.length} tracks");
-      if (tracks.isEmpty) {
-        debugPrint("[pathephon] _pickAndPlay: no tracks picked");
-        setState(() => _lastError =
-            "\u041D\u0435 \u0443\u0434\u0430\u043B\u043E\u0441\u044C \u043F\u0440\u043E\u0447\u0438\u0442\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443. "
-            "\u0412\u043E\u0437\u043C\u043E\u0436\u043D\u043E Android \u0432\u0435\u0440\u043D\u0443\u043B SAF URI \u0432\u043C\u0435\u0441\u0442\u043E \u043F\u0443\u0442\u0438 \u0444\u0430\u0439\u043B\u043E\u0432\u043E\u0439 \u0441\u0438\u0441\u0442\u0435\u043C\u044B. "
-            "\u041F\u043E\u043F\u0440\u043E\u0431\u0443\u0439\u0442\u0435 \u043A\u043D\u043E\u043F\u043A\u0443 \u00AB\u0444\u0430\u0439\u043B\u044B\u00BB.");
-        return;
-      }
+      final tracks = await ref.read(mediaStoreSourceProvider).pickAudioFiles();
+      if (tracks.isEmpty) return;
       ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
-      debugPrint("[pathephon] _pickAndPlay: setPickedTracks done");
       await playback.playQueue(tracks: tracks, startIndex: 0);
       ref.read(isPlayingProvider.notifier).state = true;
-      debugPrint("[pathephon] _pickAndPlay: playQueue started");
+    } catch (e) {
+      debugPrint("[pathephon] _pickAndPlayFiles FAILED: $e");
+    }
+  }
+
+  Future<void> _pickAndPlayFolder() async {
+    final playback = ref.read(playbackServiceProvider);
+    try {
+      final result = await ref.read(mediaStoreSourceProvider).pickDirectoryWithDiagnostic();
+      if (result.tracks.isEmpty) {
+        // Show diagnostic dialog
+        if (mounted) {
+          await showDialog<void>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              backgroundColor: const Color(0xFF1A1410),
+              title: const Text(
+                "\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430",
+                style: TextStyle(color: Color(0xFFF4E9D2)),
+              ),
+              content: SizedBox(
+                width: double.maxFinite,
+                child: SingleChildScrollView(
+                  child: Text(
+                    result.diagnostic,
+                    style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace'),
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text("OK", style: TextStyle(color: Color(0xFFFF6B1A))),
+                ),
+              ],
+            ),
+          );
+        }
+        return;
+      }
+      ref.read(libraryStateProvider.notifier).setPickedTracks(result.tracks);
+      await playback.playQueue(tracks: result.tracks, startIndex: 0);
+      ref.read(isPlayingProvider.notifier).state = true;
     } catch (e, st) {
-      debugPrint("[pathephon] _pickAndPlay FAILED: $e\n$st");
-      setState(() => _lastError = e.toString());
+      debugPrint("[pathephon] _pickAndPlayFolder FAILED: $e\n$st");
     }
   }
 
@@ -75,14 +104,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         actions: [
           IconButton(
             icon: const Icon(Icons.folder_open),
-            onPressed: () => _pickAndPlay(() =>
-                ref.read(mediaStoreSourceProvider).pickDirectory()),
+            onPressed: _pickAndPlayFolder,
             tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u043F\u0430\u043F\u043A\u0443",
           ),
           IconButton(
             icon: const Icon(Icons.audio_file),
-            onPressed: () => _pickAndPlay(() =>
-                ref.read(mediaStoreSourceProvider).pickAudioFiles()),
+            onPressed: _pickAndPlayFiles,
             tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B",
           ),
           IconButton(
@@ -118,22 +145,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                           ),
                       textAlign: TextAlign.center,
                     ),
-                    if (_lastError != null) ...[
-                      const SizedBox(height: 16),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFFFF6B1A).withOpacity(0.1),
-                          border: Border.all(color: TubeColors.amberHot),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          _lastError!,
-                          style: const TextStyle(color: TubeColors.amberHot, fontSize: 12),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                    ],
                   ],
                 ),
               ),

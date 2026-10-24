@@ -1,9 +1,5 @@
 // ============================================================================
-//  mediastore_source.dart - audio discovery with SAF fallback for folders
-//
-//  pickDirectory(): if FilePicker returns a content:// tree URI, calls
-//  native FolderScannerPlugin to enumerate via DocumentFile API.
-//  Otherwise (filesystem path), uses dart:io Directory.
+//  mediastore_source.dart - audio discovery with diagnostic dialog
 // ============================================================================
 import 'dart:io';
 
@@ -52,41 +48,11 @@ class MediaStoreSource {
           if (path != null) return Uri.file(path).toString();
         }
       }
-      for (final name in byName.keys) {
-        if ((name.startsWith('cover') ||
-             name.startsWith('folder') ||
-             name.startsWith('album') ||
-             name.startsWith('front')) && _hasImageExt(name)) {
-          return Uri.file(byName[name]!).toString();
-        }
-      }
-      for (final name in byName.keys) {
-        if (_hasImageExt(name) &&
-            !name.startsWith('artist') &&
-            !name.startsWith('back')) {
-          return Uri.file(byName[name]!).toString();
-        }
-      }
-    } catch (e) {
-      debugPrint('[pathephon] _findCoverInDir failed: $e');
-    }
+    } catch (_) {}
     return null;
   }
 
-  static bool _hasImageExt(String name) {
-    final dot = name.lastIndexOf('.');
-    if (dot < 0) return false;
-    return _coverExts.contains(name.substring(dot + 1));
-  }
-
-  static String _dirOf(String path) {
-    final slash = path.lastIndexOf('/');
-    if (slash < 0) return '';
-    return path.substring(0, slash);
-  }
-
   Future<List<Track>> fetchAllTracks() async {
-    debugPrint('[pathephon] fetchAllTracks: starting');
     if (!await _query.permissionsStatus()) {
       final granted = await _query.permissionsRequest();
       if (!granted) return const <Track>[];
@@ -118,19 +84,12 @@ class MediaStoreSource {
         if (path.isEmpty) continue;
         final ext = path.toLowerCase().split('.').last;
         final uri = Uri.file(path).toString();
-        var artUri = '';
-        final dir = _dirOf(path);
-        if (dir.isNotEmpty && !_isContentUri(dir)) {
-          final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
-          if (cover != null) artUri = cover;
-        }
         tracks.add(Track(
           id: uri,
           uri: uri,
           title: f.name,
           fileExtension: ext,
           filePath: path,
-          artUri: artUri,
         ));
       } catch (_) {
         continue;
@@ -139,22 +98,30 @@ class MediaStoreSource {
     return tracks;
   }
 
-  /// Pick a directory. Works with both filesystem paths and SAF tree URIs.
-  Future<List<Track>> pickDirectory() async {
-    debugPrint('[pathephon] pickDirectory: starting');
+  /// Pick a directory. Returns (tracks, diagnosticInfo).
+  /// The diagnosticInfo is shown to user via dialog if tracks is empty.
+  Future<({List<Track> tracks, String diagnostic})> pickDirectoryWithDiagnostic() async {
     final dirPath = await FilePicker.getDirectoryPath();
-    if (dirPath == null) return const <Track>[];
-    debugPrint('[pathephon] pickDirectory: picked path = $dirPath');
+    if (dirPath == null) {
+      return (tracks: const <Track>[], diagnostic: 'FilePicker.getDirectoryPath() returned null (user cancelled or permission denied)');
+    }
 
-    // SAF tree URI: use native FolderScannerPlugin
+    final buf = StringBuffer();
+    buf.writeln('Raw path: $dirPath');
+    buf.writeln('Starts with content://: ${dirPath.startsWith("content://")}');
+    buf.writeln('Contains %2Ftree%2F: ${dirPath.contains("%2Ftree%2F")}');
+    buf.writeln('Looks like filesystem: ${dirPath.startsWith("/storage/") || dirPath.startsWith("/sdcard/")}');
+
+    // Try SAF if content URI
     if (_isContentUri(dirPath)) {
-      debugPrint('[pathephon] pickDirectory: SAF URI detected, calling FolderScannerPlugin');
+      buf.writeln('Trying SAF scan...');
       try {
         final result = await _folderScanner.invokeMethod('scanFolder', {'treeUri': dirPath});
         if (result is! List) {
-          debugPrint('[pathephon] pickDirectory: unexpected result type');
-          return const <Track>[];
+          buf.writeln('SAF returned non-list: ${result.runtimeType}');
+          return (tracks: const <Track>[], diagnostic: buf.toString());
         }
+        buf.writeln('SAF returned ${result.length} items');
         final tracks = <Track>[];
         for (final item in result) {
           if (item is! Map) continue;
@@ -171,22 +138,28 @@ class MediaStoreSource {
             artUri: artUri,
           ));
         }
-        debugPrint('[pathephon] pickDirectory: SAF scan returned ${tracks.length} tracks');
-        return tracks;
+        buf.writeln('Created ${tracks.length} Track objects');
+        return (tracks: tracks, diagnostic: buf.toString());
       } catch (e, st) {
-        debugPrint('[pathephon] pickDirectory SAF scan FAILED: $e\n$st');
-        return const <Track>[];
+        buf.writeln('SAF scan FAILED: $e');
+        buf.writeln('Stack: $st');
+        return (tracks: const <Track>[], diagnostic: buf.toString());
       }
     }
 
-    // Filesystem path: use dart:io Directory
+    // Filesystem path - try dart:io
+    buf.writeln('Trying dart:io Directory.listSync...');
     try {
       final dir = Directory(dirPath);
-      if (!await dir.exists()) return const <Track>[];
-
+      if (!await dir.exists()) {
+        buf.writeln('Directory does not exist: $dirPath');
+        return (tracks: const <Track>[], diagnostic: buf.toString());
+      }
+      buf.writeln('Directory exists, listing...');
+      final entities = dir.listSync(recursive: false, followLinks: false);
+      buf.writeln('Found ${entities.length} entities');
       final dirCover = _findCoverInDir(dirPath);
       final tracks = <Track>[];
-      final entities = dir.listSync(recursive: false, followLinks: false);
       entities.sort((a, b) => a.path.compareTo(b.path));
       for (final e in entities) {
         if (e is! File) continue;
@@ -210,12 +183,19 @@ class MediaStoreSource {
           continue;
         }
       }
-      debugPrint('[pathephon] pickDirectory: dart:io scan returned ${tracks.length} tracks');
-      return tracks;
+      buf.writeln('Created ${tracks.length} tracks from filesystem');
+      return (tracks: tracks, diagnostic: buf.toString());
     } catch (e, st) {
-      debugPrint('[pathephon] pickDirectory dart:io FAILED: $e\n$st');
-      return const <Track>[];
+      buf.writeln('dart:io FAILED: $e');
+      buf.writeln('Stack: $st');
+      return (tracks: const <Track>[], diagnostic: buf.toString());
     }
+  }
+
+  /// Legacy pickDirectory - returns just tracks (uses diagnostic version internally).
+  Future<List<Track>> pickDirectory() async {
+    final result = await pickDirectoryWithDiagnostic();
+    return result.tracks;
   }
 
   static const _supportedExtensions = {

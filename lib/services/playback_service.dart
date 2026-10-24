@@ -181,7 +181,7 @@ class JustAudioPlaybackService implements PlaybackService {
       duration: Duration(milliseconds: t.durationMs),
       artUri: t.artUri.isEmpty ? null : Uri.parse(t.artUri),
     );
-    _handler!.mediaItem.add(mediaItem);
+    (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
   }
 
   /// Update queue stream so lock screen shows queue.
@@ -192,7 +192,7 @@ class JustAudioPlaybackService implements PlaybackService {
       duration: Duration(milliseconds: t.durationMs),
       artUri: t.artUri.isEmpty ? null : Uri.parse(t.artUri),
     )).toList();
-    _handler!.queue.add(items);
+    (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
   }
 
   Future<void> _saveQueue() async {

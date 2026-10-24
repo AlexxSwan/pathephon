@@ -18,9 +18,6 @@ android {
         targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        // arm64-v8a ONLY - modern phones. No x86, no armeabi-v7a.
-        // Combined with --target-platform android-arm64 in CI,
-        // this produces a compact ~20-25MB APK.
         ndk {
             abiFilters += listOf("arm64-v8a")
         }
@@ -77,6 +74,8 @@ dependencies {
     implementation("androidx.core:core-ktx:1.13.1")
     implementation("com.google.android.material:material:1.12.0")
     implementation("androidx.documentfile:documentfile:1.0.1")
+    // Media session notification style
+    implementation("androidx.media:media:1.7.0")
 }
 
 flutter {

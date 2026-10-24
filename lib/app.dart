@@ -12,6 +12,7 @@ import "presentation/screens/equalizer_screen.dart";
 import "presentation/screens/library_screen.dart";
 import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
+import "presentation/widgets/permission_gate.dart";
 
 final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 
@@ -33,7 +34,7 @@ class AudioPlayerX64App extends ConsumerWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
-      home: const _Shell(),
+      home: const PermissionGate(child: _Shell()),
     );
   }
 }
@@ -81,7 +82,7 @@ class _ShellState extends State<_Shell> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
+            child: const Text(
               "\u041E\u0442\u043C\u0435\u043D\u0430",
               style: const TextStyle(color: Color(0xFFB89968)),
             ),
@@ -91,7 +92,7 @@ class _ShellState extends State<_Shell> {
               Navigator.of(ctx).pop(true);
               SystemNavigator.pop();
             },
-            child: Text(
+            child: const Text(
               "\u0412\u044B\u0439\u0442\u0438",
               style: const TextStyle(color: Color(0xFFFF6B1A)),
             ),
@@ -107,10 +108,6 @@ class _ShellState extends State<_Shell> {
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
-    // Custom compact navigation bar:
-    // - Icon-only by default (saves vertical space)
-    // - Label shown ONLY for the selected item (appears when you tap)
-    // - Selected icon larger + glowing amber
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -180,7 +177,6 @@ class _ShellState extends State<_Shell> {
   }
 }
 
-/// Compact navigation button: icon always, label only when selected.
 class _NavButton extends StatelessWidget {
   const _NavButton({
     required this.icon,
@@ -204,48 +200,23 @@ class _NavButton extends StatelessWidget {
       borderRadius: BorderRadius.circular(12),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: EdgeInsets.symmetric(
-          horizontal: selected ? 12 : 8,
-          vertical: 6,
-        ),
+        padding: EdgeInsets.symmetric(horizontal: selected ? 12 : 8, vertical: 6),
         decoration: BoxDecoration(
-          color: selected
-              ? const Color(0xFFFF6B1A).withOpacity(0.12)
-              : Colors.transparent,
+          color: selected ? const Color(0xFFFF6B1A).withOpacity(0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: const Color(0xFFFF6B1A).withOpacity(0.3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
-                  ),
-                ]
-              : [],
+          boxShadow: selected ? [BoxShadow(color: const Color(0xFFFF6B1A).withOpacity(0.3), blurRadius: 8, spreadRadius: 1)] : [],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              selected ? activeIcon : icon,
-              color: color,
-              size: selected ? 26 : 22,
-            ),
-            // Label slides in only for the selected tab.
+            Icon(selected ? activeIcon : icon, color: color, size: selected ? 26 : 22),
             AnimatedSize(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeInOut,
               child: selected
                   ? Padding(
                       padding: const EdgeInsets.only(left: 6),
-                      child: Text(
-                        label,
-                        style: TextStyle(
-                          color: color,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      child: Text(label, style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600)),
                     )
                   : const SizedBox.shrink(),
             ),

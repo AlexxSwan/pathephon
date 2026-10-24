@@ -1,5 +1,5 @@
 // ============================================================================
-//  mediastore_source.dart - with READ_MEDIA_IMAGES permission + cover bytes cache
+//  mediastore_source.dart - audio discovery (permissions handled by gate)
 // ============================================================================
 import 'dart:io';
 import 'dart:typed_data';
@@ -8,7 +8,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart';
 import 'package:on_audio_query/on_audio_query.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import '../../domain/models/track.dart';
 import 'tag_source.dart';
@@ -19,8 +18,6 @@ class MediaStoreSource {
   final OnAudioQuery _query;
   static const _folderScanner = MethodChannel('pathephon/folder_scanner');
 
-  // In-memory cache: artUri -> image bytes.
-  // Populated at scan time when we have file access.
   final Map<String, Uint8List> _coverBytesCache = {};
 
   static const _coverBases = ['cover', 'folder', 'album', 'front', 'albumart', 'coverart', 'art'];
@@ -35,9 +32,7 @@ class MediaStoreSource {
   };
 
   static bool _isContentUri(String path) {
-    return path.startsWith('content://') ||
-           path.startsWith('content%3A') ||
-           path.contains('%2Ftree%2F');
+    return path.startsWith('content://') || path.startsWith('content%3A') || path.contains('%2Ftree%2F');
   }
 
   static String _ext(String path) {
@@ -63,20 +58,6 @@ class MediaStoreSource {
     return _coverExts.contains(name.substring(dot + 1));
   }
 
-  /// Request READ_MEDIA_IMAGES permission (needed on Android 13+ to read cover.jpg).
-  Future<void> _ensureImagePermission() async {
-    try {
-      var status = await Permission.photos.status;
-      if (!status.isGranted) {
-        status = await Permission.photos.request();
-        debugPrint('[pathephon] photos permission: $status');
-      }
-    } catch (e) {
-      debugPrint('[pathephon] photos permission failed: $e');
-    }
-  }
-
-  /// Read cover image bytes and cache them.
   Future<void> _cacheCoverBytes(String artUri) async {
     if (artUri.isEmpty || _coverBytesCache.containsKey(artUri)) return;
     try {
@@ -84,20 +65,15 @@ class MediaStoreSource {
         final path = Uri.parse(artUri).toFilePath();
         final bytes = await File(path).readAsBytes();
         _coverBytesCache[artUri] = bytes;
-        debugPrint('[pathephon] cached cover bytes: $path (${bytes.length} bytes)');
       } else if (artUri.startsWith('content://')) {
         final result = await _folderScanner.invokeMethod('readFileBytes', {'uri': artUri});
-        if (result is Uint8List) {
-          _coverBytesCache[artUri] = result;
-          debugPrint('[pathephon] cached cover bytes from content URI (${result.length} bytes)');
-        }
+        if (result is Uint8List) _coverBytesCache[artUri] = result;
       }
     } catch (e) {
       debugPrint('[pathephon] cacheCoverBytes FAILED: $e (uri: $artUri)');
     }
   }
 
-  /// Get cached cover bytes for an artUri.
   Uint8List? getCoverBytes(String? artUri) {
     if (artUri == null || artUri.isEmpty) return null;
     return _coverBytesCache[artUri];
@@ -149,10 +125,7 @@ class MediaStoreSource {
       final granted = await _query.permissionsRequest();
       if (!granted) return const <Track>[];
     }
-    final songs = await _query.querySongs(
-      sortType: SongSortType.DATE_ADDED,
-      orderType: OrderType.DESC_OR_GREATER,
-    );
+    final songs = await _query.querySongs(sortType: SongSortType.DATE_ADDED, orderType: OrderType.DESC_OR_GREATER);
     return songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
   }
 
@@ -163,7 +136,6 @@ class MediaStoreSource {
   Future<bool> requestPermission() async => _query.permissionsRequest();
 
   Future<List<Track>> pickAudioFiles() async {
-    await _ensureImagePermission();
     final result = await FilePicker.pickFiles(type: FileType.audio);
     if (result == null || result.isEmpty) return const <Track>[];
 
@@ -184,21 +156,15 @@ class MediaStoreSource {
             await _cacheCoverBytes(cover);
           }
         }
-        tracks.add(Track(
-          id: uri, uri: uri, title: f.name,
-          fileExtension: ext, filePath: path, artUri: artUri,
-        ));
+        tracks.add(Track(id: uri, uri: uri, title: f.name, fileExtension: ext, filePath: path, artUri: artUri));
       } catch (_) { continue; }
     }
     return tracks;
   }
 
   Future<({List<Track> tracks, String diagnostic})> pickDirectoryWithDiagnostic() async {
-    await _ensureImagePermission();
     final dirPath = await FilePicker.getDirectoryPath();
-    if (dirPath == null) {
-      return (tracks: const <Track>[], diagnostic: 'FilePicker returned null');
-    }
+    if (dirPath == null) return (tracks: const <Track>[], diagnostic: 'FilePicker returned null');
 
     final buf = StringBuffer();
     buf.writeln('Raw path: $dirPath');
@@ -222,12 +188,9 @@ class MediaStoreSource {
             cachedCoverUri = artUri;
             await _cacheCoverBytes(artUri);
           }
-          tracks.add(Track(
-            id: uri, uri: uri, title: name,
-            fileExtension: _ext(name), filePath: dirPath, artUri: artUri,
-          ));
+          tracks.add(Track(id: uri, uri: uri, title: name, fileExtension: _ext(name), filePath: dirPath, artUri: artUri));
         }
-        buf.writeln('SAF: ${tracks.length} tracks, cover: ${tracks.isNotEmpty ? tracks.first.artUri : "none"}');
+        buf.writeln('SAF: ${tracks.length} tracks');
         return (tracks: tracks, diagnostic: buf.toString());
       } catch (e) {
         buf.writeln('SAF FAILED: $e');
@@ -261,11 +224,7 @@ class MediaStoreSource {
           if (!_isAudio(path)) continue;
           final name = _fileName(path);
           final uri = Uri.file(path).toString();
-          tracks.add(Track(
-            id: uri, uri: uri, title: name,
-            fileExtension: _ext(path), filePath: path,
-            artUri: dirCover ?? '',
-          ));
+          tracks.add(Track(id: uri, uri: uri, title: name, fileExtension: _ext(path), filePath: path, artUri: dirCover ?? ''));
         } catch (_) { continue; }
       }
       buf.writeln('Created ${tracks.length} tracks');

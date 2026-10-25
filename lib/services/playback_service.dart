@@ -12,6 +12,7 @@ import 'dart:convert';
 import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
+import 'package:flutter/services.dart' show MethodChannel;
 import 'package:just_audio/just_audio.dart';
 import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,6 +71,9 @@ class JustAudioPlaybackService implements PlaybackService {
   final _player = AudioPlayer();
   AudioHandler? _handler;
   final _initCompleter = Completer<void>();
+
+  /// Нативный MediaSession channel для lock-screen виджета + BT.
+  static const _nativeChannel = MethodChannel('pathephon/native_media_session');
 
   List<Track> _queue = const [];
   int _index = 0;

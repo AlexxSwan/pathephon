@@ -1,20 +1,19 @@
 // ============================================================================
-//  playback_service.dart - audio_service + _player.play() + handler.play()
+//  playback_service.dart — v0.10.16+110 — БЕЗ audio_service
 //
-//  KEY FIX: _player.play() starts audio. THEN _handler.play() starts the
-//  foreground service (notification + lock screen). The handler's play()
-//  override calls _player.play() again (no-op if already playing) but
-//  triggers audio_service to show the notification.
+//  audio_service plugin автоматически создавал 2-ю MediaSession 'media-session'
+//  которая перехватывала BT-события у нашего нативного MediaSessionPlugin.
+//  Решение: полностью вырезали audio_service. Теперь только:
+//    - just_audio для воспроизведения
+//    - MediaSessionPlugin (нативный Kotlin) для BT + lock-screen
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:audio_service/audio_service.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:just_audio/just_audio.dart';
-import 'package:rxdart/rxdart.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../core/utils/replaygain.dart';
@@ -69,14 +68,12 @@ class JustAudioPlaybackService implements PlaybackService {
   static const _positionKey = 'pathephon.queue.position.v1';
 
   final _player = AudioPlayer();
-  AudioHandler? _handler;
   final _initCompleter = Completer<void>();
 
+  /// Нативный MediaSession channel — для BT + lock-screen.
+  /// MediaSessionPlugin.kt создаёт MediaSession с TAG "Pathephon" и
+  /// переадресует BT Callback'и сюда.
   static const _nativeChannel = MethodChannel('pathephon/native_media_session');
-
-  static const _mediaButtonChannel = MethodChannel('pathephon/media_button');
-
-  /// Нативный MediaSession channel для lock-screen виджета + BT.
 
   List<Track> _queue = const [];
   int _index = 0;
@@ -95,18 +92,20 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<int> get audioSessionIdStream => _sessionIdController.stream;
 
   Future<void> _init() async {
+    print('[pathephon] _init() START');
+
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
+      print('[pathephon] AudioSession OK');
     } catch (e) { print('[pathephon] AudioSession failed: $e'); }
-
-    // ОТКЛЮЧЕНО v0.10.15: AudioService.init создавал 2-ю MediaSession 'media-session'
 
     _stateController.add(PlaybackSnapshot.empty);
 
     _player.playerStateStream.listen((st) {
       _emitState(st);
       _savePosition();
+      _notifyNativePlaybackState(st.playing);
     });
 
     _player.sequenceStateStream.listen((seqState) {
@@ -125,37 +124,11 @@ class JustAudioPlaybackService implements PlaybackService {
       if (_queue.isNotEmpty) { _savePosition(); _emitState(_player.playerState); }
     });
 
-    // Обрабатываем команды от PathephonMediaButtonReceiver (BT-кнопки).
-    // Receiver перехватывает ACTION_MEDIA_BUTTON напрямую, в обход MediaSession.
-    _mediaButtonChannel.setMethodCallHandler((call) async {
-      print("[pathephon] media_button event: ${call.method}");
-      try {
-        switch (call.method) {
-          case 'play':  await _player.play(); break;
-          case 'pause': await _player.pause(); break;
-          case 'play_pause':
-            if (_player.playing) await _player.pause();
-            else await _player.play();
-            break;
-          case 'next':  if (_player.hasNext) await _player.seekToNext(); break;
-          case 'prev':  if (_player.hasPrevious) await _player.seekToPrevious(); break;
-          case 'stop':  await _player.stop(); break;
-          case 'fast_forward':
-            await _player.seek(_player.position + const Duration(seconds: 10));
-            break;
-          case 'rewind':
-            await _player.seek(_player.position - const Duration(seconds: 10));
-            break;
-        }
-      } catch (e) {
-        print("[pathephon] media_button handler error: $e");
-      }
-    });
-
-    // Обрабатываем BT события от MediaSessionPlugin (нативный MediaSession
-    // с TAG "Pathephon" — ColorOS отправляет BT-кнопки в неё).
+    // Обрабатываем BT события от нативного MediaSessionPlugin.
+    // Plugin создаёт MediaSession с TAG "Pathephon" и переадресует
+    // Callback.onPlay/onPause/onSkipToNext сюда.
     _nativeChannel.setMethodCallHandler((call) async {
-      print("[pathephon] BT event from native: ${call.method}");
+      print('[pathephon] BT event from native: ${call.method}');
       try {
         switch (call.method) {
           case 'play':  await _player.play(); break;
@@ -169,11 +142,40 @@ class JustAudioPlaybackService implements PlaybackService {
             break;
         }
       } catch (e) {
-        print("[pathephon] BT handler error: $e");
+        print('[pathephon] BT handler error: $e');
       }
     });
+    print('[pathephon] native channel handler set');
 
     _initCompleter.complete();
+    print('[pathephon] _init() DONE');
+  }
+
+  void _notifyNativePlaybackState(bool playing) {
+    try {
+      _nativeChannel.invokeMethod('setPlaybackState', {
+        'playing': playing,
+        'position': _player.position.inMilliseconds,
+        'hasNext': _player.hasNext,
+        'hasPrev': _player.hasPrevious,
+      });
+    } catch (_) {/* swallow — плагин мог ещё не инициализироваться */}
+  }
+
+  void _updateMediaItem() {
+    if (_queue.isEmpty) return;
+    final idx = _player.currentIndex ?? _index;
+    if (idx < 0 || idx >= _queue.length) return;
+    final t = _queue[idx];
+    try {
+      _nativeChannel.invokeMethod('setMediaItem', {
+        'title': t.title,
+        'artist': t.artist,
+        'album': t.album,
+        'durationMs': t.durationMs,
+        'artUri': t.artUri,
+      });
+    } catch (_) {/* swallow */}
   }
 
   void _emitState(PlayerState st) {
@@ -187,52 +189,6 @@ class JustAudioPlaybackService implements PlaybackService {
       isBuffering: st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering,
       shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
     ));
-  }
-
-  void _updateMediaItem() {
-    if (_handler == null || _queue.isEmpty) return;
-    final idx = _player.currentIndex ?? _index;
-    if (idx < 0 || idx >= _queue.length) return;
-    final t = _queue[idx];
-    final mediaItem = MediaItem(
-      id: t.id, album: t.album, title: t.title, artist: t.artist,
-      duration: Duration(milliseconds: t.durationMs),
-    );
-    try {
-      (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
-    } catch (e) { print('[pathephon] _updateMediaItem: $e'); }
-  }
-
-  void _updateQueueStream() {
-    if (_handler == null) return;
-    final items = _queue.map((t) => MediaItem(
-      id: t.id, album: t.album, title: t.title, artist: t.artist,
-      duration: Duration(milliseconds: t.durationMs),
-    )).toList();
-    try {
-      (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
-    } catch (e) { print('[pathephon] _updateQueueStream: $e'); }
-  }
-
-  /// CRITICAL: This is the key method.
-  /// 1. _player.play() starts audio playback (always works)
-  /// 2. _handler.play() triggers audio_service to start foreground service
-  ///    (notification + lock screen + headset support)
-  /// The handler's play() override calls _player.play() again (no-op if already
-  /// playing), but the side effect is that audio_service shows the notification.
-  Future<void> _startPlayback() async {
-    // Step 1: Start audio (guaranteed)
-    await _player.play();
-    // Step 2: Start foreground service via handler
-    // This is what makes the notification + lock screen widget appear.
-    if (_handler != null) {
-      try {
-        await _handler!.play();
-        print('[pathephon] _handler.play() called - foreground service should start');
-      } catch (e) {
-        print('[pathephon] _handler.play() failed: $e');
-      }
-    }
   }
 
   Future<void> _saveQueue() async {
@@ -265,7 +221,6 @@ class JustAudioPlaybackService implements PlaybackService {
         ConcatenatingAudioSource(children: sources, useLazyPreparation: true),
         initialPosition: savedPos, initialIndex: initial,
       );
-      _updateQueueStream();
       _updateMediaItem();
       _stateController.add(PlaybackSnapshot(
         current: _queue[initial], queue: _queue, index: initial,
@@ -290,9 +245,9 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: Duration.zero, initialIndex: initial,
       );
       await _player.seek(Duration.zero, index: initial);
-      _updateQueueStream();
       _updateMediaItem();
-      await _startPlayback();
+      await _player.play();
+      print('[pathephon] playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
     } catch (e) {
       print('[pathephon] playQueue FAILED: $e');
@@ -311,28 +266,13 @@ class JustAudioPlaybackService implements PlaybackService {
     } else {
       uri = Uri.parse(t.uri);
     }
-    return AudioSource.uri(uri, tag: MediaItem(
-      id: t.id, album: t.album, title: t.title, artist: t.artist,
-      duration: Duration(milliseconds: t.durationMs),
-    ));
+    return AudioSource.uri(uri);
   }
 
   @override
-  Future<void> play() async {
-    await _initCompleter.future;
-    await _startPlayback();
-  }
-
+  Future<void> play() async { await _initCompleter.future; await _player.play(); }
   @override
-  Future<void> pause() async {
-    await _initCompleter.future;
-    await _player.pause();
-    // Also notify handler (updates notification to show "play" button)
-    if (_handler != null) {
-      try { await _handler!.pause(); } catch (_) {}
-    }
-    await _savePosition();
-  }
+  Future<void> pause() async { await _initCompleter.future; await _player.pause(); await _savePosition(); }
 
   @override
   Future<void> stop() async {
@@ -347,7 +287,6 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> clearQueue() async {
     await _initCompleter.future;
     await _player.stop();
-    await _handler?.stop();
     _queue = const [];
     _index = 0;
     await _prefs.remove(_queueKey);
@@ -414,60 +353,5 @@ class JustAudioPlaybackService implements PlaybackService {
     _stateController.close();
     _sessionIdController.close();
     _player.dispose();
-  }
-}
-
-class _PathephonAudioHandler extends BaseAudioHandler with SeekHandler {
-  _PathephonAudioHandler(this._player) {
-    _player.playbackEventStream.listen(_broadcastState);
-  }
-  final AudioPlayer _player;
-
-  @override
-  Future<void> play() => _player.play();
-  @override
-  Future<void> pause() => _player.pause();
-  @override
-  Future<void> stop() async { await _player.stop(); await super.stop(); }
-  @override
-  Future<void> skipToNext() => _player.seekToNext();
-  @override
-  Future<void> skipToPrevious() => _player.seekToPrevious();
-  @override
-  Future<void> seek(Duration position) => _player.seek(position);
-
-  void _broadcastState(PlaybackEvent event) {
-    final state = _player.playerState;
-    playbackState.add(PlaybackState(
-      controls: [
-        if (_player.hasPrevious) MediaControl.skipToPrevious,
-        if (state.playing) MediaControl.pause else MediaControl.play,
-        if (_player.hasNext) MediaControl.skipToNext,
-        MediaControl.stop,
-      ],
-      systemActions: const {
-        MediaAction.seek, MediaAction.seekForward, MediaAction.seekBackward,
-        MediaAction.playPause, MediaAction.setSpeed,
-      },
-      androidCompactActionIndices: const [0, 1, 2],
-      processingState: switch (state.processingState) {
-        ProcessingState.idle => AudioProcessingState.idle,
-        ProcessingState.loading => AudioProcessingState.loading,
-        ProcessingState.buffering => AudioProcessingState.buffering,
-        ProcessingState.ready => AudioProcessingState.ready,
-        ProcessingState.completed => AudioProcessingState.completed,
-      },
-      playing: state.playing,
-      updatePosition: _player.position,
-      bufferedPosition: _player.bufferedPosition,
-      speed: _player.speed,
-      queueIndex: _player.currentIndex,
-    ));
-  }
-
-  @override
-  Future<void> onTaskRemoved() async {
-    await _player.pause();
-    await super.onTaskRemoved();
   }
 }

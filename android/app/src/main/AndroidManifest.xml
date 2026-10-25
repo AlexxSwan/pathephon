@@ -79,6 +79,15 @@
                 <action android:name="android.intent.action.MEDIA_BUTTON" />
             </intent-filter>
         </receiver>
+        <!-- Наш receiver для BT-кнопок — приоритет выше чем у audio_service -->
+        <receiver
+            android:name="com.swanlab.audiox64.PathephonMediaButtonReceiver"
+            android:exported="true"
+            android:priority="2147483647">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON" />
+            </intent-filter>
+        </receiver>
     </application>
 
     <queries>

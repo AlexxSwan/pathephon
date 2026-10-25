@@ -72,6 +72,8 @@ class JustAudioPlaybackService implements PlaybackService {
   AudioHandler? _handler;
   final _initCompleter = Completer<void>();
 
+  static const _mediaButtonChannel = MethodChannel('pathephon/media_button');
+
   /// Нативный MediaSession channel для lock-screen виджета + BT.
 
   List<Track> _queue = const [];
@@ -130,6 +132,33 @@ class JustAudioPlaybackService implements PlaybackService {
 
     Timer.periodic(const Duration(seconds: 5), (_) {
       if (_queue.isNotEmpty) { _savePosition(); _emitState(_player.playerState); }
+    });
+
+    // Обрабатываем команды от PathephonMediaButtonReceiver (BT-кнопки).
+    // Receiver перехватывает ACTION_MEDIA_BUTTON напрямую, в обход MediaSession.
+    _mediaButtonChannel.setMethodCallHandler((call) async {
+      print("[pathephon] media_button event: ${call.method}");
+      try {
+        switch (call.method) {
+          case 'play':  await _player.play(); break;
+          case 'pause': await _player.pause(); break;
+          case 'play_pause':
+            if (_player.playing) await _player.pause();
+            else await _player.play();
+            break;
+          case 'next':  if (_player.hasNext) await _player.seekToNext(); break;
+          case 'prev':  if (_player.hasPrevious) await _player.seekToPrevious(); break;
+          case 'stop':  await _player.stop(); break;
+          case 'fast_forward':
+            await _player.seek(_player.position + const Duration(seconds: 10));
+            break;
+          case 'rewind':
+            await _player.seek(_player.position - const Duration(seconds: 10));
+            break;
+        }
+      } catch (e) {
+        print("[pathephon] media_button handler error: $e");
+      }
     });
 
     _initCompleter.complete();

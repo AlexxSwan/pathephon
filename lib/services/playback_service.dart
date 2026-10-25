@@ -100,18 +100,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await session.configure(const AudioSessionConfiguration.music());
     } catch (e) { print('[pathephon] AudioSession failed: $e'); }
 
-    try {
-      _handler = await AudioService.init(
-        builder: () => _PathephonAudioHandler(_player),
-        config: const AudioServiceConfig(
-          androidNotificationChannelId: 'pathephon_playback',
-          androidNotificationChannelName: 'Pathephon Playback',
-          androidNotificationOngoing: true,
-          androidStopForegroundOnPause: true,
-        ),
-      );
-      print('[pathephon] AudioService.init OK');
-    } catch (e) { print('[pathephon] AudioService.init FAILED: $e'); }
+    // ОТКЛЮЧЕНО v0.10.15: AudioService.init создавал 2-ю MediaSession 'media-session'
 
     _stateController.add(PlaybackSnapshot.empty);
 

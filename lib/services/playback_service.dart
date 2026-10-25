@@ -73,7 +73,6 @@ class JustAudioPlaybackService implements PlaybackService {
   final _initCompleter = Completer<void>();
 
   /// Нативный MediaSession channel для lock-screen виджета + BT.
-  static const _nativeChannel = MethodChannel('pathephon/native_media_session');
 
   List<Track> _queue = const [];
   int _index = 0;
@@ -95,7 +94,7 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
-    } catch (e) { debugPrint('[pathephon] AudioSession failed: $e'); }
+    } catch (e) { print('[pathephon] AudioSession failed: $e'); }
 
     try {
       _handler = await AudioService.init(
@@ -107,8 +106,8 @@ class JustAudioPlaybackService implements PlaybackService {
           androidStopForegroundOnPause: true,
         ),
       );
-      debugPrint('[pathephon] AudioService.init OK');
-    } catch (e) { debugPrint('[pathephon] AudioService.init FAILED: $e'); }
+      print('[pathephon] AudioService.init OK');
+    } catch (e) { print('[pathephon] AudioService.init FAILED: $e'); }
 
     _stateController.add(PlaybackSnapshot.empty);
 
@@ -160,7 +159,7 @@ class JustAudioPlaybackService implements PlaybackService {
     );
     try {
       (_handler!.mediaItem as BehaviorSubject<MediaItem?>).add(mediaItem);
-    } catch (e) { debugPrint('[pathephon] _updateMediaItem: $e'); }
+    } catch (e) { print('[pathephon] _updateMediaItem: $e'); }
   }
 
   void _updateQueueStream() {
@@ -171,7 +170,7 @@ class JustAudioPlaybackService implements PlaybackService {
     )).toList();
     try {
       (_handler!.queue as BehaviorSubject<List<MediaItem>>).add(items);
-    } catch (e) { debugPrint('[pathephon] _updateQueueStream: $e'); }
+    } catch (e) { print('[pathephon] _updateQueueStream: $e'); }
   }
 
   /// CRITICAL: This is the key method.
@@ -188,9 +187,9 @@ class JustAudioPlaybackService implements PlaybackService {
     if (_handler != null) {
       try {
         await _handler!.play();
-        debugPrint('[pathephon] _handler.play() called - foreground service should start');
+        print('[pathephon] _handler.play() called - foreground service should start');
       } catch (e) {
-        debugPrint('[pathephon] _handler.play() failed: $e');
+        print('[pathephon] _handler.play() failed: $e');
       }
     }
   }
@@ -233,7 +232,7 @@ class JustAudioPlaybackService implements PlaybackService {
         isPlaying: false, isBuffering: false,
         shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
       ));
-    } catch (e) { debugPrint('[pathephon] restoreSavedQueue failed: $e'); }
+    } catch (e) { print('[pathephon] restoreSavedQueue failed: $e'); }
   }
 
   @override
@@ -255,7 +254,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _startPlayback();
       await _saveQueue();
     } catch (e) {
-      debugPrint('[pathephon] playQueue FAILED: $e');
+      print('[pathephon] playQueue FAILED: $e');
       _stateController.add(PlaybackSnapshot.empty);
       rethrow;
     }

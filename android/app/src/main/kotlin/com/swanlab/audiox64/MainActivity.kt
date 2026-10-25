@@ -29,9 +29,7 @@ class MainActivity : FlutterActivity() {
         visualizerPlugin = VisualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         equalizerPlugin = EqualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
-        // Нативный MediaSession plugin для lock-screen виджета + BT.
-        flutterEngine.plugins.add(MediaSessionPlugin())
-        Log.i(TAG, "MediaSessionPlugin registered")
+        Log.i(TAG, "Plugins registered (Visualizer, Equalizer, FolderScanner)")
     }
 
     override fun onDestroy() {

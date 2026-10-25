@@ -7,6 +7,7 @@ import android.media.session.MediaSession
 import android.media.session.PlaybackState
 import android.os.SystemClock
 import android.util.Log
+import android.view.KeyEvent
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
@@ -14,17 +15,6 @@ import io.flutter.plugin.common.MethodChannel.Result
 import java.net.URL
 import java.util.concurrent.Executors
 
-/**
- * Нативный MediaSession с TAG "Pathephon".
- *
- * ColorOS на OPPO/Realme отправляет BT-события ТОЛЬКО в MediaSession с
- * нестандартным TAG (не "media-session" как у audio_service). Поэтому
- * нам нужна собственная сессия "Pathephon" — она получает BT-события
- * через Callback.onPlay/onPause/onSkipToNext/onSkipToPrevious.
- *
- * Callback'и переадресуются в Dart через MethodChannel
- * "pathephon/native_media_session".
- */
 class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     companion object {
         private const val TAG = "Pathephon/MediaSession"
@@ -42,14 +32,11 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             it.setMethodCallHandler(this)
         }
         ensureMediaSession()
-        Log.i(TAG, ">>> onAttachedToEngine END — mediaSession=$mediaSession")
+        Log.i(TAG, ">>> onAttachedToEngine END")
     }
 
     override fun onDetachedFromEngine(binding: FlutterPlugin.FlutterPluginBinding) {
-        Log.i(TAG, ">>> onDetachedFromEngine")
-        try { mediaSession?.release() } catch (e: Exception) {
-            Log.w(TAG, "release: ${e.message}")
-        }
+        try { mediaSession?.release() } catch (e: Exception) {}
         mediaSession = null
         channel?.setMethodCallHandler(null)
         channel = null
@@ -79,7 +66,6 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
-            Log.e(TAG, "${call.method}: ${e.message}", e)
             result.error("ERROR", e.message, null)
         }
     }
@@ -88,45 +74,90 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         if (mediaSession != null) return
         val ctx = context ?: return
         try {
-            Log.i(TAG, ">>> creating MediaSession(TAG='Pathephon')...")
+            Log.i(TAG, ">>> creating MediaSession 'Pathephon'...")
             val s = MediaSession(ctx, "Pathephon")
             s.setFlags(
                 MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
                 MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
             )
-            // === КЛЮЧЕВОЙ МОМЕНТ: Callback переадресует BT-события в Dart ===
+
+            // === КЛЮЧЕВОЙ МОМЕНТ ===
+            // Переопределяем onMediaButtonEvent — он получает ВСЕ KeyEvent'ы
+            // от BT-гарнитуры. ColorOS не вызывает автоматически onPlay/onPause/
+            // onSkipToNext — нужно самим парсить keyCode.
             s.setCallback(object : MediaSession.Callback() {
-                override fun onPlay() {
-                    Log.i(TAG, ">>> BT CALLBACK: onPlay — invoking Dart 'play'")
-                    channel?.invokeMethod("play", null)
+                override fun onMediaButtonEvent(mediaButtonIntent: android.content.Intent): Boolean {
+                    val ke = mediaButtonIntent.getParcelableExtra<KeyEvent>(android.content.Intent.EXTRA_KEY_EVENT)
+                    if (ke == null) {
+                        Log.w(TAG, ">>> onMediaButtonEvent: no KeyEvent")
+                        return false
+                    }
+                    Log.i(TAG, ">>> onMediaButtonEvent: keyCode=${ke.keyCode} action=${ke.action} name=${keyCodeToString(ke.keyCode)}")
+                    // Только ACTION_UP (отпускание) — ACTION_DOWN игнорируем
+                    if (ke.action != KeyEvent.ACTION_UP) return true
+                    handleKeyCode(ke.keyCode)
+                    return true
                 }
-                override fun onPause() {
-                    Log.i(TAG, ">>> BT CALLBACK: onPause — invoking Dart 'pause'")
-                    channel?.invokeMethod("pause", null)
-                }
-                override fun onSkipToNext() {
-                    Log.i(TAG, ">>> BT CALLBACK: onSkipToNext — invoking Dart 'next'")
-                    channel?.invokeMethod("next", null)
-                }
-                override fun onSkipToPrevious() {
-                    Log.i(TAG, ">>> BT CALLBACK: onSkipToPrevious — invoking Dart 'prev'")
-                    channel?.invokeMethod("prev", null)
-                }
-                override fun onStop() {
-                    Log.i(TAG, ">>> BT CALLBACK: onStop — invoking Dart 'stop'")
-                    channel?.invokeMethod("stop", null)
-                }
+
+                // Также оставляем transport callbacks на случай если ColorOS их вызовет
+                override fun onPlay()  { invokeDart("play") }
+                override fun onPause() { invokeDart("pause") }
+                override fun onSkipToNext()     { invokeDart("next") }
+                override fun onSkipToPrevious() { invokeDart("prev") }
+                override fun onStop()   { invokeDart("stop") }
                 override fun onSeekTo(pos: Long) {
-                    Log.i(TAG, ">>> BT CALLBACK: onSeekTo $pos — invoking Dart 'seek'")
+                    Log.i(TAG, ">>> onSeekTo $pos")
                     channel?.invokeMethod("seek", mapOf("position" to pos))
                 }
             })
             s.isActive = true
             mediaSession = s
-            Log.i(TAG, ">>> MediaSession 'Pathephon' ACTIVE — будет получать BT-события!")
+            Log.i(TAG, ">>> MediaSession 'Pathephon' ACTIVE")
         } catch (e: Exception) {
             Log.e(TAG, ">>> ensureMediaSession FAILED: ${e.message}", e)
         }
+    }
+
+    private fun handleKeyCode(keyCode: Int) {
+        val cmd = when (keyCode) {
+            KeyEvent.KEYCODE_MEDIA_PLAY,
+            KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "play_pause"
+            KeyEvent.KEYCODE_MEDIA_PAUSE -> "pause"
+            KeyEvent.KEYCODE_MEDIA_NEXT -> "next"
+            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "prev"
+            KeyEvent.KEYCODE_MEDIA_STOP -> "stop"
+            KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "fast_forward"
+            KeyEvent.KEYCODE_MEDIA_REWIND -> "rewind"
+            else -> {
+                Log.w(TAG, ">>> unknown keyCode: $keyCode")
+                return
+            }
+        }
+        Log.i(TAG, ">>> handleKeyCode: $cmd")
+        invokeDart(cmd)
+    }
+
+    private fun invokeDart(method: String) {
+        Log.i(TAG, ">>> invoking Dart '$method'")
+        channel?.invokeMethod(method, null, object : MethodChannel.Result {
+            override fun success(result: Any?) { Log.i(TAG, ">>> '$method' OK") }
+            override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+                Log.e(TAG, ">>> '$method' ERROR: $errorCode / $errorMessage")
+            }
+            override fun notImplemented() { Log.w(TAG, ">>> '$method' notImplemented") }
+        })
+    }
+
+    private fun keyCodeToString(code: Int): String = when (code) {
+        KeyEvent.KEYCODE_MEDIA_PLAY -> "PLAY"
+        KeyEvent.KEYCODE_MEDIA_PAUSE -> "PAUSE"
+        KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE -> "PLAY_PAUSE"
+        KeyEvent.KEYCODE_MEDIA_NEXT -> "NEXT"
+        KeyEvent.KEYCODE_MEDIA_PREVIOUS -> "PREVIOUS"
+        KeyEvent.KEYCODE_MEDIA_STOP -> "STOP"
+        KeyEvent.KEYCODE_MEDIA_FAST_FORWARD -> "FAST_FORWARD"
+        KeyEvent.KEYCODE_MEDIA_REWIND -> "REWIND"
+        else -> "UNKNOWN($code)"
     }
 
     private fun updateMetadata(title: String, artist: String, album: String, durationMs: Long, artUri: String) {
@@ -146,14 +177,12 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                             b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
                         }
                         s.setMetadata(b.build())
-                        Log.i(TAG, ">>> metadata set: $title / $artist")
                     } catch (e: Exception) {
                         s.setMetadata(b.build())
                     }
                 }
             } else {
                 s.setMetadata(b.build())
-                Log.i(TAG, ">>> metadata set (no art): $title")
             }
         } catch (e: Exception) {
             Log.e(TAG, "updateMetadata: ${e.message}", e)
@@ -197,7 +226,6 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     .setState(state, posMs, 1.0f, SystemClock.elapsedRealtime())
                     .build()
             )
-            Log.i(TAG, ">>> PlaybackState SET: state=$state pos=$posMs next=$hasNext prev=$hasPrev")
         } catch (e: Exception) {
             Log.e(TAG, "updatePlaybackState: ${e.message}", e)
         }

@@ -131,11 +131,24 @@ class JustAudioPlaybackService implements PlaybackService {
       print('[pathephon] BT event from native: ${call.method}');
       try {
         switch (call.method) {
-          case 'play':  await _player.play(); break;
+          case 'play':
+          case 'play_pause':
+            if (_player.playing) {
+              await _player.pause();
+            } else {
+              await _player.play();
+            }
+            break;
           case 'pause': await _player.pause(); break;
           case 'next':  if (_player.hasNext) await _player.seekToNext(); break;
           case 'prev':  if (_player.hasPrevious) await _player.seekToPrevious(); break;
           case 'stop':  await _player.stop(); break;
+          case 'fast_forward':
+            await _player.seek(_player.position + const Duration(seconds: 10));
+            break;
+          case 'rewind':
+            await _player.seek(_player.position - const Duration(seconds: 10));
+            break;
           case 'seek':
             final pos = call.arguments['position'] as int?;
             if (pos != null) await _player.seek(Duration(milliseconds: pos));

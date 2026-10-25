@@ -1,6 +1,6 @@
 import "package:flutter/material.dart";
-import "package:flutter/services.dart" show PackageInfo;
 import "package:flutter_riverpod/flutter_riverpod.dart";
+import "package:package_info_plus/package_info_plus.dart";
 import "package:permission_handler/permission_handler.dart";
 import "../../core/theme/retro_theme.dart";
 import "../providers/providers.dart";
@@ -26,8 +26,8 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
   }
 
   /// Читает версию из pubspec.yaml через PackageInfo.fromPlatform().
-  /// Это стандартный Flutter API — не требует доп. зависимостей.
-  /// Возвращает version (из pubspec) и buildNumber (тоже из pubspec).
+  /// Требует зависимость package_info_plus (добавлена в pubspec.yaml).
+  /// Возвращает version (например "0.10.9") и buildNumber (например "103").
   Future<void> _loadVersion() async {
     try {
       final info = await PackageInfo.fromPlatform();

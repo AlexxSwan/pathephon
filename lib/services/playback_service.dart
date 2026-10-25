@@ -72,6 +72,8 @@ class JustAudioPlaybackService implements PlaybackService {
   AudioHandler? _handler;
   final _initCompleter = Completer<void>();
 
+  static const _nativeChannel = MethodChannel('pathephon/native_media_session');
+
   static const _mediaButtonChannel = MethodChannel('pathephon/media_button');
 
   /// Нативный MediaSession channel для lock-screen виджета + BT.
@@ -158,6 +160,27 @@ class JustAudioPlaybackService implements PlaybackService {
         }
       } catch (e) {
         print("[pathephon] media_button handler error: $e");
+      }
+    });
+
+    // Обрабатываем BT события от MediaSessionPlugin (нативный MediaSession
+    // с TAG "Pathephon" — ColorOS отправляет BT-кнопки в неё).
+    _nativeChannel.setMethodCallHandler((call) async {
+      print("[pathephon] BT event from native: ${call.method}");
+      try {
+        switch (call.method) {
+          case 'play':  await _player.play(); break;
+          case 'pause': await _player.pause(); break;
+          case 'next':  if (_player.hasNext) await _player.seekToNext(); break;
+          case 'prev':  if (_player.hasPrevious) await _player.seekToPrevious(); break;
+          case 'stop':  await _player.stop(); break;
+          case 'seek':
+            final pos = call.arguments['position'] as int?;
+            if (pos != null) await _player.seek(Duration(milliseconds: pos));
+            break;
+        }
+      } catch (e) {
+        print("[pathephon] BT handler error: $e");
       }
     });
 

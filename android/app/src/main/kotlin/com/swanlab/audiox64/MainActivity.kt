@@ -7,13 +7,11 @@ import android.os.Build
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
-import io.flutter.plugin.common.MethodChannel
 
 class MainActivity : FlutterActivity() {
     companion object {
         private const val TAG = "Pathephon/Main"
         private const val CHANNEL_ID = "pathephon_playback"
-        private const val MEDIA_BUTTON_CHANNEL = "pathephon/media_button"
     }
 
     private var visualizerPlugin: VisualizerPlugin? = null
@@ -31,13 +29,10 @@ class MainActivity : FlutterActivity() {
         visualizerPlugin = VisualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         equalizerPlugin = EqualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
-
-        // Регистрируем MethodChannel для PathephonMediaButtonReceiver.
-        // Receiver получает BT-кнопки через manifest, но ему нужен канал
-        // чтобы слать команды в Dart. Канал прокидывается через companion object.
-        val ch = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, MEDIA_BUTTON_CHANNEL)
-        PathephonMediaButtonReceiver.setChannel(ch)
-        Log.i(TAG, "MediaButton channel registered")
+        // Регистрируем MediaSessionPlugin — он создаёт сессию "Pathephon"
+        // которая получает BT-события от ColorOS.
+        flutterEngine.plugins.add(MediaSessionPlugin())
+        Log.i(TAG, ">>> MediaSessionPlugin registered")
     }
 
     override fun onDestroy() {

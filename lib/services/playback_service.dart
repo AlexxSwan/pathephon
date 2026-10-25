@@ -160,6 +160,11 @@ class JustAudioPlaybackService implements PlaybackService {
     });
     print('[pathephon] native channel handler set');
 
+    // Пушим начальный PlaybackState (paused, position=0) чтобы система
+    // увидела что MediaSession готова — без этого часы/локскрин не отображают трек.
+    _notifyNativePlaybackState(false);
+    print('[pathephon] initial playbackState pushed');
+
     _initCompleter.complete();
     print('[pathephon] _init() DONE');
   }
@@ -235,6 +240,9 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: savedPos, initialIndex: initial,
       );
       _updateMediaItem();
+      // Пушим metadata в нативную MediaSession — иначе часы/локскрин
+      // не увидят трек после восстановления очереди.
+      _notifyNativePlaybackState(false);
       _stateController.add(PlaybackSnapshot(
         current: _queue[initial], queue: _queue, index: initial,
         position: savedPos, duration: _player.duration ?? Duration.zero,
@@ -259,7 +267,11 @@ class JustAudioPlaybackService implements PlaybackService {
       );
       await _player.seek(Duration.zero, index: initial);
       _updateMediaItem();
+      _notifyNativePlaybackState(false);
       await _player.play();
+      // После play() пушим playing=true чтобы система отрисовала виджет
+      await Future.delayed(const Duration(milliseconds: 100));
+      _notifyNativePlaybackState(true);
       print('[pathephon] playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
     } catch (e) {

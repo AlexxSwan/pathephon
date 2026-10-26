@@ -34,8 +34,10 @@ class _OpenWithObserver extends WidgetsBindingObserver {
   Future<bool> didPushRouteInformation(RouteInformation routeInformation) async {
     final uri = routeInformation.uri.toString();
     if (uri.startsWith('content://') || uri.startsWith('file://')) {
-      _handleOpenWith(uri, '');
-      return true; // перехватили, не пускаем в Navigator
+      // НЕ запускаем трек здесь — name неизвестен.
+      // Kotlin push (onLaunchIntent) придёт с правильным name.
+      // Только перехватываем чтобы Navigator не упал.
+      return true;
     }
     return super.didPushRouteInformation(routeInformation);
   }
@@ -90,14 +92,7 @@ class AudioPlayerX64App extends ConsumerWidget {
       }
     });
     _OpenWithObserver.container = ProviderScope.containerOf(context);
-    // Если intent пришёл до регистрации — обрабатываем сейчас
-    if (_OpenWithObserver.pendingUri != null) {
-      final uri = _OpenWithObserver.pendingUri!;
-      _OpenWithObserver.pendingUri = null;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        _OpenWithObserver._handleOpenWith(uri, '');
-      });
-    }
+    // Kotlin push (onLaunchIntent) обрабатывает open-with с правильным name
 
     final locale = ref.watch(localeProvider);
     final themeModeIdx = ref.watch(themeModeProvider);

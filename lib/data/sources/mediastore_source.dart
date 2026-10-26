@@ -132,7 +132,47 @@ class MediaStoreSource {
       if (!granted) return const <Track>[];
     }
     final songs = await _query.querySongs(sortType: SongSortType.DATE_ADDED, orderType: OrderType.DESC_OR_GREATER);
-    return songs.where(_isSupportedFormat).map(TagSource.fromSongModel).toList(growable: false);
+    // Фильтруем: 1) поддерживаемый формат, 2) длительность > 30 сек,
+    // 3) не из папок мессенджеров/записей звонков/диктофона
+    final filtered = songs.where((s) {
+      if (!_isSupportedFormat(s)) return false;
+      // Длительность < 30 сек — пропускаем (голосовые, рингтоны)
+      final duration = s.duration ?? 0;
+      if (duration < 30000) return false;
+      // Проверяем папку
+      final path = s.data.toLowerCase();
+      final excludedFolders = [
+        '/whatsapp/', '/telegram/', '/viber/', '/discord/',
+        '/call recording', '/recordings/call', '/voice recorder',
+        '/audiorecord', '/voicemessages', '/voice messages',
+        '/standard recordings', '/recordings/standard',
+        '/system/media/audio/ringtones', '/system/media/audio/notifications',
+        '/system/media/audio/alarms',
+      ];
+      for (final folder in excludedFolders) {
+        if (path.contains(folder)) return false;
+      }
+      return true;
+    }).toList();
+    // Ищем cover.jpg для каждого трека
+    final dirCoverCache = <String, String?>{};
+    final tracks = <Track>[];
+    for (final s in filtered) {
+      final track = TagSource.fromSongModel(s);
+      // Если у трека нет artUri — ищем cover.jpg в папке
+      if (track.artUri.isEmpty && track.filePath.isNotEmpty) {
+        final dir = _dirOf(track.filePath);
+        if (dir.isNotEmpty && !_isContentUri(dir)) {
+          final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
+          if (cover != null) {
+            track.artUri = cover;
+            await _cacheCoverBytes(cover);
+          }
+        }
+      }
+      tracks.add(track);
+    }
+    return tracks;
   }
 
   OnAudioQuery get query => _query;

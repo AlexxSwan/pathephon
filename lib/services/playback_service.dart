@@ -116,6 +116,18 @@ class JustAudioPlaybackService implements PlaybackService {
       }
     });
 
+    // Когда just_audio загрузил аудио и узнал duration — пере-пушим metadata
+    // в натив. На старте трека _player.duration ещё null, поэтому первый
+    // setMediaItem шлёт dur=0. После загрузки аудио durationStream эмитит
+    // реальное значение — пушим заново. Без этого lock-screen показывает --:--
+    // пока не переключишь трек.
+    _player.durationStream.listen((duration) {
+      if (duration != null && _queue.isNotEmpty) {
+        print('[pathephon] durationStream: ${duration.inMilliseconds}ms — re-push metadata');
+        _updateMediaItem();
+      }
+    });
+
     _player.androidAudioSessionIdStream.listen((id) {
       if (id != null) _sessionIdController.add(id);
     });

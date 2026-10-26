@@ -219,26 +219,35 @@ class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
 
+  /// Статический кеш найденных обложек по filePath трека.
+  /// Ключ — путь к аудиофайлу, значение — file:// URI обложки или null.
+  static final Map<String, String?> _coverCache = {};
+
   /// Ищет cover.jpg/folder.jpg/album.jpg/front.jpg в папке трека.
-  /// Возвращает file:// URI или null.
   Future<String?> _findCoverInDir(String? filePath) async {
     if (filePath == null || filePath.isEmpty) return null;
+    // Если уже искали — возвращаем из кеша
+    if (_coverCache.containsKey(filePath)) return _coverCache[filePath];
+    String? result;
     try {
       final file = File(filePath);
       final dir = file.parent;
-      if (!dir.existsSync()) return null;
-      final entities = dir.listSync(recursive: false, followLinks: false);
-      for (final e in entities) {
-        final name = e.uri.pathSegments.last.toLowerCase();
-        if (name == 'cover.jpg' || name == 'folder.jpg' ||
-            name == 'album.jpg' || name == 'front.jpg' ||
-            name == 'cover.png' || name == 'folder.png' ||
-            name == 'album.png' || name == 'front.png') {
-          return 'file://${e.path}';
+      if (dir.existsSync()) {
+        final entities = dir.listSync(recursive: false, followLinks: false);
+        for (final e in entities) {
+          final name = e.uri.pathSegments.last.toLowerCase();
+          if (name == 'cover.jpg' || name == 'folder.jpg' ||
+              name == 'album.jpg' || name == 'front.jpg' ||
+              name == 'cover.png' || name == 'folder.png' ||
+              name == 'album.png' || name == 'front.png') {
+            result = 'file://${e.path}';
+            break;
+          }
         }
       }
     } catch (_) {}
-    return null;
+    _coverCache[filePath] = result; // кешируем (даже null)
+    return result;
   }
 
   @override
@@ -250,22 +259,19 @@ class _ArtworkImage extends ConsumerWidget {
 
     // Если artUri пустой — пытаемся найти cover.jpg в папке трека
     if (artUri.isEmpty) {
-      return FutureBuilder<String?>(
-        future: _findCoverInDir(t.filePath.isNotEmpty ? t.filePath : null),
-        builder: (ctx, snap) {
-          if (snap.connectionState != ConnectionState.done) {
-            return _appIconFallback(p); // показываем gif пока ищем
-          }
-          final foundUri = snap.data;
-          if (foundUri != null && foundUri.isNotEmpty) {
-            // Нашли cover.jpg — показываем
-            return Image.file(File(Uri.parse(foundUri).toFilePath()), 
-                fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
-          }
-          // Нет cover.jpg — gif
-          return _appIconFallback(p);
-        },
-      );
+      final fp = t.filePath.isNotEmpty ? t.filePath : null;
+      if (fp != null && _coverCache.containsKey(fp)) {
+        // Уже искали — берём из кеша синхронно
+        final cached = _coverCache[fp];
+        if (cached != null && cached.isNotEmpty) {
+          return Image.file(File(Uri.parse(cached).toFilePath()), 
+              fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+        }
+        return _appIconFallback(p); // искали, не нашли
+      }
+      // Первый раз — запускаем поиск, показываем gif пока ищем
+      _findCoverInDir(fp); // запускаем, результат сохранится в кеш
+      return _appIconFallback(p); // gif на этот кадр
     }
 
     // artUri есть — показываем

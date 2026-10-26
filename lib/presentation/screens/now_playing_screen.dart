@@ -23,6 +23,7 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   bool _showPlaylist = false;
   final _playlistScrollController = ScrollController();
+  int _lastScrolledIndex = -1;
 
   @override
   void initState() {
@@ -133,21 +134,25 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     if (queue.isEmpty) {
       return Center(child: Text('\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u043F\u0443\u0441\u0442\u0430', style: TextStyle(color: p.textMuted)));
     }
-    // Auto-scroll to current track
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_playlistScrollController.hasClients) {
-        final target = currentIndex * 44.0;
-        final viewport = _playlistScrollController.position.viewportDimension;
-        final offset = _playlistScrollController.offset;
-        if (target < offset || target > offset + viewport - 44) {
-          _playlistScrollController.animateTo(
-            (target - viewport / 2 + 22).clamp(0.0, _playlistScrollController.position.maxScrollExtent),
-            duration: const Duration(milliseconds: 200),
-            curve: Curves.easeOut,
-          );
+    // Auto-scroll to current track ТОЛЬКО если индекс изменился
+    // (или при первом открытии). Иначе пользователь не сможет прокрутить список.
+    if (currentIndex != _lastScrolledIndex) {
+      _lastScrolledIndex = currentIndex;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (_playlistScrollController.hasClients) {
+          final target = currentIndex * 44.0;
+          final viewport = _playlistScrollController.position.viewportDimension;
+          final offset = _playlistScrollController.offset;
+          if (target < offset || target > offset + viewport - 44) {
+            _playlistScrollController.animateTo(
+              (target - viewport / 2 + 22).clamp(0.0, _playlistScrollController.position.maxScrollExtent),
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+            );
+          }
         }
-      }
-    });
+      });
+    }
     return Container(
       decoration: BoxDecoration(
         color: p.background,

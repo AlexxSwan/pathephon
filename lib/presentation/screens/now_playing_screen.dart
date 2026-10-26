@@ -22,6 +22,7 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   bool _showPlaylist = false;
+  final _playlistScrollController = ScrollController();
 
   @override
   void initState() {

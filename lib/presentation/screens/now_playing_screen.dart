@@ -205,7 +205,7 @@ class _ArtworkImage extends ConsumerWidget {
     return Container(
       color: p.surfaceVariant,
       alignment: Alignment.center,
-      child: Image.asset('assets/app_icon.png', fit: BoxFit.contain, width: 100, height: 100,
+      child: Image.asset('assets/pathephon.gif', fit: BoxFit.cover, width: double.infinity, height: double.infinity,
           errorBuilder: (_, e, __) => Icon(Icons.album, size: 100, color: p.brass)),
     );
   }

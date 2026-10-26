@@ -25,6 +25,7 @@ class MainActivity : FlutterActivity() {
     private var folderScannerPlugin: FolderScannerPlugin? = null
     private var pendingLaunchUri: String? = null
     private var pendingLaunchName: String? = null
+    private var pendingLaunchContent: String? = null
     private var launchChannel: MethodChannel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,10 +46,30 @@ class MainActivity : FlutterActivity() {
             if (data != null) {
                 pendingLaunchUri = data.toString()
                 pendingLaunchName = queryFileName(data)
-                Log.i(TAG, ">>> ACTION_VIEW uri=$pendingLaunchUri name=$pendingLaunchName")
-                // Если channel уже зарегистрирован — отправляем сразу
+                // Для .m3u файлов — читаем контент
+                val isM3u = pendingLaunchName?.endsWith(".m3u") == true ||
+                             pendingLaunchName?.endsWith(".m3u8") == true ||
+                             data.toString().contains(".m3u")
+                if (isM3u) {
+                    pendingLaunchContent = readFileContent(data)
+                    Log.i(TAG, ">>> ACTION_VIEW M3U: $pendingLaunchUri (${pendingLaunchContent?.length ?: 0} chars)")
+                } else {
+                    Log.i(TAG, ">>> ACTION_VIEW uri=$pendingLaunchUri name=$pendingLaunchName")
+                }
                 trySendLaunchIntent()
             }
+        }
+    }
+
+    /// Читает текстовый файл из Uri (для .m3u).
+    private fun readFileContent(uri: android.net.Uri): String? {
+        return try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                input.bufferedReader().readText()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, ">>> readFileContent failed: ${e.message}")
+            null
         }
     }
 
@@ -110,13 +131,16 @@ class MainActivity : FlutterActivity() {
         launchChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
                 "getLaunchIntent" -> {
-                    // Pull-модель для совместимости
                     val uri = pendingLaunchUri
                     val name = pendingLaunchName
+                    val content = pendingLaunchContent
                     pendingLaunchUri = null
                     pendingLaunchName = null
+                    pendingLaunchContent = null
                     if (uri != null) {
-                        result.success(mapOf("uri" to uri, "name" to (name ?: "")))
+                        val payload = mutableMapOf("uri" to uri, "name" to (name ?: ""))
+                        content?.let { payload["content"] = it }
+                        result.success(payload)
                     } else {
                         result.success(null)
                     }

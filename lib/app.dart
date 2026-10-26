@@ -42,9 +42,16 @@ class _OpenWithObserver extends WidgetsBindingObserver {
     return super.didPushRouteInformation(routeInformation);
   }
 
-  static void _handleOpenWith(String uri, [String name = '']) {
+  static void _handleOpenWith(String uri, [String name = '', String content = '']) {
     try {
-      // Приоритет: name из Kotlin (правильное имя файла) > pathSegments > Unknown
+      // Проверяем — это .m3u файл?
+      final isM3u = name.endsWith('.m3u') || name.endsWith('.m3u8') || uri.contains('.m3u');
+      if (isM3u && content.isNotEmpty) {
+        _handleM3uContent(uri, name, content);
+        return;
+      }
+
+      // Обычный аудиофайл
       var fileName = name;
       if (fileName.isEmpty) {
         final decoded = Uri.parse(uri);
@@ -72,6 +79,84 @@ class _OpenWithObserver extends WidgetsBindingObserver {
       print('[pathephon] open-with failed: $e');
     }
   }
+
+  /// Парсит .m3u контент и запускает очередь.
+  static void _handleM3uContent(String uri, String name, String content) {
+    try {
+      print('[pathephon] open-with m3u: $name (${content.length} chars)');
+      final lines = content.split('\n').map((l) => l.trim()).where((l) => l.isNotEmpty).toList();
+      final tracks = <Track>[];
+      String? pendingTitle;
+      String? pendingArtist;
+      int? pendingDuration;
+
+      // Базовый путь для относительных путей в .m3u
+      final basePath = uri.startsWith('content://')
+          ? ''
+          : uri.substring(0, uri.lastIndexOf('/') + 1);
+
+      for (final line in lines) {
+        if (line.startsWith('#EXTM3U')) continue;
+        if (line.startsWith('#EXTINF:')) {
+          final rest = line.substring(8);
+          final commaIdx = rest.indexOf(',');
+          if (commaIdx > 0) {
+            final durStr = rest.substring(0, commaIdx);
+            pendingDuration = int.tryParse(durStr);
+            final info = rest.substring(commaIdx + 1);
+            final dashIdx = info.indexOf(' - ');
+            if (dashIdx > 0) {
+              pendingArtist = info.substring(0, dashIdx);
+              pendingTitle = info.substring(dashIdx + 3);
+            } else {
+              pendingTitle = info;
+            }
+          }
+          continue;
+        }
+        if (line.startsWith('#')) continue;
+        // Путь к файлу
+        String trackUri;
+        String filePath;
+        if (line.startsWith('file://') || line.startsWith('content://')) {
+          trackUri = line;
+          filePath = line.startsWith('file://') ? Uri.parse(line).toFilePath() : '';
+        } else if (line.startsWith('/')) {
+          trackUri = Uri.file(line).toString();
+          filePath = line;
+        } else {
+          // Относительный путь — добавляем базовый
+          final full = basePath + line;
+          trackUri = full.startsWith('file://') ? full : Uri.file(full).toString();
+          filePath = full.startsWith('file://') ? Uri.parse(full).toFilePath() : full;
+        }
+        tracks.add(Track(
+          id: trackUri,
+          uri: trackUri,
+          filePath: filePath,
+          title: pendingTitle ?? line.split('/').last.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), ''),
+          artist: pendingArtist ?? '',
+          durationMs: (pendingDuration ?? 0) * 1000,
+        ));
+        pendingTitle = null;
+        pendingArtist = null;
+        pendingDuration = null;
+      }
+
+      if (tracks.isEmpty) {
+        print('[pathephon] m3u: no tracks found');
+        return;
+      }
+      print('[pathephon] m3u: ${tracks.length} tracks, starting playback');
+      final c = container;
+      if (c != null) {
+        c.read(libraryStateProvider.notifier).setPickedTracks(tracks);
+        c.read(playbackServiceProvider).playQueue(tracks: tracks, startIndex: 0);
+      }
+    } catch (e) {
+      print('[pathephon] m3u parse failed: $e');
+    }
+  }
 }
 
 class AudioPlayerX64App extends ConsumerWidget {
@@ -86,8 +171,9 @@ class AudioPlayerX64App extends ConsumerWidget {
       if (call.method == 'onLaunchIntent') {
         final uri = call.arguments['uri'] as String? ?? '';
         final name = call.arguments['name'] as String? ?? '';
+        final content = call.arguments['content'] as String? ?? '';
         if (uri.isNotEmpty) {
-          _OpenWithObserver._handleOpenWith(uri, name);
+          _OpenWithObserver._handleOpenWith(uri, name, content);
         }
       }
     });

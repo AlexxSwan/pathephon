@@ -184,9 +184,15 @@ class _ArtworkImage extends ConsumerWidget {
     final p = Preset.of(context);
     final t = track;
     if (t == null) return _appIconFallback(p);
+    // Приоритет 1: artUri из самого трека
     String? artUri = t.artUri;
+    // Приоритет 2: ищем обложку в индексе только для этого конкретного альбома
     if (artUri.isEmpty) {
-      artUri = ref.watch(albumArtIndexProvider)['${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}'];
+      final albumKey = '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}';
+      final indexed = ref.watch(albumArtIndexProvider)[albumKey];
+      if (indexed != null && indexed.isNotEmpty) {
+        artUri = indexed;
+      }
     }
     if (artUri != null && artUri.isNotEmpty) {
       final ms = ref.read(mediaStoreSourceProvider);
@@ -199,6 +205,7 @@ class _ArtworkImage extends ConsumerWidget {
       }
       return Image.network(artUri, fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
     }
+    // Нет обложки — показываем gif
     return _appIconFallback(p);
   }
   Widget _appIconFallback(ThemePreset p) {

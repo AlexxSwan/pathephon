@@ -2,6 +2,7 @@ import "package:flutter/foundation.dart" show debugPrint;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:io";
+import "package:file_picker/file_picker.dart";
 import "dart:typed_data";
 import "dart:convert";
 
@@ -55,7 +56,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
         }
         return;
       }
-      await ref.read(libraryStateProvider.notifier).addToCurrentQueue(result.tracks);
+      await ref.read(libraryStateProvider.notifier).addToCurrentQueue(result.tracks, ProviderScope.containerOf(context));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Добавлено треков: ${result.tracks.length}')),

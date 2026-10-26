@@ -46,6 +46,20 @@ class AudioPlayerX64App extends ConsumerWidget {
       theme: RetroTheme.lightTheme,
       darkTheme: RetroTheme.darkTheme,
       themeMode: themeMode,
+      onGenerateRoute: (settings) {
+        // Перехватываем ACTION_VIEW от Android.
+        // Flutter сам вызывает pushNamed(uri) когда получает intent.
+        // settings.name = Uri аудиофайла (content:// или file://).
+        final uri = settings.name;
+        if (uri.startsWith('content://') || uri.startsWith('file://')) {
+          // Запускаем трек через addPostFrameCallback чтобы providers были готовы
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleOpenWith(uri, ref);
+          });
+          return MaterialPageRoute(builder: (_) => const SizedBox.shrink());
+        }
+        return null;
+      },
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [

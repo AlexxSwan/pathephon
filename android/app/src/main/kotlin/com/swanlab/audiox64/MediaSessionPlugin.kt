@@ -214,6 +214,15 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         }
     }
 
+    private fun loadAssetBitmap(name: String): android.graphics.Bitmap? {
+        return try {
+            val assetManager = context?.assets ?: return null
+            val input = assetManager.open("flutter_assets/assets/$name")
+            BitmapFactory.decodeStream(input).also { input.close() }
+        } catch (e: Exception) {
+            null
+        }
+    }
     private fun loadBitmap(uri: String): android.graphics.Bitmap? {
         return try {
             when {

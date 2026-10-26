@@ -7,6 +7,7 @@ import 'dart:io' show Directory;
 
 import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/widgets.dart' show WidgetsBinding, ProviderScope;
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -131,6 +132,34 @@ class LibraryNotifier extends StateNotifier<AsyncValue<List<Track>>> {
 
   void setPickedTracks(List<Track> tracks) {
     state = AsyncValue.data(tracks);
+  }
+
+  /// Добавляет треки в конец текущей очереди воспроизведения.
+  Future<void> addToCurrentQueue(List<Track> newTracks) async {
+    final current = state.valueOrNull ?? const <Track>[];
+    final combined = [...current, ...newTracks];
+    state = AsyncValue.data(combined);
+    // Также добавляем в playback queue
+    try {
+      final container = ProviderScope.containerOf(
+        WidgetsBinding.instance.rootElement,
+      );
+      final playback = container.read(playbackServiceProvider);
+      final snap = container.read(playbackSnapshotProvider).valueOrNull;
+      final existing = snap?.queue ?? const <Track>[];
+      if (existing.isEmpty) {
+        await playback.playQueue(tracks: combined, startIndex: 0);
+      } else {
+        // Просто обновляем library state — playbackService сам добавит
+        // (через addToQueue метод если есть, иначе переиграет)
+        await playback.playQueue(
+          tracks: [...existing, ...newTracks],
+          startIndex: existing.length > 0 ? snap?.index ?? 0 : 0,
+        );
+      }
+    } catch (e) {
+      print('[pathephon] addToCurrentQueue failed: $e');
+    }
   }
 }
 

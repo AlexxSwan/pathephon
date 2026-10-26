@@ -27,6 +27,7 @@ abstract class PlaybackService {
 
   Future<void> playQueue({required List<Track> tracks, required int startIndex});
   Future<void> playSingle(Track track);
+  Future<void> addToQueue(List<Track> tracks);
   Future<void> play();
   Future<void> pause();
   Future<void> stop();
@@ -289,6 +290,16 @@ class JustAudioPlaybackService implements PlaybackService {
         shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
       ));
     } catch (e) { print('[pathephon] restoreSavedQueue failed: $e'); }
+  }
+
+  @override
+  Future<void> addToQueue(List<Track> tracks) async {
+    if (tracks.isEmpty) return;
+    _queue = List.unmodifiable([..._queue, ...tracks]);
+    final sources = tracks.map(_toSource).toList();
+    // TODO: добавить в existing ConcatenatingAudioSource
+    // Пока просто переигрываем всю очередь
+    await _saveQueue();
   }
 
   @override

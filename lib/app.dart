@@ -8,7 +8,7 @@ import "package:flutter/services.dart";
 import "core/l10n/generated/app_localizations.dart";
 import "core/theme/retro_theme.dart";
 import "domain/models/track.dart";
-import "presentation/screens/audiobooks_screen.dart";
+
 import "presentation/screens/equalizer_screen.dart";
 import "presentation/screens/library_screen.dart";
 import "presentation/screens/now_playing_screen.dart";
@@ -240,7 +240,7 @@ class _ShellState extends ConsumerState<_Shell> {
   int _index = 0;
   final _screens = const <Widget>[
     NowPlayingScreen(), LibraryScreen(), EqualizerScreen(),
-    AudiobooksScreen(), AboutScreen(),
+    AboutScreen(),
   ];
 
   static const _themeModeNames = ['\u0422\u0451\u043C\u043D\u0430\u044F', '\u0421\u0432\u0435\u0442\u043B\u0430\u044F', '\u0421\u0438\u0441\u0442\u0435\u043C\u043D\u0430\u044F'];
@@ -317,8 +317,7 @@ class _ShellState extends ConsumerState<_Shell> {
                   _NavButton(icon: Icons.graphic_eq_outlined, activeIcon: Icons.graphic_eq, label: l.navNowPlaying, selected: _index == 0, onTap: () => setState(() => _index = 0)),
                   _NavButton(icon: Icons.library_music_outlined, activeIcon: Icons.library_music, label: l.navLibrary, selected: _index == 1, onTap: () => setState(() => _index = 1)),
                   _NavButton(icon: Icons.equalizer_outlined, activeIcon: Icons.equalizer, label: l.navEqualizer, selected: _index == 2, onTap: () => setState(() => _index = 2)),
-                  _NavButton(icon: Icons.menu_book_outlined, activeIcon: Icons.menu_book, label: l.navAudiobooks, selected: _index == 3, onTap: () => setState(() => _index = 3)),
-                  _NavButton(icon: Icons.info_outline, activeIcon: Icons.info, label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435", selected: _index == 4, onTap: () => setState(() => _index = 4)),
+                  _NavButton(icon: Icons.info_outline, activeIcon: Icons.info, label: "\u041E \u043F\u0440\u043E\u0433\u0440\u0430\u043C\u043C\u0435", selected: _index == 3, onTap: () => setState(() => _index = 3)),
                 ],
               ),
             ),

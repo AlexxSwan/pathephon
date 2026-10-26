@@ -7,6 +7,7 @@ import "package:flutter/services.dart";
 
 import "core/l10n/generated/app_localizations.dart";
 import "core/theme/retro_theme.dart";
+import "domain/models/track.dart";
 import "presentation/screens/audiobooks_screen.dart";
 import "presentation/screens/equalizer_screen.dart";
 import "presentation/screens/library_screen.dart";
@@ -20,6 +21,30 @@ final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 class AudioPlayerX64App extends ConsumerWidget {
   const AudioPlayerX64App({super.key});
 
+  /// Обрабатывает "Открыть с помощью Pathephon" — uri аудиофайла.
+  /// Вызывается из onGenerateRoute когда Flutter получает ACTION_VIEW.
+  void _handleOpenWith(BuildContext context, String uri) {
+    try {
+      final decoded = Uri.parse(uri);
+      final name = decoded.pathSegments.isNotEmpty
+          ? Uri.decodeComponent(decoded.pathSegments.last)
+          : 'Unknown';
+      final title = name.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
+      final track = Track(
+        id: uri,
+        uri: uri,
+        title: title,
+        durationMs: 0,
+      );
+      print('[pathephon] open-with: $title ($uri)');
+      final container = ProviderScope.containerOf(context);
+      container.read(libraryStateProvider.notifier).setPickedTracks([track]);
+      container.read(playbackServiceProvider).playSingle(track);
+    } catch (e) {
+      print('[pathephon] open-with failed: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final locale = ref.watch(localeProvider);
@@ -27,14 +52,12 @@ class AudioPlayerX64App extends ConsumerWidget {
     ref.watch(libraryRestoreProvider);
     ref.watch(launchIntentProvider);
 
-    // Map index to ThemeMode: 0=dark, 1=light, 2=system
     final themeMode = switch (themeModeIdx) {
       0 => ThemeMode.dark,
       1 => ThemeMode.light,
       _ => ThemeMode.system,
     };
 
-    // Determine effective brightness
     final isDark = themeMode == ThemeMode.dark ||
         (themeMode == ThemeMode.system &&
             View.of(context).platformDispatcher.platformBrightness == Brightness.dark);
@@ -47,14 +70,10 @@ class AudioPlayerX64App extends ConsumerWidget {
       darkTheme: RetroTheme.darkTheme,
       themeMode: themeMode,
       onGenerateRoute: (settings) {
-        // Перехватываем ACTION_VIEW от Android.
-        // Flutter сам вызывает pushNamed(uri) когда получает intent.
-        // settings.name = Uri аудиофайла (content:// или file://).
         final uri = settings.name ?? '';
         if (uri.startsWith('content://') || uri.startsWith('file://')) {
-          // Запускаем трек через addPostFrameCallback чтобы providers были готовы
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _handleOpenWith(uri);
+            _handleOpenWith(context, uri);
           });
           return MaterialPageRoute(builder: (_) => const SizedBox.shrink());
         }
@@ -69,7 +88,6 @@ class AudioPlayerX64App extends ConsumerWidget {
         GlobalCupertinoLocalizations.delegate,
       ],
       builder: (context, child) {
-        // Re-evaluate brightness in case system changed
         final brightness = Theme.of(context).brightness;
         final p = brightness == Brightness.dark ? ThemePreset.dark : ThemePreset.light;
         return Preset(preset: p, child: child!);
@@ -102,7 +120,7 @@ class _ShellState extends ConsumerState<_Shell> {
     AudiobooksScreen(), AboutScreen(),
   ];
 
-  static const _themeModeNames = ['Тёмная', 'Светлая', 'Системная'];
+  static const _themeModeNames = ['\u0422\u0451\u043C\u043D\u0430\u044F', '\u0421\u0432\u0435\u0442\u043B\u0430\u044F', '\u0421\u0438\u0441\u0442\u0435\u043C\u043D\u0430\u044F'];
   static const _themeModeIcons = [Icons.dark_mode, Icons.light_mode, Icons.brightness_auto];
 
   void _cycleTheme() {
@@ -223,29 +241,5 @@ class _NavButton extends StatelessWidget {
         ),
       ),
     );
-  }
-  /// Обрабатывает "Открыть с помощью Pathephon" — uri аудиофайла.
-  /// Использует ProviderScope.container для доступа к providers.
-  void _handleOpenWith(String uri) {
-    try {
-      final decoded = Uri.parse(uri);
-      final name = decoded.pathSegments.isNotEmpty
-          ? Uri.decodeComponent(decoded.pathSegments.last)
-          : 'Unknown';
-      final title = name.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
-      final track = Track(
-        id: uri,
-        uri: uri,
-        title: title,
-        durationMs: 0,
-      );
-      print('[pathephon] open-with: $title ($uri)');
-      // Получаем container из ProviderScope
-      final container = ProviderScope.containerOf(context);
-      container.read(libraryStateProvider.notifier).setPickedTracks([track]);
-      container.read(playbackServiceProvider).playSingle(track);
-    } catch (e) {
-      print('[pathephon] open-with failed: $e');
-    }
   }
 }

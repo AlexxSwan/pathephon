@@ -149,7 +149,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               color: isCurrent ? p.accentHot.withOpacity(0.15) : Colors.transparent,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(children: [
-                SizedBox(width: 56, child: isCurrent
+                SizedBox(width: 44, child: isCurrent
                     ? Icon(Icons.play_arrow, size: 20, color: p.accentHot)
                     : Text('${i + 1}', style: TextStyle(color: p.textMuted, fontSize: 13), textAlign: TextAlign.center)),
                 const SizedBox(width: 8),

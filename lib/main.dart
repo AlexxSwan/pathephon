@@ -15,7 +15,21 @@ import 'domain/models/track.dart';
 import 'presentation/providers/providers.dart';
 
 /// MethodChannel для чтения launch intent.
-const _intentChannel = MethodChannel('pathephon/launch_intent');
+final _intentChannel = MethodChannel('pathephon/launch_intent');
+
+/// Callback для push-модели (Kotlin сам вызывает когда есть intent).
+void Function(String uri, String name)? _onLaunchIntentCallback;
+
+void setLaunchIntentCallback(void Function(String uri, String name) callback) {
+  _onLaunchIntentCallback = callback;
+  _intentChannel.setMethodCallHandler((call) async {
+    if (call.method == 'onLaunchIntent') {
+      final uri = call.arguments['uri'] as String?;
+      final name = call.arguments['name'] as String? ?? '';
+      if (uri != null) _onLaunchIntentCallback?.call(uri, name);
+    }
+  });
+}
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -34,24 +48,28 @@ Future<void> main() async {
   );
 }
 
-/// Читает ACTION_VIEW intent при запуске приложения.
-/// Возвращает Track если был "Открыть с помощью Pathephon" на аудиофайле.
+/// Читает ACTION_VIEW intent при запуске (pull-модель).
+/// Возвращает Track если был "Открыть с помощью Pathephon".
 Future<Track?> readLaunchIntent() async {
   try {
-    final result = await _intentChannel.invokeMethod<String>('getLaunchIntent');
-    if (result == null || result.isEmpty) return null;
-    final uri = Uri.parse(result);
-    final fileName = uri.pathSegments.isNotEmpty
-        ? Uri.decodeComponent(uri.pathSegments.last)
-        : 'Unknown';
-    final title = fileName.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
+    final result = await _intentChannel.invokeMethod<Map>('getLaunchIntent');
+    if (result == null) return null;
+    final uri = result['uri'] as String? ?? '';
+    final name = result['name'] as String? ?? '';
+    if (uri.isEmpty) return null;
+    final title = name.isNotEmpty
+        ? name.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '')
+        : (Uri.tryParse(uri)?.pathSegments.isNotEmpty == true
+            ? Uri.decodeComponent(Uri.parse(uri).pathSegments.last)
+            : 'Unknown');
     return Track(
-      id: result,
-      uri: result,
+      id: uri,
+      uri: uri,
       title: title,
       durationMs: 0,
     );
-  } catch (_) {
+  } catch (e) {
+    print('[pathephon] readLaunchIntent failed: $e');
     return null;
   }
 }

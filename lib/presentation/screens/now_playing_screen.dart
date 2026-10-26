@@ -184,16 +184,10 @@ class _ArtworkImage extends ConsumerWidget {
     final p = Preset.of(context);
     final t = track;
     if (t == null) return _appIconFallback(p);
-    // Приоритет 1: artUri из самого трека
+    // Используем ТОЛЬКО artUri из самого трека.
+    // НЕ используем albumArtIndexProvider — он глобальный и может вернуть
+    // обложку от другого альбома с таким же artist||album ключом.
     String? artUri = t.artUri;
-    // Приоритет 2: ищем обложку в индексе только для этого конкретного альбома
-    if (artUri.isEmpty) {
-      final albumKey = '${t.albumArtist.isEmpty ? t.artist : t.albumArtist}||${t.album}';
-      final indexed = ref.watch(albumArtIndexProvider)[albumKey];
-      if (indexed != null && indexed.isNotEmpty) {
-        artUri = indexed;
-      }
-    }
     if (artUri != null && artUri.isNotEmpty) {
       final ms = ref.read(mediaStoreSourceProvider);
       final cachedBytes = ms.getCoverBytes(artUri);

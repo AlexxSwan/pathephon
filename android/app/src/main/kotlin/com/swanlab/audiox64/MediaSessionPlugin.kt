@@ -43,29 +43,48 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         context = null
     }
 
+    /// Helper: getInt — Flutter MethodChannel передаёт Dart int как java.lang.Integer,
+    /// НЕ Long. Поэтому call.argument<Long> падает с ClassCastException.
+    /// Используем Number и toLong() чтобы работать с обоими.
+    private fun getInt(call: MethodCall, key: String, default: Long = 0L): Long {
+        val v = call.argument<Number>(key) ?: return default
+        return v.toLong()
+    }
+
+    private fun getBool(call: MethodCall, key: String, default: Boolean = false): Boolean {
+        return call.argument<Boolean>(key) ?: default
+    }
+
+    private fun getString(call: MethodCall, key: String, default: String = ""): String {
+        return call.argument<String>(key) ?: default
+    }
+
     override fun onMethodCall(call: MethodCall, result: Result) {
         try {
             when (call.method) {
                 "setMediaItem" -> {
-                    val title = call.argument<String>("title") ?: ""
-                    val artist = call.argument<String>("artist") ?: ""
-                    val album = call.argument<String>("album") ?: ""
-                    val durationMs = call.argument<Long>("durationMs") ?: 0L
-                    val artUri = call.argument<String>("artUri") ?: ""
+                    val title = getString(call, "title")
+                    val artist = getString(call, "artist")
+                    val album = getString(call, "album")
+                    val durationMs = getInt(call, "durationMs")
+                    val artUri = getString(call, "artUri")
+                    Log.i(TAG, ">>> setMediaItem: title='$title' artist='$artist' dur=$durationMs artUri='$artUri'")
                     updateMetadata(title, artist, album, durationMs, artUri)
                     result.success(null)
                 }
                 "setPlaybackState" -> {
-                    val playing = call.argument<Boolean>("playing")
-                    val pos = call.argument<Long>("position") ?: 0L
-                    val hasNext = call.argument<Boolean>("hasNext") ?: false
-                    val hasPrev = call.argument<Boolean>("hasPrev") ?: false
-                    if (playing != null) updatePlaybackState(playing, pos, hasNext, hasPrev)
+                    val playing = getBool(call, "playing")
+                    val pos = getInt(call, "position")
+                    val hasNext = getBool(call, "hasNext")
+                    val hasPrev = getBool(call, "hasPrev")
+                    Log.i(TAG, ">>> setPlaybackState: playing=$playing pos=$pos next=$hasNext prev=$hasPrev")
+                    updatePlaybackState(playing, pos, hasNext, hasPrev)
                     result.success(null)
                 }
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
+            Log.e(TAG, ">>> onMethodCall ${call.method} FAILED: ${e.message}", e)
             result.error("ERROR", e.message, null)
         }
     }
@@ -80,39 +99,29 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
                 MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
             )
-
-            // === КЛЮЧЕВОЙ МОМЕНТ ===
-            // Переопределяем onMediaButtonEvent — он получает ВСЕ KeyEvent'ы
-            // от BT-гарнитуры. ColorOS не вызывает автоматически onPlay/onPause/
-            // onSkipToNext — нужно самим парсить keyCode.
             s.setCallback(object : MediaSession.Callback() {
                 override fun onMediaButtonEvent(mediaButtonIntent: android.content.Intent): Boolean {
                     val ke = mediaButtonIntent.getParcelableExtra<KeyEvent>(android.content.Intent.EXTRA_KEY_EVENT)
-                    if (ke == null) {
-                        Log.w(TAG, ">>> onMediaButtonEvent: no KeyEvent")
-                        return false
-                    }
+                    if (ke == null) return false
                     Log.i(TAG, ">>> onMediaButtonEvent: keyCode=${ke.keyCode} action=${ke.action} name=${keyCodeToString(ke.keyCode)}")
-                    // Только ACTION_UP (отпускание) — ACTION_DOWN игнорируем
                     if (ke.action != KeyEvent.ACTION_UP) return true
                     handleKeyCode(ke.keyCode)
                     return true
                 }
-
-                // Также оставляем transport callbacks на случай если ColorOS их вызовет
                 override fun onPlay()  { invokeDart("play") }
                 override fun onPause() { invokeDart("pause") }
                 override fun onSkipToNext()     { invokeDart("next") }
                 override fun onSkipToPrevious() { invokeDart("prev") }
                 override fun onStop()   { invokeDart("stop") }
                 override fun onSeekTo(pos: Long) {
-                    Log.i(TAG, ">>> onSeekTo $pos")
                     channel?.invokeMethod("seek", mapOf("position" to pos))
                 }
             })
             s.isActive = true
             mediaSession = s
             Log.i(TAG, ">>> MediaSession 'Pathephon' ACTIVE")
+            // Пушим начальный пустой state чтобы система увидела сессию готовой
+            updatePlaybackState(false, 0L, false, false)
         } catch (e: Exception) {
             Log.e(TAG, ">>> ensureMediaSession FAILED: ${e.message}", e)
         }
@@ -175,14 +184,19 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         if (bmp != null) {
                             b.putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
                             b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
+                            Log.i(TAG, ">>> metadata set WITH art: $title / $artist")
+                        } else {
+                            Log.i(TAG, ">>> metadata set WITHOUT art (bmp null): $title")
                         }
                         s.setMetadata(b.build())
                     } catch (e: Exception) {
+                        Log.e(TAG, ">>> metadata bitmap failed: ${e.message}")
                         s.setMetadata(b.build())
                     }
                 }
             } else {
                 s.setMetadata(b.build())
+                Log.i(TAG, ">>> metadata set (no artUri): $title")
             }
         } catch (e: Exception) {
             Log.e(TAG, "updateMetadata: ${e.message}", e)
@@ -226,6 +240,7 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     .setState(state, posMs, 1.0f, SystemClock.elapsedRealtime())
                     .build()
             )
+            Log.i(TAG, ">>> PlaybackState SET: state=$state pos=$posMs next=$hasNext prev=$hasPrev")
         } catch (e: Exception) {
             Log.e(TAG, "updatePlaybackState: ${e.message}", e)
         }

@@ -26,6 +26,7 @@ abstract class PlaybackService {
   Stream<int> get audioSessionIdStream;
 
   Future<void> playQueue({required List<Track> tracks, required int startIndex});
+  Future<void> playSingle(Track track);
   Future<void> play();
   Future<void> pause();
   Future<void> stop();
@@ -288,6 +289,11 @@ class JustAudioPlaybackService implements PlaybackService {
         shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
       ));
     } catch (e) { print('[pathephon] restoreSavedQueue failed: $e'); }
+  }
+
+  @override
+  Future<void> playSingle(Track track) async {
+    await playQueue(tracks: [track], startIndex: 0);
   }
 
   @override

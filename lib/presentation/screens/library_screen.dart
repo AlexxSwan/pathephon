@@ -2,8 +2,6 @@ import "package:flutter/foundation.dart" show debugPrint;
 import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:io";
-import "package:file_picker/file_picker.dart";
-import "package:file_picker/file_picker.dart";
 import "dart:typed_data";
 import "dart:convert";
 
@@ -345,7 +343,7 @@ class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
 
     // Выбор папки через file_picker
     try {
-      final result = await FilePicker.platform.getDirectoryPath();
+      final result = await FilePicker.getDirectoryPath();
       if (result == null) return;
       final name = pl['name'] as String? ?? 'playlist';
       final file = File('$result/$name.m3u');
@@ -375,7 +373,7 @@ class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
   /// Импорт плейлиста из .m3u файла.
   Future<void> _importFromM3u() async {
     try {
-      final result = await FilePicker.platform.pickFiles(
+      final result = await FilePicker.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['m3u', 'm3u8'],
       );

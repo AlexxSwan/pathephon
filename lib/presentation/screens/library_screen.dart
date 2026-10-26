@@ -103,7 +103,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             }),
             _AlbumGrid(),
             _ArtistsList(),
-            const Center(child: Text("No playlists yet")),
+            _PlaylistsTab(),
           ]);
         },
       ),
@@ -190,5 +190,198 @@ class _ArtistsList extends ConsumerWidget {
       title: Text(e.key), subtitle: Text("${e.value.length} albums"),
       leading: const Icon(Icons.person, color: TubeColors.brass), onTap: () {},
     )).toList());
+  }
+}
+
+// ============================================================================
+//  Вкладка "Плейлисты" — список сохранённых плейлистов + кнопка "Сохранить текущий"
+// ============================================================================
+class _PlaylistsTab extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<_PlaylistsTab> createState() => _PlaylistsTabState();
+}
+
+class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
+  List<Map<String, dynamic>> _playlists = [];
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPlaylists();
+  }
+
+  Future<void> _loadPlaylists() async {
+    final prefs = ref.read(sharedPreferencesProvider);
+    final raw = prefs.getString('pathephon.playlists');
+    if (raw == null) {
+      setState(() { _playlists = []; _loading = false; });
+      return;
+    }
+    try {
+      final list = jsonDecode(raw) as List<dynamic>;
+      setState(() { _playlists = list.cast<Map<String, dynamic>>(); _loading = false; });
+    } catch (_) {
+      setState(() { _playlists = []; _loading = false; });
+    }
+  }
+
+  Future<void> _saveCurrentPlaylist() async {
+    final snap = ref.read(playbackSnapshotProvider).valueOrNull;
+    if (snap == null || snap.queue.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Очередь воспроизведения пуста')),
+      );
+      return;
+    }
+    // Диалог — спрашиваем имя плейлиста
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final controller = TextEditingController(
+          text: 'Плейлист ${_playlists.length + 1}',
+        );
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1A1410),
+          title: const Text('Сохранить плейлист', style: TextStyle(color: Color(0xFFF4E9D2))),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            style: const TextStyle(color: Color(0xFFF4E9D2)),
+            decoration: const InputDecoration(
+              hintText: 'Название плейлиста',
+              hintStyle: TextStyle(color: Color(0xFF8A7F6A)),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Отмена', style: TextStyle(color: Color(0xFF8A7F6A))),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Сохранить', style: TextStyle(color: Color(0xFFFF6B1A))),
+            ),
+          ],
+        );
+      },
+    );
+    if (name == null || name.isEmpty) return;
+
+    // Сохраняем
+    final prefs = ref.read(sharedPreferencesProvider);
+    final newPlaylist = {
+      'id': 'playlist_${DateTime.now().millisecondsSinceEpoch}',
+      'name': name,
+      'createdAt': DateTime.now().toIso8601String(),
+      'tracks': snap.queue.map((t) => t.toJson()).toList(),
+    };
+    _playlists.insert(0, newPlaylist);
+    await prefs.setString('pathephon.playlists', jsonEncode(_playlists));
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Плейлист "$name" сохранён (${snap.queue.length} треков)')),
+    );
+  }
+
+  Future<void> _loadPlaylist(int index) async {
+    final pl = _playlists[index];
+    final tracksJson = pl['tracks'] as List<dynamic>;
+    final tracks = tracksJson
+        .map((j) => Track.fromJson(j as Map<String, dynamic>))
+        .toList(growable: false);
+    ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
+    await ref.read(playbackServiceProvider).playQueue(tracks: tracks, startIndex: 0);
+    ref.read(isPlayingProvider.notifier).state = true;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Загружен плейлист "${pl['name']}" (${tracks.length} треков)')),
+    );
+  }
+
+  Future<void> _deletePlaylist(int index) async {
+    final pl = _playlists[index];
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: const Color(0xFF1A1410),
+        title: const Text('Удалить плейлист?', style: TextStyle(color: Color(0xFFF4E9D2))),
+        content: Text('"${pl['name']}"', style: const TextStyle(color: Color(0xFFF4E9D2))),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('Отмена', style: TextStyle(color: Color(0xFF8A7F6A)))),
+          TextButton(onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('Удалить', style: TextStyle(color: Color(0xFFFF6B1A)))),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    _playlists.removeAt(index);
+    final prefs = ref.read(sharedPreferencesProvider);
+    await prefs.setString('pathephon.playlists', jsonEncode(_playlists));
+    setState(() {});
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Column(children: [
+      Padding(
+        padding: const EdgeInsets.all(12),
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _saveCurrentPlaylist,
+            icon: const Icon(Icons.save),
+            label: const Text('Сохранить текущий'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: TubeColors.amber,
+              foregroundColor: TubeColors.background,
+            ),
+          ),
+        ),
+      ),
+      Expanded(
+        child: _playlists.isEmpty
+            ? Center(
+                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                  const Icon(Icons.playlist_add, size: 80, color: TubeColors.brass),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Нет сохранённых плейлистов',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.textSecondary),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Нажмите «Сохранить текущий» чтобы\nдобавить текущую очередь воспроизведения',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: TubeColors.textMuted, fontSize: 12),
+                  ),
+                ]),
+              )
+            : ListView.builder(
+                itemCount: _playlists.length,
+                itemBuilder: (_, i) {
+                  final pl = _playlists[i];
+                  final tracksCount = (pl['tracks'] as List).length;
+                  final createdAt = DateTime.tryParse(pl['createdAt'] as String? ?? '');
+                  final dateStr = createdAt != null
+                      ? '${createdAt.day}.${createdAt.month}.${createdAt.year}'
+                      : '';
+                  return ListTile(
+                    leading: const Icon(Icons.playlist_play, color: TubeColors.brass, size: 40),
+                    title: Text(pl['name'] as String? ?? 'Без названия'),
+                    subtitle: Text('$tracksCount треков  •  $dateStr'),
+                    trailing: IconButton(
+                      icon: const Icon(Icons.delete_outline, color: TubeColors.textMuted),
+                      onPressed: () => _deletePlaylist(i),
+                    ),
+                    onTap: () => _loadPlaylist(i),
+                  );
+                },
+              ),
+      ),
+    ]);
   }
 }

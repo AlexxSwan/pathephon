@@ -133,6 +133,21 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     if (queue.isEmpty) {
       return Center(child: Text('\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u043F\u0443\u0441\u0442\u0430', style: TextStyle(color: p.textMuted)));
     }
+    // Auto-scroll to current track
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_playlistScrollController.hasClients) {
+        final target = currentIndex * 44.0;
+        final viewport = _playlistScrollController.position.viewportDimension;
+        final offset = _playlistScrollController.offset;
+        if (target < offset || target > offset + viewport - 44) {
+          _playlistScrollController.animateTo(
+            (target - viewport / 2 + 22).clamp(0.0, _playlistScrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 200),
+            curve: Curves.easeOut,
+          );
+        }
+      }
+    });
     return Container(
       decoration: BoxDecoration(
         color: p.background,
@@ -140,19 +155,26 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         borderRadius: BorderRadius.circular(4),
       ),
       child: ListView.builder(
+        controller: _playlistScrollController,
         padding: EdgeInsets.zero, itemCount: queue.length, itemExtent: 44,
         itemBuilder: (_, i) {
           final t = queue[i];
           final isCurrent = i == currentIndex;
           return InkWell(
-            onTap: () => playback.playQueue(tracks: queue, startIndex: i),
+            onTap: () {
+              if (isCurrent) {
+                _showFilePathDialog(t, p);
+              } else {
+                playback.playQueue(tracks: queue, startIndex: i);
+              }
+            },
             child: Container(
               color: isCurrent ? p.accentHot.withOpacity(0.15) : Colors.transparent,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               child: Row(children: [
                 SizedBox(width: 44, child: isCurrent
                     ? Icon(Icons.play_arrow, size: 20, color: p.accentHot)
-                    : Text('${i + 1}', style: TextStyle(color: p.textMuted, fontSize: 13), textAlign: TextAlign.center)),
+                    : Text('${i + 1}', style: TextStyle(color: p.textMuted, fontSize: 13, fontFamily: 'monospace'), textAlign: TextAlign.end)),
                 const SizedBox(width: 8),
                 Expanded(child: Column(
                   mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
@@ -172,6 +194,22 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  void _showFilePathDialog(Track t, ThemePreset p) {
+    final path = t.filePath.isNotEmpty ? t.filePath : t.uri;
+    final cleanPath = path.startsWith('file://') ? Uri.parse(path).toFilePath() : path;
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surfaceVariant,
+        title: Text(t.title, style: TextStyle(color: p.accent, fontSize: 16)),
+        content: SingleChildScrollView(child: SelectableText(cleanPath, style: TextStyle(color: p.textPrimary, fontSize: 12, fontFamily: 'monospace'))),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Закрыть', style: TextStyle(color: p.brass))),
+        ],
       ),
     );
   }

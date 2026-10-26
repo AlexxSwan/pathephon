@@ -50,11 +50,11 @@ class AudioPlayerX64App extends ConsumerWidget {
         // Перехватываем ACTION_VIEW от Android.
         // Flutter сам вызывает pushNamed(uri) когда получает intent.
         // settings.name = Uri аудиофайла (content:// или file://).
-        final uri = settings.name;
+        final uri = settings.name ?? '';
         if (uri.startsWith('content://') || uri.startsWith('file://')) {
           // Запускаем трек через addPostFrameCallback чтобы providers были готовы
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _handleOpenWith(uri, ref);
+            _handleOpenWith(uri);
           });
           return MaterialPageRoute(builder: (_) => const SizedBox.shrink());
         }
@@ -223,5 +223,29 @@ class _NavButton extends StatelessWidget {
         ),
       ),
     );
+  }
+  /// Обрабатывает "Открыть с помощью Pathephon" — uri аудиофайла.
+  /// Использует ProviderScope.container для доступа к providers.
+  void _handleOpenWith(String uri) {
+    try {
+      final decoded = Uri.parse(uri);
+      final name = decoded.pathSegments.isNotEmpty
+          ? Uri.decodeComponent(decoded.pathSegments.last)
+          : 'Unknown';
+      final title = name.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
+      final track = Track(
+        id: uri,
+        uri: uri,
+        title: title,
+        durationMs: 0,
+      );
+      print('[pathephon] open-with: $title ($uri)');
+      // Получаем container из ProviderScope
+      final container = ProviderScope.containerOf(context);
+      container.read(libraryStateProvider.notifier).setPickedTracks([track]);
+      container.read(playbackServiceProvider).playSingle(track);
+    } catch (e) {
+      print('[pathephon] open-with failed: $e');
+    }
   }
 }

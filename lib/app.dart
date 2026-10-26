@@ -22,6 +22,10 @@ final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 /// Flutter через SystemChannels.navigation вызывает didPushRouteInformation
 /// на WidgetsBinding, а не на MaterialApp. onGenerateRoute не перехватывает
 /// эти вызовы. Поэтому используем WidgetsBindingObserver.
+/// Channel для получения name файла из Kotlin (push-модель).
+/// Kotlin сам вызывает onLaunchIntent когда есть intent.
+final _launchChannel = MethodChannel('pathephon/launch_intent');
+
 class _OpenWithObserver extends WidgetsBindingObserver {
   static String? pendingUri;
   static ProviderContainer? container;
@@ -30,19 +34,23 @@ class _OpenWithObserver extends WidgetsBindingObserver {
   Future<bool> didPushRouteInformation(RouteInformation routeInformation) async {
     final uri = routeInformation.uri.toString();
     if (uri.startsWith('content://') || uri.startsWith('file://')) {
-      _handleOpenWith(uri);
+      _handleOpenWith(uri, '');
       return true; // перехватили, не пускаем в Navigator
     }
     return super.didPushRouteInformation(routeInformation);
   }
 
-  static void _handleOpenWith(String uri) {
+  static void _handleOpenWith(String uri, [String name = '']) {
     try {
-      final decoded = Uri.parse(uri);
-      final name = decoded.pathSegments.isNotEmpty
-          ? Uri.decodeComponent(decoded.pathSegments.last)
-          : 'Unknown';
-      final title = name.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
+      // Приоритет: name из Kotlin (правильное имя файла) > pathSegments > Unknown
+      var fileName = name;
+      if (fileName.isEmpty) {
+        final decoded = Uri.parse(uri);
+        fileName = decoded.pathSegments.isNotEmpty
+            ? Uri.decodeComponent(decoded.pathSegments.last)
+            : 'Unknown';
+      }
+      final title = fileName.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
       final track = Track(
         id: uri,
         uri: uri,
@@ -71,13 +79,23 @@ class AudioPlayerX64App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     // Регистрируем observer + сохраняем container
     WidgetsBinding.instance.addObserver(_OpenWithObserver());
+    // Регистрируем handler для получения name файла из Kotlin
+    _launchChannel.setMethodCallHandler((call) async {
+      if (call.method == 'onLaunchIntent') {
+        final uri = call.arguments['uri'] as String? ?? '';
+        final name = call.arguments['name'] as String? ?? '';
+        if (uri.isNotEmpty) {
+          _OpenWithObserver._handleOpenWith(uri, name);
+        }
+      }
+    });
     _OpenWithObserver.container = ProviderScope.containerOf(context);
     // Если intent пришёл до регистрации — обрабатываем сейчас
     if (_OpenWithObserver.pendingUri != null) {
       final uri = _OpenWithObserver.pendingUri!;
       _OpenWithObserver.pendingUri = null;
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        _OpenWithObserver._handleOpenWith(uri);
+        _OpenWithObserver._handleOpenWith(uri, '');
       });
     }
 

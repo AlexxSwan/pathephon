@@ -76,7 +76,14 @@ class MainActivity : FlutterActivity() {
     private fun trySendLaunchIntent() {
         val uri = pendingLaunchUri ?: return
         val ch = launchChannel ?: return
-        Log.i(TAG, ">>> sending launch intent to Dart: $uri")
+        // Отправляем имя файла вместе с uri через pathephon/launch_intent channel.
+        // SystemChannels.navigation не позволяет передать extra данные, поэтому
+        // используем свой channel.
+        launchChannel?.invokeMethod(
+            "onLaunchIntent",
+            mapOf("uri" to uri, "name" to (pendingLaunchName ?: ""))
+        )
+        Log.i(TAG, ">>> sending launch intent to Dart: $uri name=${pendingLaunchName ?: ""}")
         ch.invokeMethod("onLaunchIntent", mapOf("uri" to uri, "name" to (pendingLaunchName ?: "")))
         pendingLaunchUri = null
         pendingLaunchName = null

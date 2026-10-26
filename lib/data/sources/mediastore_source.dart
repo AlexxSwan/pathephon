@@ -158,14 +158,14 @@ class MediaStoreSource {
     final dirCoverCache = <String, String?>{};
     final tracks = <Track>[];
     for (final s in filtered) {
-      final track = TagSource.fromSongModel(s);
+      var track = TagSource.fromSongModel(s);
       // Если у трека нет artUri — ищем cover.jpg в папке
       if (track.artUri.isEmpty && track.filePath.isNotEmpty) {
         final dir = _dirOf(track.filePath);
         if (dir.isNotEmpty && !_isContentUri(dir)) {
           final cover = dirCoverCache.putIfAbsent(dir, () => _findCoverInDir(dir));
           if (cover != null) {
-            track.artUri = cover;
+            track = track.copyWith(artUri: cover);
             await _cacheCoverBytes(cover);
           }
         }

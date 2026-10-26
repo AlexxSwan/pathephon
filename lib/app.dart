@@ -102,7 +102,6 @@ class AudioPlayerX64App extends ConsumerWidget {
     final locale = ref.watch(localeProvider);
     final themeModeIdx = ref.watch(themeModeProvider);
     ref.watch(libraryRestoreProvider);
-    ref.watch(launchIntentProvider);
 
     final themeMode = switch (themeModeIdx) {
       0 => ThemeMode.dark,

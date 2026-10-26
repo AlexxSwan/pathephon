@@ -9,7 +9,6 @@ import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:on_audio_query/on_audio_query.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:pathephon/main.dart' show readLaunchIntent;
 
 import '../../core/utils/replaygain.dart';
 import '../../data/repositories/audiobook_repository.dart';
@@ -66,21 +65,6 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
 });
 
 // Separate provider to restore library - called from app startup
-// Обработка "Открыть с помощью Pathephon" — читаем ACTION_VIEW intent.
-final launchIntentProvider = FutureProvider<void>((ref) async {
-  try {
-    final track = await readLaunchIntent();
-    if (track != null) {
-      print('[pathephon] launch intent: ${track.title}');
-      ref.read(libraryStateProvider.notifier).setPickedTracks([track]);
-      final playback = ref.read(playbackServiceProvider);
-      await playback.playSingle(track);
-    }
-  } catch (e) {
-    print('[pathephon] launch intent failed: $e');
-  }
-});
-
 final libraryRestoreProvider = FutureProvider<void>((ref) async {
   final prefs = ref.watch(sharedPreferencesProvider);
   try {

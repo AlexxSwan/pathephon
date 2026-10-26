@@ -18,12 +18,25 @@ import "presentation/providers/providers.dart";
 
 final localeProvider = StateProvider<Locale>((ref) => const Locale("ru"));
 
-class AudioPlayerX64App extends ConsumerWidget {
-  const AudioPlayerX64App({super.key});
+/// Глобальный callback для ACTION_VIEW.
+/// Flutter через SystemChannels.navigation вызывает didPushRouteInformation
+/// на WidgetsBinding, а не на MaterialApp. onGenerateRoute не перехватывает
+/// эти вызовы. Поэтому используем WidgetsBindingObserver.
+class _OpenWithObserver extends WidgetsBindingObserver {
+  static String? pendingUri;
+  static ProviderContainer? container;
 
-  /// Обрабатывает "Открыть с помощью Pathephon" — uri аудиофайла.
-  /// Вызывается из onGenerateRoute когда Flutter получает ACTION_VIEW.
-  void _handleOpenWith(BuildContext context, String uri) {
+  @override
+  Future<bool> didPushRouteInformation(RouteInformation routeInformation) async {
+    final uri = routeInformation.uri.toString();
+    if (uri.startsWith('content://') || uri.startsWith('file://')) {
+      _handleOpenWith(uri);
+      return true; // перехватили, не пускаем в Navigator
+    }
+    return super.didPushRouteInformation(routeInformation);
+  }
+
+  static void _handleOpenWith(String uri) {
     try {
       final decoded = Uri.parse(uri);
       final name = decoded.pathSegments.isNotEmpty
@@ -37,16 +50,37 @@ class AudioPlayerX64App extends ConsumerWidget {
         durationMs: 0,
       );
       print('[pathephon] open-with: $title ($uri)');
-      final container = ProviderScope.containerOf(context);
-      container.read(libraryStateProvider.notifier).setPickedTracks([track]);
-      container.read(playbackServiceProvider).playSingle(track);
+      final c = container;
+      if (c != null) {
+        c.read(libraryStateProvider.notifier).setPickedTracks([track]);
+        c.read(playbackServiceProvider).playSingle(track);
+      } else {
+        pendingUri = uri;
+        print('[pathephon] open-with: container not ready, pending');
+      }
     } catch (e) {
       print('[pathephon] open-with failed: $e');
     }
   }
+}
+
+class AudioPlayerX64App extends ConsumerWidget {
+  const AudioPlayerX64App({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Регистрируем observer + сохраняем container
+    WidgetsBinding.instance.addObserver(_OpenWithObserver());
+    _OpenWithObserver.container = ProviderScope.containerOf(context);
+    // Если intent пришёл до регистрации — обрабатываем сейчас
+    if (_OpenWithObserver.pendingUri != null) {
+      final uri = _OpenWithObserver.pendingUri!;
+      _OpenWithObserver.pendingUri = null;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _OpenWithObserver._handleOpenWith(uri);
+      });
+    }
+
     final locale = ref.watch(localeProvider);
     final themeModeIdx = ref.watch(themeModeProvider);
     ref.watch(libraryRestoreProvider);
@@ -69,16 +103,7 @@ class AudioPlayerX64App extends ConsumerWidget {
       theme: RetroTheme.lightTheme,
       darkTheme: RetroTheme.darkTheme,
       themeMode: themeMode,
-      onGenerateRoute: (settings) {
-        final uri = settings.name ?? '';
-        if (uri.startsWith('content://') || uri.startsWith('file://')) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _handleOpenWith(context, uri);
-          });
-          return MaterialPageRoute(builder: (_) => const SizedBox.shrink());
-        }
-        return null;
-      },
+      // onGenerateRoute НЕ нужен — перехватываем через WidgetsBindingObserver
       locale: locale,
       supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [

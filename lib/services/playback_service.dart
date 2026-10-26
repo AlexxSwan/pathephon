@@ -97,7 +97,11 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
-      print('[pathephon] AudioSession OK');
+      // Запрашиваем audio focus — это даёт системе сигнал что мы —
+      // активный media player. Без этого другая MediaSession (например
+      // Яндекс Музыка) может перехватить приоритет на часах/локскрине.
+      await session.setActive(true);
+      print('[pathephon] AudioSession OK + active');
     } catch (e) { print('[pathephon] AudioSession failed: $e'); }
 
     _stateController.add(PlaybackSnapshot.empty);
@@ -149,6 +153,12 @@ class JustAudioPlaybackService implements PlaybackService {
               await _player.pause();
             } else {
               await _player.play();
+      // Повторно активируем audio session когда реально играем —
+      // это переключает active MediaSession на нас.
+      try {
+        final s = await AudioSession.instance;
+        await s.setActive(true);
+      } catch (_) {}
             }
             break;
           case 'pause': await _player.pause(); break;
@@ -297,6 +307,12 @@ class JustAudioPlaybackService implements PlaybackService {
       _updateMediaItem();
       _notifyNativePlaybackState(false);
       await _player.play();
+      // Повторно активируем audio session когда реально играем —
+      // это переключает active MediaSession на нас.
+      try {
+        final s = await AudioSession.instance;
+        await s.setActive(true);
+      } catch (_) {}
       // После play() пушим playing=true чтобы система отрисовала виджет
       await Future.delayed(const Duration(milliseconds: 100));
       _notifyNativePlaybackState(true);
@@ -340,6 +356,11 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> clearQueue() async {
     await _initCompleter.future;
     await _player.stop();
+    // Освобождаем audio focus — другая MediaSession может стать active.
+    try {
+      final s = await AudioSession.instance;
+      await s.setActive(false);
+    } catch (_) {}
     _queue = const [];
     _index = 0;
     await _prefs.remove(_queueKey);

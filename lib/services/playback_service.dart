@@ -217,13 +217,29 @@ class JustAudioPlaybackService implements PlaybackService {
     var title = t.title;
     if (title.isEmpty || title.endsWith('.mp3') || title.endsWith('.flac') ||
         title.endsWith('.ogg') || title.endsWith('.m4a') || title.endsWith('.wav')) {
-      // Убираем расширение и путь
       title = title.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
-      // Берём только имя файла если есть слэш
       final slashIdx = title.lastIndexOf('/');
       if (slashIdx >= 0) title = title.substring(slashIdx + 1);
-      // Убираем "NN - " префикс (номер трека)
       title = title.replaceAll(RegExp(r'^\d+\s*[-\.]\s*'), '');
+    }
+    // Динамический поиск cover.jpg если artUri пустой
+    var artUri = t.artUri;
+    if (artUri.isEmpty && t.filePath.isNotEmpty) {
+      try {
+        final dir = File(t.filePath).parent;
+        if (dir.existsSync()) {
+          for (final e in dir.listSync(recursive: false, followLinks: false)) {
+            final name = e.uri.pathSegments.last.toLowerCase();
+            if (name == 'cover.jpg' || name == 'folder.jpg' ||
+                name == 'album.jpg' || name == 'front.jpg' ||
+                name == 'cover.png' || name == 'folder.png' ||
+                name == 'album.png' || name == 'front.png') {
+              artUri = 'file://${e.path}';
+              break;
+            }
+          }
+        }
+      } catch (_) {}
     }
     try {
       _nativeChannel.invokeMethod('setMediaItem', {
@@ -231,7 +247,7 @@ class JustAudioPlaybackService implements PlaybackService {
         'artist': t.artist.isNotEmpty ? t.artist : 'Pathephon',
         'album': t.album.isNotEmpty ? t.album : '',
         'durationMs': durationMs,
-        'artUri': t.artUri,
+        'artUri': artUri,
       });
     } catch (_) {/* swallow */}
   }

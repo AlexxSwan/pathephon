@@ -195,8 +195,19 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     }
                 }
             } else {
-                s.setMetadata(b.build())
-                Log.i(TAG, ">>> metadata set (no artUri): $title")
+                executor.execute {
+                    try {
+                        val gifBmp = loadAssetBitmap("pathephon.gif")
+                        if (gifBmp != null) {
+                            b.putBitmap(MediaMetadata.METADATA_KEY_ART, gifBmp)
+                            b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, gifBmp)
+                        }
+                        s.setMetadata(b.build())
+                        Log.i(TAG, ">>> metadata set (no artUri, used gif): $title")
+                    } catch (e: Exception) {
+                        s.setMetadata(b.build())
+                    }
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "updateMetadata: ${e.message}", e)

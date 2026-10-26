@@ -179,11 +179,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 Expanded(child: Column(
                   mainAxisAlignment: MainAxisAlignment.center, crossAxisAlignment: CrossAxisAlignment.start, mainAxisSize: MainAxisSize.min,
                   children: [
-                    isCurrent
-                        ? _MarqueeText(text: t.title, style: TextStyle(color: p.accentHot,
-                            fontWeight: FontWeight.bold, fontSize: 14, height: 1.15))
-                        : Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                            style: TextStyle(color: p.textPrimary, fontWeight: FontWeight.normal, fontSize: 14, height: 1.15)),
+                    Text(t.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: TextStyle(color: isCurrent ? p.accentHot : p.textPrimary,
+                            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal, fontSize: 14, height: 1.15)),
                     if (t.artist.isNotEmpty)
                       Text(t.artist, maxLines: 1, overflow: TextOverflow.ellipsis,
                           style: TextStyle(color: p.textSecondary, fontSize: 11, height: 1.15)),
@@ -298,107 +296,3 @@ class _ArtworkImage extends ConsumerWidget {
   }
 }
 
-
-/// Бегущая строка для длинных названий.
-class _MarqueeText extends StatefulWidget {
-  const _MarqueeText({required this.text, required this.style});
-  final String text;
-  final TextStyle style;
-
-  @override
-  State<_MarqueeText> createState() => _MarqueeTextState();
-}
-
-class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  double _textWidth = 0;
-  double _containerWidth = 0;
-  bool _needsScroll = false;
-  bool _measured = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 6),
-    );
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) _controller.reverse();
-        });
-      } else if (status == AnimationStatus.dismissed) {
-        Future.delayed(const Duration(seconds: 1), () {
-          if (mounted) _controller.forward();
-        });
-      }
-    });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
-  }
-
-  @override
-  void didUpdateWidget(_MarqueeText oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.text != widget.text) {
-      _measured = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
-    }
-  }
-
-  void _measure() {
-    if (!mounted) return;
-    final tp = TextPainter(
-      text: TextSpan(text: widget.text, style: widget.style),
-      maxLines: 1,
-      textDirection: TextDirection.ltr,
-    )..layout();
-    _textWidth = tp.width;
-    _needsScroll = _textWidth > _containerWidth;
-    _measured = true;
-    if (_needsScroll) {
-      _controller.forward();
-    } else {
-      _controller.stop();
-      _controller.reset();
-    }
-    setState(() {});
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        _containerWidth = constraints.maxWidth;
-        if (!_measured) {
-          return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
-        }
-        if (!_needsScroll) {
-          return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
-        }
-        final scrollDistance = _textWidth - _containerWidth + 20;
-        return ClipRect(
-          child: OverflowBox(
-            maxWidth: double.infinity,
-            alignment: Alignment.centerLeft,
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (_, __) {
-                return Transform.translate(
-                  offset: Offset(-_controller.value * scrollDistance, 0),
-                  child: Text(widget.text, style: widget.style, maxLines: 1),
-                );
-              },
-            ),
-          ),
-        );
-      },
-    );
-  }
-}

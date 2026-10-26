@@ -57,11 +57,15 @@ Future<Track?> readLaunchIntent() async {
     final uri = result['uri'] as String? ?? '';
     final name = result['name'] as String? ?? '';
     if (uri.isEmpty) return null;
-    final title = name.isNotEmpty
-        ? name.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '')
-        : (Uri.tryParse(uri)?.pathSegments.isNotEmpty == true
-            ? Uri.decodeComponent(Uri.parse(uri).pathSegments.last)
-            : 'Unknown');
+    // Приоритет: name из Kotlin (правильное имя файла) > pathSegments > Unknown
+    var fileName = name;
+    if (fileName.isEmpty) {
+      final decoded = Uri.tryParse(uri);
+      fileName = (decoded != null && decoded.pathSegments.isNotEmpty)
+          ? Uri.decodeComponent(decoded.pathSegments.last)
+          : 'Unknown';
+    }
+    final title = fileName.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
     return Track(
       id: uri,
       uri: uri,

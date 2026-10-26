@@ -206,19 +206,37 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private fun loadBitmap(uri: String): android.graphics.Bitmap? {
         return try {
             when {
-                uri.startsWith("file://") -> BitmapFactory.decodeFile(uri.removePrefix("file://"))
+                uri.startsWith("file://") -> {
+                    // URL-decode путь (file:///storage/.../Viva%20la%20Vida/cover.jpg → .../Viva la Vida/cover.jpg)
+                    val rawPath = uri.removePrefix("file://")
+                    val decodedPath = android.net.Uri.decode(rawPath)
+                    Log.i(TAG, ">>> loadBitmap file: raw='$rawPath' decoded='$decodedPath'")
+                    val file = java.io.File(decodedPath)
+                    if (!file.exists()) {
+                        Log.w(TAG, ">>> file not found: $decodedPath")
+                        return null
+                    }
+                    BitmapFactory.decodeFile(decodedPath)
+                }
                 uri.startsWith("content://") -> {
                     val ctx = context ?: return null
-                    ctx.contentResolver.openInputStream(android.net.Uri.parse(uri))?.use {
+                    val decodedUri = android.net.Uri.decode(uri)
+                    ctx.contentResolver.openInputStream(android.net.Uri.parse(decodedUri))?.use {
                         BitmapFactory.decodeStream(it)
                     }
                 }
                 uri.startsWith("http://") || uri.startsWith("https://") -> {
                     URL(uri).openStream().use { BitmapFactory.decodeStream(it) }
                 }
-                else -> null
+                else -> {
+                    Log.w(TAG, ">>> loadBitmap unknown scheme: $uri")
+                    null
+                }
             }
-        } catch (e: Exception) { null }
+        } catch (e: Exception) {
+            Log.e(TAG, ">>> loadBitmap FAILED: ${e.message}", e)
+            null
+        }
     }
 
     private fun updatePlaybackState(playing: Boolean, posMs: Long, hasNext: Boolean, hasPrev: Boolean) {

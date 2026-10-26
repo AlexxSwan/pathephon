@@ -185,12 +185,28 @@ class JustAudioPlaybackService implements PlaybackService {
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
     final t = _queue[idx];
+    // Если durationMs=0 (треки из file_picker без тегов) — берём из _player.duration
+    final durationMs = (t.durationMs > 0)
+        ? t.durationMs
+        : (_player.duration?.inMilliseconds ?? 0);
+    // Title: если пустой или = имя файла с .mp3 — улучшаем
+    var title = t.title;
+    if (title.isEmpty || title.endsWith('.mp3') || title.endsWith('.flac') ||
+        title.endsWith('.ogg') || title.endsWith('.m4a') || title.endsWith('.wav')) {
+      // Убираем расширение и путь
+      title = title.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
+      // Берём только имя файла если есть слэш
+      final slashIdx = title.lastIndexOf('/');
+      if (slashIdx >= 0) title = title.substring(slashIdx + 1);
+      // Убираем "NN - " префикс (номер трека)
+      title = title.replaceAll(RegExp(r'^\d+\s*[-\.]\s*'), '');
+    }
     try {
       _nativeChannel.invokeMethod('setMediaItem', {
-        'title': t.title,
-        'artist': t.artist,
-        'album': t.album,
-        'durationMs': t.durationMs,
+        'title': title,
+        'artist': t.artist.isNotEmpty ? t.artist : 'Pathephon',
+        'album': t.album.isNotEmpty ? t.album : '',
+        'durationMs': durationMs,
         'artUri': t.artUri,
       });
     } catch (_) {/* swallow */}

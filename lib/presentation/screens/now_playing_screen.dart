@@ -218,29 +218,68 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
+
+  /// Ищет cover.jpg/folder.jpg/album.jpg/front.jpg в папке трека.
+  /// Возвращает file:// URI или null.
+  Future<String?> _findCoverInDir(String? filePath) async {
+    if (filePath == null || filePath.isEmpty) return null;
+    try {
+      final file = File(filePath);
+      final dir = file.parent;
+      if (!dir.existsSync()) return null;
+      final entities = dir.listSync(recursive: false, followLinks: false);
+      for (final e in entities) {
+        final name = e.uri.pathSegments.last.toLowerCase();
+        if (name == 'cover.jpg' || name == 'folder.jpg' ||
+            name == 'album.jpg' || name == 'front.jpg' ||
+            name == 'cover.png' || name == 'folder.png' ||
+            name == 'album.png' || name == 'front.png') {
+          return 'file://${e.path}';
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = Preset.of(context);
     final t = track;
     if (t == null) return _appIconFallback(p);
-    // Используем ТОЛЬКО artUri из самого трека.
-    // НЕ используем albumArtIndexProvider — он глобальный и может вернуть
-    // обложку от другого альбома с таким же artist||album ключом.
     String? artUri = t.artUri;
-    if (artUri != null && artUri.isNotEmpty) {
-      final ms = ref.read(mediaStoreSourceProvider);
-      final cachedBytes = ms.getCoverBytes(artUri);
-      if (cachedBytes != null) {
-        return Image.memory(cachedBytes, fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
-      }
-      if (artUri.startsWith('file://')) {
-        return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
-      }
-      return Image.network(artUri, fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+
+    // Если artUri пустой — пытаемся найти cover.jpg в папке трека
+    if (artUri.isEmpty) {
+      return FutureBuilder<String?>(
+        future: _findCoverInDir(t.filePath.isNotEmpty ? t.filePath : null),
+        builder: (ctx, snap) {
+          if (snap.connectionState != ConnectionState.done) {
+            return _appIconFallback(p); // показываем gif пока ищем
+          }
+          final foundUri = snap.data;
+          if (foundUri != null && foundUri.isNotEmpty) {
+            // Нашли cover.jpg — показываем
+            return Image.file(File(Uri.parse(foundUri).toFilePath()), 
+                fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+          }
+          // Нет cover.jpg — gif
+          return _appIconFallback(p);
+        },
+      );
     }
-    // Нет обложки — показываем gif
-    return _appIconFallback(p);
+
+    // artUri есть — показываем
+    final ms = ref.read(mediaStoreSourceProvider);
+    final cachedBytes = ms.getCoverBytes(artUri);
+    if (cachedBytes != null) {
+      return Image.memory(cachedBytes, fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+    }
+    if (artUri.startsWith('file://')) {
+      return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+    }
+    return Image.network(artUri, fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
   }
+
   Widget _appIconFallback(ThemePreset p) {
     return Container(
       color: p.surfaceVariant,

@@ -378,8 +378,8 @@ class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
         type: FileType.custom,
         allowedExtensions: ['m3u', 'm3u8'],
       );
-      if (result == null || result.files.isEmpty) return;
-      final path = result.files.first.path;
+      if (result == null || result.isEmpty) return;
+      final path = result.first.path;
       if (path == null) return;
       final file = File(path);
       final content = await file.readAsString();

@@ -22,6 +22,9 @@ class LibraryScreen extends ConsumerStatefulWidget {
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
   late final TabController _tab = TabController(length: 4, vsync: this);
+  bool _isSearching = false;
+  String _searchQuery = '';
+  final _searchController = TextEditingController();
 
   @override
   void dispose() { _tab.dispose(); super.dispose(); }
@@ -100,7 +103,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(l.navLibrary),
+        title: _isSearching ? TextField(controller: _searchController, autofocus: true, style: TextStyle(color: TubeColors.textPrimary), decoration: InputDecoration(hintText: "Поиск...", hintStyle: TextStyle(color: TubeColors.textMuted), border: InputBorder.none), onChanged: (v) => setState(() => _searchQuery = v.toLowerCase())) : Text(l.navLibrary),
         bottom: TabBar(controller: _tab, isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
           Tab(text: l.libraryAllTracks), Tab(text: l.libraryAlbums),
           Tab(text: l.libraryArtists), Tab(text: l.libraryPlaylists),
@@ -109,22 +112,22 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
           IconButton(icon: const Icon(Icons.folder_open), onPressed: _pickAndPlayFolder, tooltip: "Выбрать папку"),
           IconButton(icon: const Icon(Icons.playlist_add), onPressed: _addFolderToQueue, tooltip: "Добавить папку в очередь"),
           IconButton(icon: const Icon(Icons.audio_file), onPressed: _pickAndPlayFiles, tooltip: "\u0412\u044B\u0431\u0440\u0430\u0442\u044C \u0444\u0430\u0439\u043B\u044B"),
-          IconButton(icon: const Icon(Icons.search), onPressed: () {}),
+          IconButton(icon: Icon(_isSearching ? Icons.close : Icons.search), onPressed: () { setState(() { _isSearching = !_isSearching; if (!_isSearching) { _searchQuery = ""; _searchController.clear(); } }); }),
         ],
       ),
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text("${l.commonError}: $e")),
-        data: (tracks) {
-          if (tracks.isEmpty) {
+        data: (tracks) {`n          final filtered = _searchQuery.isEmpty ? tracks : tracks.where((t) {`n            final q = _searchQuery;`n            return t.title.toLowerCase().contains(q) ||`n                t.artist.toLowerCase().contains(q) ||`n                t.album.toLowerCase().contains(q) ||`n                t.filePath.toLowerCase().contains(q);`n          }).toList();
+          if (filtered.isEmpty) {
             return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.library_music, size: 80, color: TubeColors.brass),
               const SizedBox(height: 16),
-              Text("\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
+              Text(_searchQuery.isNotEmpty ? "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E" : "\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.textSecondary)),
             ]));
           }
-          return TabBarView(controller: _tab, children: [
+          if (_isSearching) {`n            return ListView.builder(itemCount: filtered.length, itemBuilder: (_, i) {`n              final t = filtered[i];`n              return TrackListTile(track: t, index: i, onTap: () {`n                playback.playQueue(tracks: filtered, startIndex: i);`n                ref.read(isPlayingProvider.notifier).state = true;`n              });`n            });`n          }`n          return TabBarView(controller: _tab, children: [
             ListView.builder(itemCount: tracks.length, itemBuilder: (_, i) {
               final t = tracks[i];
               return TrackListTile(track: t, index: i, onTap: () {

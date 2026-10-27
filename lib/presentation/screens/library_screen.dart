@@ -545,7 +545,7 @@ class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
               child: ElevatedButton.icon(
                 onPressed: _exportToM3u,
                 icon: const Icon(Icons.file_download),
-                label: const Text('Экспорт .m3u'),
+                label: const Text('Экспорт\n.m3u'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: TubeColors.brass,
                   foregroundColor: TubeColors.background,
@@ -557,7 +557,7 @@ class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
               child: ElevatedButton.icon(
                 onPressed: _importFromM3u,
                 icon: const Icon(Icons.file_upload),
-                label: const Text('Импорт .m3u'),
+                label: const Text('Импорт\n.m3u'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: TubeColors.brass,
                   foregroundColor: TubeColors.background,

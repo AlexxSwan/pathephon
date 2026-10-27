@@ -1,9 +1,11 @@
 // ============================================================================
 //  now_playing_screen.dart - uses Preset.of(context) for theme-aware colors
-//  v0.10.99+193: ПОЛНОСТЬЮ убран спектральный анализатор.
-//                Нет FFT, нет Visualizer, нет spectrumProvider → максимум экономии CPU.
-//                Остаётся: обложка, контролы, плейлист (toggle справа).
+//  v0.11.0+194: CPU% индикатор в верхнем левом углу.
+//               Читает /proc/self/stat (utime+stime) каждую секунду.
+//               StreamBuilder — пересобирается только бейдж, не весь экран.
+//               Цвет: зелёный (0%) → жёлтый (50%) → красный (100%).
 // ============================================================================
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -27,6 +29,83 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   final _playlistScrollController = ScrollController();
   int _lastScrolledIndex = -1;
 
+  // === CPU мониторинг ===
+  // StreamController<int> — бейдж подписывается через StreamBuilder,
+  // setState НЕ вызывается — весь экран не пересобирается.
+  final _cpuController = StreamController<int>.broadcast();
+  Timer? _cpuTimer;
+  int _prevUtime = 0;
+  int _prevStime = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _startCpuMonitor();
+  }
+
+  @override
+  void dispose() {
+    _cpuTimer?.cancel();
+    _cpuController.close();
+    _playlistScrollController.dispose();
+    super.dispose();
+  }
+
+  /// Читает /proc/self/stat каждые 1 сек, считает CPU% по дельте utime+stime.
+  /// /proc/self/stat — виртуальный файл procfs, читается мгновенно (без I/O).
+  /// Поля (после comm в скобках): [0]=state, [11]=utime, [12]=stime.
+  /// clk_tck на ARM64 = 100, поэтому 1 секунда = 100 jiffies max на ядро.
+  void _startCpuMonitor() {
+    // Первое чтение — устанавливает baseline, ничего не шлёт в stream
+    _readCpuStat();
+    // Периодические обновления
+    _cpuTimer = Timer.periodic(const Duration(seconds: 1), (_) => _readCpuStat());
+  }
+
+  void _readCpuStat() {
+    try {
+      final stat = File('/proc/self/stat').readAsStringSync();
+      // comm может содержать скобки/пробелы — берём всё после последней ')'
+      final lastParen = stat.lastIndexOf(') ');
+      if (lastParen < 0) return;
+      final fields = stat.substring(lastParen + 2).split(RegExp(r'\s+'));
+      if (fields.length < 13) return;
+      final utime = int.parse(fields[11]);
+      final stime = int.parse(fields[12]);
+
+      if (_prevUtime > 0 || _prevStime > 0) {
+        final deltaJiffies = (utime - _prevUtime) + (stime - _prevStime);
+        // 1 секунда * 100 jiffies/sec = 100 max per core
+        // Ограничиваем 100% (один_core_эквивалент) — интуитивно для пользователя
+        final pct = deltaJiffies.clamp(0, 100);
+        _cpuController.add(pct);
+      }
+      _prevUtime = utime;
+      _prevStime = stime;
+    } catch (_) {
+      // /proc/self/stat недоступен (iOS/desktop) — индикатор просто не обновляется
+    }
+  }
+
+  /// Цветовая градация: 0% = зелёный, 50% = жёлтый, 100% = красный.
+  Color _cpuColor(int pct) {
+    if (pct <= 50) {
+      // зелёный → жёлтый
+      return Color.lerp(
+        const Color(0xFF4CAF50), // Material Green 500
+        const Color(0xFFFFC107), // Material Amber 500
+        pct / 50,
+      )!;
+    } else {
+      // жёлтый → красный
+      return Color.lerp(
+        const Color(0xFFFFC107),
+        const Color(0xFFF44336), // Material Red 500
+        (pct - 50) / 50,
+      )!;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = AppLocalizations.of(context);
@@ -46,12 +125,46 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(children: [
-            // ====== Топ-бар: [title] [playlist toggle] ======
+            // ====== Топ-бар: [CPU%] [title] [playlist toggle] ======
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(width: 48),
+                // ЛЕВО: CPU индикатор (StreamBuilder — пересобирается только он)
+                StreamBuilder<int>(
+                  stream: _cpuController.stream,
+                  initialData: 0,
+                  builder: (context, snapshot) {
+                    final pct = snapshot.data ?? 0;
+                    final color = _cpuColor(pct);
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: color.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: color, width: 1),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.memory, size: 12, color: color),
+                          const SizedBox(width: 3),
+                          Text(
+                            '$pct%',
+                            style: TextStyle(
+                              color: color,
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              fontFamily: 'monospace',
+                              height: 1.0,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
                 Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),
+                // ПРАВО: playlist toggle
                 IconButton(
                   icon: Icon(_showPlaylist ? Icons.queue_music : Icons.queue_music_outlined),
                   tooltip: _showPlaylist ? 'Скрыть очередь' : 'Показать очередь',
@@ -61,7 +174,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            // ====== Обложка (растягивается если плейлист скрыт) ======
             Expanded(
               flex: _showPlaylist ? 3 : 5,
               child: Center(
@@ -98,7 +210,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             const SizedBox(height: 8),
             const PlaybackControls(),
             const SizedBox(height: 12),
-            // ====== Плейлист (или пустое место если скрыт) ======
             if (_showPlaylist)
               Expanded(
                 flex: 2,
@@ -114,7 +225,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     if (queue.isEmpty) {
       return Center(child: Text('\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u043F\u0443\u0441\u0442\u0430', style: TextStyle(color: p.textMuted)));
     }
-    // Auto-scroll к текущему треку ТОЛЬКО если индекс изменился
     if (currentIndex != _lastScrolledIndex) {
       _lastScrolledIndex = currentIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -203,7 +313,6 @@ class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
 
-  /// Статический кеш найденных обложек по filePath трека.
   static final Map<String, String?> _coverCache = {};
 
   Future<String?> _findCoverInDir(String? filePath) async {

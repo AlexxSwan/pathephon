@@ -21,7 +21,7 @@ class LibraryScreen extends ConsumerStatefulWidget {
 
 class _LibraryScreenState extends ConsumerState<LibraryScreen>
     with SingleTickerProviderStateMixin {
-  late final TabController _tab = TabController(length: 4, vsync: this);
+  late final TabController _tab = TabController(length: 2, vsync: this);
   bool _isSearching = false;
   String _searchQuery = '';
   final _searchController = TextEditingController();
@@ -105,8 +105,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       appBar: AppBar(
         title: _isSearching ? TextField(controller: _searchController, autofocus: true, style: TextStyle(color: TubeColors.textPrimary), decoration: InputDecoration(hintText: "Поиск...", hintStyle: TextStyle(color: TubeColors.textMuted), border: InputBorder.none), onChanged: (v) => setState(() => _searchQuery = v.toLowerCase())) : Text(l.navLibrary),
         bottom: TabBar(controller: _tab, isScrollable: true, tabAlignment: TabAlignment.start, tabs: [
-          Tab(text: l.libraryAllTracks), Tab(text: l.libraryAlbums),
-          Tab(text: l.libraryArtists), Tab(text: l.libraryPlaylists),
+          Tab(text: l.libraryAllTracks), Tab(text: l.libraryPlaylists),
         ]),
         actions: [
           IconButton(icon: const Icon(Icons.folder_open), onPressed: _pickAndPlayFolder, tooltip: "Выбрать папку"),
@@ -151,8 +150,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
                 ref.read(isPlayingProvider.notifier).state = true;
               });
             }),
-            _AlbumGrid(),
-            _ArtistsList(),
             _PlaylistsTab(),
           ]);
         },

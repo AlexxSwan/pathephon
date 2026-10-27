@@ -22,7 +22,7 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   bool _showPlaylist = false;
-  bool _spectrumEnabled = true;
+  final bool _spectrumEnabled = true;
   final _playlistScrollController = ScrollController();
   int _lastScrolledIndex = -1;
 
@@ -324,6 +324,7 @@ class _SpectrumView extends ConsumerWidget {
       );
     }
     final spectrum = ref.watch(spectrumProvider).valueOrNull;
+     final bins = spectrum?.bins ?? const <double>[];
 
     return Container(
       decoration: BoxDecoration(

@@ -118,28 +118,43 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       body: state.when(
         loading: () => const Center(child: CircularProgressIndicator()),
         error: (e, _) => Center(child: Text("${l.commonError}: $e")),
-        data: (tracks) {`n          final filtered = _searchQuery.isEmpty ? tracks : tracks.where((t) {`n            final q = _searchQuery;`n            return t.title.toLowerCase().contains(q) ||`n                t.artist.toLowerCase().contains(q) ||`n                t.album.toLowerCase().contains(q) ||`n                t.filePath.toLowerCase().contains(q);`n          }).toList();
+        data: (tracks) {
+          final filtered = _searchQuery.isEmpty ? tracks : tracks.where((t) {
+            final q = _searchQuery;
+            return t.title.toLowerCase().contains(q) ||
+                t.artist.toLowerCase().contains(q) ||
+                t.album.toLowerCase().contains(q) ||
+                t.filePath.toLowerCase().contains(q);
+          }).toList();
           if (filtered.isEmpty) {
             return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
               const Icon(Icons.library_music, size: 80, color: TubeColors.brass),
               const SizedBox(height: 16),
-              Text(_searchQuery.isNotEmpty ? "\u041D\u0438\u0447\u0435\u0433\u043E \u043D\u0435 \u043D\u0430\u0439\u0434\u0435\u043D\u043E" : "\u0424\u0430\u0439\u043B\u044B \u043D\u0435 \u0432\u044B\u0431\u0440\u0430\u043D\u044B",
+              Text(_searchQuery.isNotEmpty ? "Ничего не найдено" : "Файлы не выбраны",
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(color: TubeColors.textSecondary)),
             ]));
           }
-          if (_isSearching) {`n            return ListView.builder(itemCount: filtered.length, itemBuilder: (_, i) {`n              final t = filtered[i];`n              return TrackListTile(track: t, index: i, onTap: () {`n                playback.playQueue(tracks: filtered, startIndex: i);`n                ref.read(isPlayingProvider.notifier).state = true;`n              });`n            });`n          }`n          return TabBarView(controller: _tab, children: [
-            ListView.builder(itemCount: tracks.length, itemBuilder: (_, i) {
-              final t = tracks[i];
+          if (_isSearching) {
+            return ListView.builder(itemCount: filtered.length, itemBuilder: (_, i) {
+              final t = filtered[i];
               return TrackListTile(track: t, index: i, onTap: () {
-                playback.playQueue(tracks: tracks, startIndex: i);
+                playback.playQueue(tracks: filtered, startIndex: i);
+                ref.read(isPlayingProvider.notifier).state = true;
+              });
+            });
+          }
+          return TabBarView(controller: _tab, children: [
+            ListView.builder(itemCount: filtered.length, itemBuilder: (_, i) {
+              final t = filtered[i];
+              return TrackListTile(track: t, index: i, onTap: () {
+                playback.playQueue(tracks: filtered, startIndex: i);
                 ref.read(isPlayingProvider.notifier).state = true;
               });
             }),
             _AlbumGrid(),
             _ArtistsList(),
             _PlaylistsTab(),
-          ]);
-        },
+          ]);        },
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => ref.read(libraryStateProvider.notifier).scan(),

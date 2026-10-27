@@ -108,7 +108,7 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                 }
                 eventSink?.success(list)
             }
-        }, 20000, false, true)
+        }, 50000, false, true)
         v.enabled = true
         visualizer = v
         Log.i("VisualizerPlugin", "FFT Visualizer attached to session $sessionId")

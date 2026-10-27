@@ -44,7 +44,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final p = Preset.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
     final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
-    final spectrum = _spectrumEnabled ? (ref.watch(spectrumProvider).valueOrNull) : null;
+    // spectrum moved to _SpectrumView consumer to avoid full screen rebuilds
     final playback = ref.watch(playbackServiceProvider);
     ref.watch(isPlayingProvider);
 
@@ -115,16 +115,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               child: _showPlaylist
                   ? _buildPlaylist(queue, currentIndex, playback, p)
                   : _spectrumEnabled
-                    ? Container(
-                        decoration: BoxDecoration(
-                          color: p.background,
-                          border: Border.all(color: p.brass.withOpacity(0.5), width: 1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: ClipRect(
-                          child: CustomPaint(size: Size.infinite, painter: SpectrumPainter(bins: bins, brightness: brightness)),
-                        ),
-                      )
+                    ? _SpectrumView(enabled: _spectrumEnabled, brightness: isPlaying ? 1.0 : 0.0)
                     : Container(
                         decoration: BoxDecoration(
                           color: p.background,
@@ -313,3 +304,36 @@ class _ArtworkImage extends ConsumerWidget {
 
 
 
+
+
+class _SpectrumView extends ConsumerWidget {
+  const _SpectrumView({required this.enabled, required this.brightness});
+  final bool enabled;
+  final double brightness;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    if (!enabled) {
+      return Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          border: Border.all(color: Colors.amber.withOpacity(0.2), width: 1),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Center(child: Icon(Icons.graphic_eq, size: 40, color: Colors.amber.withOpacity(0.3))),
+      );
+    }
+    final spectrum = ref.watch(spectrumProvider).valueOrNull;
+    final bins = spectrum?.bins ?? const <double>[];
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border.all(color: Colors.amber.withOpacity(0.5), width: 1),
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: ClipRect(
+        child: CustomPaint(size: Size.infinite, painter: SpectrumPainter(bins: bins, brightness: brightness)),
+      ),
+    );
+  }
+}

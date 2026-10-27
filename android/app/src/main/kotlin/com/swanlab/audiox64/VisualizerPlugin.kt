@@ -65,31 +65,26 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                 // FFT format from Android Visualizer:
                 // fft[0] = DC (real), fft[1] = Nyquist (real)
                 // For k >= 1: real at fft[2k], imag at fft[2k+1]
-                val numBins = n / 2
-                val magnitudes = FloatArray(numBins)
-                magnitudes[0] = Math.abs(fft[0].toFloat())  // DC
-                if (numBins > 1) {
-                    magnitudes[numBins - 1] = Math.abs(fft[1].toFloat())  // Nyquist
-                }
-                for (k in 1 until numBins - 1) {
-                    val real = fft[2 * k].toFloat()
-                    val imag = fft[2 * k + 1].toFloat()
-                    magnitudes[k] = Math.sqrt((real * real + imag * imag).toDouble()).toFloat()
-                }
-
-                // Take bins 3..34 (32 bins), skipping DC/Nyquist and very low rumble.
+                // IMPORTANT: DC (fft[0]) and Nyquist (fft[1]) are NOT real frequencies.
+                // Including them causes the leftmost bins to always be at peak (DC offset).
+                // We skip them entirely.
+                val numBins = n / 2  // total bins including DC/Nyquist
+                // Take bins 2..33 (32 display bins), fully skipping DC/Nyquist.
                 // At 22050 Hz sample rate with 256 bins, each bin = ~86 Hz.
-                // Bin 3 = ~258 Hz, bin 34 = ~2924 Hz - the most musical range.
-                val startBin = 3
+                // Bin 2 = ~172 Hz, bin 33 = ~2838 Hz - musical range.
+                val startBin = 2
                 val numDisplayBins = 32
                 val result = FloatArray(numDisplayBins)
                 for (i in 0 until numDisplayBins) {
-                    val srcIdx = startBin + i
-                    val mag = if (srcIdx < magnitudes.size) magnitudes[srcIdx] else 0f
-                    // Normalize to 0..1 using a fixed scale (Visualizer magnitudes
-                    // are typically 0..~50 for music, max ~127)
+                    val k = startBin + i
+                    if (k >= numBins) { result[i] = 0f; continue }
+                    // Real at fft[2*k], Imaginary at fft[2*k+1]
+                    val real = fft[2 * k].toFloat()
+                    val imag = fft[2 * k + 1].toFloat()
+                    val mag = Math.sqrt((real * real + imag * imag).toDouble()).toFloat()
+                    // Normalize: Visualizer magnitudes typically 0..~50 for music
                     val norm = (mag / 50f).coerceIn(0f, 1f)
-                    // Apply log scaling for better visual response
+                    // Log scaling for better visual response
                     val logScaled = (Math.log10(1.0 + 9.0 * norm.toDouble()) * 255f).toFloat()
                     result[i] = logScaled
                 }

@@ -238,7 +238,7 @@ class _ArtworkImage extends ConsumerWidget {
       final file = File(filePath);
       final dir = file.parent;
       if (dir.existsSync()) {
-        final entities = dir.listSync(recursive: false, followLinks: false);
+        final entities = await dir.list(recursive: false, followLinks: false).toList();
         for (final e in entities) {
           final name = e.uri.pathSegments.last.toLowerCase();
           if (name == 'cover.jpg' || name == 'folder.jpg' ||

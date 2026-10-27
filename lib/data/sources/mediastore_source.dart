@@ -200,30 +200,10 @@ class MediaStoreSource {
             await _cacheCoverBytes(cover);
           }
         }
-        // Читаем теги из файла
-        String title = f.name;
-        String artist = '';
-        String album = '';
-        String albumArtist = '';
-        int durationMs = 0;
-        try {
-          final tags = await _tagReader.invokeMethod<Map>('readTags', {'path': path});
-          if (tags != null) {
-            title = (tags['title'] as String?)?.isNotEmpty == true ? tags['title'] as String : f.name;
-            artist = tags['artist'] as String? ?? '';
-            album = tags['album'] as String? ?? '';
-            albumArtist = tags['albumArtist'] as String? ?? '';
-            durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
-          }
-        } catch (_) {}
         tracks.add(Track(
           id: Uri.file(path).toString(),
           uri: Uri.file(path).toString(),
-          title: title,
-          artist: artist,
-          albumArtist: albumArtist,
-          album: album,
-          durationMs: durationMs,
+          title: f.name,
           fileExtension: _ext(path),
           filePath: path,
           artUri: artUri,
@@ -302,30 +282,15 @@ class MediaStoreSource {
               final path = e.path;
               if (!_isAudio(path)) continue;
               final name = _fileName(path);
-              // Читаем теги из файла
-              String title = name;
-              String artist = '';
-              String album = '';
-              String albumArtist = '';
-              int durationMs = 0;
-              try {
-                final tags = await _tagReader.invokeMethod<Map>('readTags', {'path': path});
-                if (tags != null) {
-                  title = (tags['title'] as String?)?.isNotEmpty == true ? tags['title'] as String : name;
-                  artist = tags['artist'] as String? ?? '';
-                  album = tags['album'] as String? ?? '';
-                  albumArtist = tags['albumArtist'] as String? ?? '';
-                  durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
-                }
-              } catch (_) {}
+              // RESERVE METHOD: чтение тегов при сканировании (медленно для больших папок)
+              // String title = name; String artist = ''; String album = '';
+              // final tags = await _tagReader.invokeMethod<Map>('readTags', {'path': path});
+              // ... см. git history v0.10.83
+              // ТЕКУЩИЙ МЕТОД: теги читаются при воспроизведении (playback_service._readTagsAndUpdate)
               tracks.add(Track(
                 id: Uri.file(path).toString(),
                 uri: Uri.file(path).toString(),
-                title: title,
-                artist: artist,
-                albumArtist: albumArtist,
-                album: album,
-                durationMs: durationMs,
+                title: name,
                 fileExtension: _ext(path),
                 filePath: path,
                 artUri: coverUri ?? '',

@@ -78,6 +78,7 @@ class JustAudioPlaybackService implements PlaybackService {
   /// переадресует BT Callback'и сюда.
   static const _nativeChannel = MethodChannel('pathephon/native_media_session');
   static const _tagChannel = MethodChannel('pathephon/tag_reader');
+  static const _tagChannel = MethodChannel('pathephon/tag_reader');
 
   List<Track> _queue = const [];
   int _index = 0;
@@ -252,6 +253,30 @@ class JustAudioPlaybackService implements PlaybackService {
         'artUri': artUri,
       });
     } catch (_) {/* swallow */}
+  }
+
+  /// Читает теги из файла и обновляет metadata в MediaSession.
+  Future<void> _readTagsAndUpdate(String filePath) async {
+    try {
+      final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
+      if (tags == null) return;
+      final title = tags['title'] as String? ?? '';
+      final artist = tags['artist'] as String? ?? '';
+      final album = tags['album'] as String? ?? '';
+      final durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
+      if (title.isNotEmpty || artist.isNotEmpty) {
+        print('[pathephon] tags loaded: title="$title" artist="$artist"');
+        _nativeChannel.invokeMethod('setMediaItem', {
+          'title': title.isNotEmpty ? title : '',
+          'artist': artist.isNotEmpty ? artist : 'Pathephon',
+          'album': album,
+          'durationMs': durationMs,
+          'artUri': '',
+        });
+      }
+    } catch (e) {
+      print('[pathephon] _readTagsAndUpdate failed: $e');
+    }
   }
 
   /// Читает теги из файла и обновляет metadata в MediaSession.

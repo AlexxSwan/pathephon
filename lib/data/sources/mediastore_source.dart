@@ -302,10 +302,30 @@ class MediaStoreSource {
               final path = e.path;
               if (!_isAudio(path)) continue;
               final name = _fileName(path);
+              // Читаем теги из файла
+              String title = name;
+              String artist = '';
+              String album = '';
+              String albumArtist = '';
+              int durationMs = 0;
+              try {
+                final tags = await _tagReader.invokeMethod<Map>('readTags', {'path': path});
+                if (tags != null) {
+                  title = (tags['title'] as String?)?.isNotEmpty == true ? tags['title'] as String : name;
+                  artist = tags['artist'] as String? ?? '';
+                  album = tags['album'] as String? ?? '';
+                  albumArtist = tags['albumArtist'] as String? ?? '';
+                  durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
+                }
+              } catch (_) {}
               tracks.add(Track(
                 id: Uri.file(path).toString(),
                 uri: Uri.file(path).toString(),
-                title: name,
+                title: title,
+                artist: artist,
+                albumArtist: albumArtist,
+                album: album,
+                durationMs: durationMs,
                 fileExtension: _ext(path),
                 filePath: path,
                 artUri: coverUri ?? '',

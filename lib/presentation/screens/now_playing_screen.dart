@@ -339,7 +339,6 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
         });
       }
     });
-    WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
   }
 
   @override
@@ -347,11 +346,10 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     super.didUpdateWidget(oldWidget);
     if (oldWidget.text != widget.text) {
       _measured = false;
-      WidgetsBinding.instance.addPostFrameCallback((_) => _measure());
     }
   }
 
-  void _measure() {
+  void _measure(double containerWidth) {
     if (!mounted) return;
     final tp = TextPainter(
       text: TextSpan(text: widget.text, style: widget.style),
@@ -359,11 +357,13 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
       textDirection: TextDirection.ltr,
     )..layout();
     _textWidth = tp.width;
+    _containerWidth = containerWidth;
+    final wasScrolling = _needsScroll;
     _needsScroll = _textWidth > _containerWidth;
     _measured = true;
-    if (_needsScroll) {
+    if (_needsScroll && !wasScrolling) {
       _controller.forward();
-    } else {
+    } else if (!_needsScroll && wasScrolling) {
       _controller.stop();
       _controller.reset();
     }
@@ -380,7 +380,11 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        _containerWidth = constraints.maxWidth;
+        // Измеряем каждый кадр если нужно
+        if (!_measured || constraints.maxWidth != _containerWidth) {
+          // Откладываем измерение на следующий кадр
+          WidgetsBinding.instance.addPostFrameCallback((_) => _measure(constraints.maxWidth));
+        }
         if (!_measured) {
           return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
         }

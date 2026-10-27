@@ -156,8 +156,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             _PlaylistsTab(),
           ]);        },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => ref.read(libraryStateProvider.notifier).scan(),
+
         icon: const Icon(Icons.refresh), label: Text(l.libraryScan),
         backgroundColor: TubeColors.amber, foregroundColor: TubeColors.background,
       ),

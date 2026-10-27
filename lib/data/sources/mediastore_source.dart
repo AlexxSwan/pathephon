@@ -20,6 +20,7 @@ class MediaStoreSource {
 
   final OnAudioQuery _query;
   static const _folderScanner = MethodChannel('pathephon/folder_scanner');
+  static const _tagReader = MethodChannel('pathephon/tag_reader');
 
   final Map<String, Uint8List> _coverBytesCache = {};
 
@@ -199,8 +200,34 @@ class MediaStoreSource {
             await _cacheCoverBytes(cover);
           }
         }
-        tracks.add(Track(id: Uri.file(path).toString(), uri: Uri.file(path).toString(),
-            title: f.name, fileExtension: _ext(path), filePath: path, artUri: artUri));
+        // Читаем теги из файла
+        String title = f.name;
+        String artist = '';
+        String album = '';
+        String albumArtist = '';
+        int durationMs = 0;
+        try {
+          final tags = await _tagReader.invokeMethod<Map>('readTags', {'path': path});
+          if (tags != null) {
+            title = (tags['title'] as String?)?.isNotEmpty == true ? tags['title'] as String : f.name;
+            artist = tags['artist'] as String? ?? '';
+            album = tags['album'] as String? ?? '';
+            albumArtist = tags['albumArtist'] as String? ?? '';
+            durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
+          }
+        } catch (_) {}
+        tracks.add(Track(
+          id: Uri.file(path).toString(),
+          uri: Uri.file(path).toString(),
+          title: title,
+          artist: artist,
+          albumArtist: albumArtist,
+          album: album,
+          durationMs: durationMs,
+          fileExtension: _ext(path),
+          filePath: path,
+          artUri: artUri,
+        ));
       } catch (_) { continue; }
     }
     return tracks;

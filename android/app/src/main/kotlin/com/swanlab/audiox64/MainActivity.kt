@@ -122,6 +122,8 @@ class MainActivity : FlutterActivity() {
         equalizerPlugin = EqualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
         flutterEngine.plugins.add(MediaSessionPlugin())
+        flutterEngine.plugins.add(TagReaderPlugin())
+        Log.i(TAG, ">>> TagReaderPlugin registered")
         Log.i(TAG, ">>> MediaSessionPlugin registered")
 
         // Channel для передачи ACTION_VIEW intent в Dart.

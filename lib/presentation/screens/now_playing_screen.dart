@@ -316,10 +316,10 @@ class _MarqueeText extends StatefulWidget {
 
 class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  final _scrollProgress = ValueNotifier<double>(0.0);
   double _textWidth = 0;
   double _containerWidth = 0;
   bool _needsScroll = false;
-  bool _measured = false;
 
   @override
   void initState() {
@@ -328,6 +328,9 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
       vsync: this,
       duration: const Duration(seconds: 6),
     );
+    _controller.addListener(() {
+      _scrollProgress.value = _controller.value;
+    });
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
         Future.delayed(const Duration(seconds: 1), () {
@@ -345,7 +348,9 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   void didUpdateWidget(_MarqueeText oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.text != widget.text) {
-      _measured = false;
+      _needsScroll = false;
+      _controller.stop();
+      _controller.reset();
     }
   }
 
@@ -360,19 +365,19 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
     _containerWidth = containerWidth;
     final wasScrolling = _needsScroll;
     _needsScroll = _textWidth > _containerWidth;
-    _measured = true;
     if (_needsScroll && !wasScrolling) {
       _controller.forward();
     } else if (!_needsScroll && wasScrolling) {
       _controller.stop();
       _controller.reset();
+      _scrollProgress.value = 0;
     }
-    setState(() {});
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _scrollProgress.dispose();
     super.dispose();
   }
 
@@ -380,14 +385,7 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Измеряем каждый кадр если нужно
-        if (!_measured || constraints.maxWidth != _containerWidth) {
-          // Откладываем измерение на следующий кадр
-          WidgetsBinding.instance.addPostFrameCallback((_) => _measure(constraints.maxWidth));
-        }
-        if (!_measured) {
-          return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
-        }
+        _measure(constraints.maxWidth);
         if (!_needsScroll) {
           return Text(widget.text, style: widget.style, maxLines: 1, overflow: TextOverflow.ellipsis);
         }
@@ -396,11 +394,11 @@ class _MarqueeTextState extends State<_MarqueeText> with SingleTickerProviderSta
           child: OverflowBox(
             maxWidth: double.infinity,
             alignment: Alignment.centerLeft,
-            child: AnimatedBuilder(
-              animation: _controller,
-              builder: (_, __) {
+            child: ValueListenableBuilder<double>(
+              valueListenable: _scrollProgress,
+              builder: (_, value, __) {
                 return Transform.translate(
-                  offset: Offset(-_controller.value * scrollDistance, 0),
+                  offset: Offset(-value * scrollDistance, 0),
                   child: Text(widget.text, style: widget.style, maxLines: 1),
                 );
               },

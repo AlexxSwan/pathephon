@@ -171,6 +171,28 @@ class MediaStoreSource {
           }
         }
       }
+      if (track.artist.isEmpty && track.filePath.isNotEmpty) {
+        try {
+          final tags = await _tagReader.invokeMethod<Map>('readTags', {'path': track.filePath});
+          if (tags != null) {
+            final t = (tags['title'] as String?) ?? '';
+            final a = (tags['artist'] as String?) ?? '';
+            final al = (tags['album'] as String?) ?? '';
+            final aa = (tags['albumArtist'] as String?) ?? '';
+            final d = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
+            if (t.isNotEmpty || a.isNotEmpty) {
+              tracks.add(track.copyWith(
+                title: t.isNotEmpty ? t : track.title,
+                artist: a,
+                album: al,
+                albumArtist: aa,
+                durationMs: d > 0 ? d : track.durationMs,
+              ));
+              continue;
+            }
+          }
+        } catch (_) {}
+      }
       tracks.add(track);
     }
     return tracks;

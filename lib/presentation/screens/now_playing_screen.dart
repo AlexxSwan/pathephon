@@ -1,6 +1,8 @@
 // ============================================================================
 //  now_playing_screen.dart - uses Preset.of(context) for theme-aware colors
-//  v0.10.98+192: 2 отдельные кнопки — toggle on/off (слева) + playlist/spectrum (справа)
+//  v0.10.99+193: ПОЛНОСТЬЮ убран спектральный анализатор.
+//                Нет FFT, нет Visualizer, нет spectrumProvider → максимум экономии CPU.
+//                Остаётся: обложка, контролы, плейлист (toggle справа).
 // ============================================================================
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -8,7 +10,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/l10n/generated/app_localizations.dart';
 import '../../core/theme/retro_theme.dart';
-import '../../core/theme/spectrum_painter.dart';
 import '../../core/utils/duration_format.dart';
 import '../../domain/models/track.dart';
 import '../providers/providers.dart';
@@ -22,23 +23,9 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 }
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
-  bool _showPlaylist = false;
-  // true = спектр включён, false = нативный capture остановлен (экономия CPU)
-  bool _spectrumEnabled = true;
+  bool _showPlaylist = true;
   final _playlistScrollController = ScrollController();
   int _lastScrolledIndex = -1;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final playback = ref.read(playbackServiceProvider);
-      final visualizer = ref.read(visualizerServiceProvider);
-      playback.audioSessionIdStream.listen((sessionId) {
-        if (_spectrumEnabled) visualizer.attach(sessionId);
-      });
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -46,7 +33,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final p = Preset.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
     final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
-    final spectrum = _spectrumEnabled ? (ref.watch(spectrumProvider).valueOrNull) : null;
     final playback = ref.watch(playbackServiceProvider);
     ref.watch(isPlayingProvider);
 
@@ -54,56 +40,30 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final queue = snap?.queue ?? const <Track>[];
     final currentIndex = snap?.index ?? 0;
     final duration = snap?.duration ?? Duration.zero;
-    final bins = spectrum?.bins ?? const <double>[];
-    final isPlaying = snap?.isPlaying ?? false;
-    final brightness = isPlaying ? 1.0 : 0.0;
 
     return Scaffold(
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(children: [
-            // ====== Топ-бар: [toggle on/off] [title] [playlist/spectrum] ======
+            // ====== Топ-бар: [title] [playlist toggle] ======
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // ЛЕВАЯ кнопка: вкл/выкл анализатор (экономия CPU)
-                IconButton(
-                  icon: Icon(_spectrumEnabled
-                      ? Icons.graphic_eq
-                      : Icons.graphic_eq_outlined),
-                  tooltip: _spectrumEnabled
-                      ? 'Выключить анализатор'
-                      : 'Включить анализатор',
-                  color: _spectrumEnabled ? p.accentHot : p.textMuted,
-                  onPressed: () {
-                    setState(() {
-                      _spectrumEnabled = !_spectrumEnabled;
-                      if (_spectrumEnabled) {
-                        // Включаем — переподписываемся на sessionId
-                        final visualizer = ref.read(visualizerServiceProvider);
-                        final pb = ref.read(playbackServiceProvider);
-                        pb.audioSessionIdStream.listen((sid) => visualizer.attach(sid));
-                      } else {
-                        // Выключаем — стопаем нативный capture → экономия CPU
-                        ref.read(visualizerServiceProvider).detach();
-                        // _showPlaylist НЕ трогаем — плейлист остаётся если показан
-                      }
-                    });
-                  },
-                ),
+                const SizedBox(width: 48),
                 Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),
-                // ПРАВАЯ кнопка: playlist <-> spectrum (как в c066253)
                 IconButton(
-                  icon: Icon(_showPlaylist ? Icons.graphic_eq : Icons.queue_music),
-                  tooltip: _showPlaylist ? 'Анализатор' : 'Очередь',
+                  icon: Icon(_showPlaylist ? Icons.queue_music : Icons.queue_music_outlined),
+                  tooltip: _showPlaylist ? 'Скрыть очередь' : 'Показать очередь',
+                  color: _showPlaylist ? p.accentHot : p.textMuted,
                   onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
                 ),
               ],
             ),
             const SizedBox(height: 8),
+            // ====== Обложка (растягивается если плейлист скрыт) ======
             Expanded(
-              flex: 3,
+              flex: _showPlaylist ? 3 : 5,
               child: Center(
                 child: AspectRatio(
                   aspectRatio: 1,
@@ -138,33 +98,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             const SizedBox(height: 8),
             const PlaybackControls(),
             const SizedBox(height: 12),
-            // ====== Нижняя панель: 3 состояния ======
-            Expanded(
-              flex: 2,
-              child: _showPlaylist
-                  ? _buildPlaylist(queue, currentIndex, playback, p)
-                  : _spectrumEnabled
-                      ? Container(
-                          decoration: BoxDecoration(
-                            color: p.background,
-                            border: Border.all(color: p.brass.withOpacity(0.5), width: 1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: ClipRect(
-                            child: CustomPaint(size: Size.infinite, painter: SpectrumPainter(bins: bins, brightness: brightness)),
-                          ),
-                        )
-                      : Container(
-                          decoration: BoxDecoration(
-                            color: p.background,
-                            border: Border.all(color: p.brass.withOpacity(0.2), width: 1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Center(
-                            child: Icon(Icons.graphic_eq, size: 40, color: p.brass.withOpacity(0.3)),
-                          ),
-                        ),
-            ),
+            // ====== Плейлист (или пустое место если скрыт) ======
+            if (_showPlaylist)
+              Expanded(
+                flex: 2,
+                child: _buildPlaylist(queue, currentIndex, playback, p),
+              ),
           ]),
         ),
       ),
@@ -175,7 +114,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     if (queue.isEmpty) {
       return Center(child: Text('\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u043F\u0443\u0441\u0442\u0430', style: TextStyle(color: p.textMuted)));
     }
-    // Auto-scroll to current track ТОЛЬКО если индекс изменился
+    // Auto-scroll к текущему треку ТОЛЬКО если индекс изменился
     if (currentIndex != _lastScrolledIndex) {
       _lastScrolledIndex = currentIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -265,13 +204,10 @@ class _ArtworkImage extends ConsumerWidget {
   final Track? track;
 
   /// Статический кеш найденных обложек по filePath трека.
-  /// Ключ — путь к аудиофайлу, значение — file:// URI обложки или null.
   static final Map<String, String?> _coverCache = {};
 
-  /// Ищет cover.jpg/folder.jpg/album.jpg/front.jpg в папке трека.
   Future<String?> _findCoverInDir(String? filePath) async {
     if (filePath == null || filePath.isEmpty) return null;
-    // Если уже искали — возвращаем из кеша
     if (_coverCache.containsKey(filePath)) return _coverCache[filePath];
     String? result;
     try {
@@ -291,7 +227,7 @@ class _ArtworkImage extends ConsumerWidget {
         }
       }
     } catch (_) {}
-    _coverCache[filePath] = result; // кешируем (даже null)
+    _coverCache[filePath] = result;
     return result;
   }
 
@@ -302,24 +238,20 @@ class _ArtworkImage extends ConsumerWidget {
     if (t == null) return _appIconFallback(p);
     String? artUri = t.artUri;
 
-    // Если artUri пустой — пытаемся найти cover.jpg в папке трека
     if (artUri.isEmpty) {
       final fp = t.filePath.isNotEmpty ? t.filePath : null;
       if (fp != null && _coverCache.containsKey(fp)) {
-        // Уже искали — берём из кеша синхронно
         final cached = _coverCache[fp];
         if (cached != null && cached.isNotEmpty) {
           return Image.file(File(Uri.parse(cached).toFilePath()),
               fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
         }
-        return _appIconFallback(p); // искали, не нашли
+        return _appIconFallback(p);
       }
-      // Первый раз — запускаем поиск, показываем gif пока ищем
-      _findCoverInDir(fp); // запускаем, результат сохранится в кеш
-      return _appIconFallback(p); // gif на этот кадр
+      _findCoverInDir(fp);
+      return _appIconFallback(p);
     }
 
-    // artUri есть — показываем
     final ms = ref.read(mediaStoreSourceProvider);
     final cachedBytes = ms.getCoverBytes(artUri);
     if (cachedBytes != null) {

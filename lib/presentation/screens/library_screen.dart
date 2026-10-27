@@ -154,11 +154,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
             _AlbumGrid(),
             _ArtistsList(),
             _PlaylistsTab(),
-          ]);        },
-      ),
-
-        icon: const Icon(Icons.refresh), label: Text(l.libraryScan),
-        backgroundColor: TubeColors.amber, foregroundColor: TubeColors.background,
+          ]);
+        },
       ),
     );
   }

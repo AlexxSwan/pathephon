@@ -1,6 +1,6 @@
 // ============================================================================
 //  now_playing_screen.dart - uses Preset.of(context) for theme-aware colors
-//  v0.10.97+191: 3-state toggle (queue/spectrum/off) — detach stops native FFT
+//  v0.10.98+192: 2 отдельные кнопки — toggle on/off (слева) + playlist/spectrum (справа)
 // ============================================================================
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -63,42 +63,41 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Column(children: [
+            // ====== Топ-бар: [toggle on/off] [title] [playlist/spectrum] ======
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const SizedBox(width: 48),
-                Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),
+                // ЛЕВАЯ кнопка: вкл/выкл анализатор (экономия CPU)
                 IconButton(
-                  icon: Icon(_showPlaylist
-                      ? Icons.queue_music
-                      : (_spectrumEnabled ? Icons.graphic_eq : Icons.graphic_eq_outlined)),
-                  tooltip: _showPlaylist ? 'Очередь'
-                      : (_spectrumEnabled ? 'Выключить анализатор' : 'Включить анализатор'),
-                  color: _showPlaylist ? null
-                      : (_spectrumEnabled ? p.accentHot : p.textMuted),
+                  icon: Icon(_spectrumEnabled
+                      ? Icons.graphic_eq
+                      : Icons.graphic_eq_outlined),
+                  tooltip: _spectrumEnabled
+                      ? 'Выключить анализатор'
+                      : 'Включить анализатор',
+                  color: _spectrumEnabled ? p.accentHot : p.textMuted,
                   onPressed: () {
                     setState(() {
-                      if (_showPlaylist) {
-                        // playlist -> spectrum
-                        _showPlaylist = false;
-                        if (_spectrumEnabled) {
-                          final visualizer = ref.read(visualizerServiceProvider);
-                          final pb = ref.read(playbackServiceProvider);
-                          pb.audioSessionIdStream.listen((sid) => visualizer.attach(sid));
-                        }
-                      } else if (_spectrumEnabled) {
-                        // spectrum -> off (стопаем нативный capture → экономия CPU)
-                        _spectrumEnabled = false;
-                        ref.read(visualizerServiceProvider).detach();
-                      } else {
-                        // off -> spectrum
-                        _spectrumEnabled = true;
+                      _spectrumEnabled = !_spectrumEnabled;
+                      if (_spectrumEnabled) {
+                        // Включаем — переподписываемся на sessionId
                         final visualizer = ref.read(visualizerServiceProvider);
                         final pb = ref.read(playbackServiceProvider);
                         pb.audioSessionIdStream.listen((sid) => visualizer.attach(sid));
+                      } else {
+                        // Выключаем — стопаем нативный capture → экономия CPU
+                        ref.read(visualizerServiceProvider).detach();
+                        // _showPlaylist НЕ трогаем — плейлист остаётся если показан
                       }
                     });
                   },
+                ),
+                Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),
+                // ПРАВАЯ кнопка: playlist <-> spectrum (как в c066253)
+                IconButton(
+                  icon: Icon(_showPlaylist ? Icons.graphic_eq : Icons.queue_music),
+                  tooltip: _showPlaylist ? 'Анализатор' : 'Очередь',
+                  onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
                 ),
               ],
             ),
@@ -139,31 +138,32 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
             const SizedBox(height: 8),
             const PlaybackControls(),
             const SizedBox(height: 12),
+            // ====== Нижняя панель: 3 состояния ======
             Expanded(
               flex: 2,
               child: _showPlaylist
                   ? _buildPlaylist(queue, currentIndex, playback, p)
                   : _spectrumEnabled
-                    ? Container(
-                        decoration: BoxDecoration(
-                          color: p.background,
-                          border: Border.all(color: p.brass.withOpacity(0.5), width: 1),
-                          borderRadius: BorderRadius.circular(4),
+                      ? Container(
+                          decoration: BoxDecoration(
+                            color: p.background,
+                            border: Border.all(color: p.brass.withOpacity(0.5), width: 1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: ClipRect(
+                            child: CustomPaint(size: Size.infinite, painter: SpectrumPainter(bins: bins, brightness: brightness)),
+                          ),
+                        )
+                      : Container(
+                          decoration: BoxDecoration(
+                            color: p.background,
+                            border: Border.all(color: p.brass.withOpacity(0.2), width: 1),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Center(
+                            child: Icon(Icons.graphic_eq, size: 40, color: p.brass.withOpacity(0.3)),
+                          ),
                         ),
-                        child: ClipRect(
-                          child: CustomPaint(size: Size.infinite, painter: SpectrumPainter(bins: bins, brightness: brightness)),
-                        ),
-                      )
-                    : Container(
-                        decoration: BoxDecoration(
-                          color: p.background,
-                          border: Border.all(color: p.brass.withOpacity(0.2), width: 1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Center(
-                          child: Icon(Icons.graphic_eq, size: 40, color: p.brass.withOpacity(0.3)),
-                        ),
-                      ),
             ),
           ]),
         ),
@@ -176,7 +176,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       return Center(child: Text('\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u043F\u0443\u0441\u0442\u0430', style: TextStyle(color: p.textMuted)));
     }
     // Auto-scroll to current track ТОЛЬКО если индекс изменился
-    // (или при первом открытии). Иначе пользователь не сможет прокрутить список.
     if (currentIndex != _lastScrolledIndex) {
       _lastScrolledIndex = currentIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {

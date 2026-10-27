@@ -245,14 +245,17 @@ class JustAudioPlaybackService implements PlaybackService {
       if (idx >= 0 && idx < _queue.length) {
         final old = _queue[idx];
         if (old.artist.isEmpty) {
-          _queue[idx] = old.copyWith(
+          // _queue is unmodifiable — create a new modifiable copy, update, then make unmodifiable again
+          final newList = List<Track>.from(_queue);
+          newList[idx] = old.copyWith(
             title: title.isNotEmpty ? title : old.title,
             artist: artist,
             album: album,
             albumArtist: tags['albumArtist'] as String? ?? '',
             durationMs: durationMs > 0 ? durationMs : old.durationMs,
           );
-          // Пере-эмитим снапшот чтобы UI обновился
+          _queue = List.unmodifiable(newList);
+          // Re-emit snapshot so UI updates
           _emitState(_player.playerState);
         }
       }

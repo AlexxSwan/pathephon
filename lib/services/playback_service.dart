@@ -78,7 +78,6 @@ class JustAudioPlaybackService implements PlaybackService {
   /// переадресует BT Callback'и сюда.
   static const _nativeChannel = MethodChannel('pathephon/native_media_session');
   static const _tagChannel = MethodChannel('pathephon/tag_reader');
-  static const _tagChannel = MethodChannel('pathephon/tag_reader');
 
   List<Track> _queue = const [];
   int _index = 0;
@@ -295,44 +294,6 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   /// Читает теги из файла и обновляет metadata в MediaSession + UI.
-  Future<void> _readTagsAndUpdate(String filePath) async {
-    try {
-      final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
-      if (tags == null) return;
-      final title = tags['title'] as String? ?? '';
-      final artist = tags['artist'] as String? ?? '';
-      final album = tags['album'] as String? ?? '';
-      final durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
-      print('[pathephon] tags loaded: title="$title" artist="$artist" dur=$durationMs');
-      // Обновляем Track в очереди
-      final idx = _player.currentIndex ?? _index;
-      if (idx >= 0 && idx < _queue.length) {
-        final old = _queue[idx];
-        if (old.artist.isEmpty) {
-          _queue[idx] = old.copyWith(
-            title: title.isNotEmpty ? title : old.title,
-            artist: artist,
-            album: album,
-            albumArtist: tags['albumArtist'] as String? ?? '',
-            durationMs: durationMs > 0 ? durationMs : old.durationMs,
-          );
-          // Пере-эмитим снапшот чтобы UI обновился
-          _emitState(_player.playerState);
-        }
-      }
-      // Пушим в MediaSession
-      _nativeChannel.invokeMethod('setMediaItem', {
-        'title': title.isNotEmpty ? title : '',
-        'artist': artist.isNotEmpty ? artist : 'Pathephon',
-        'album': album,
-        'durationMs': durationMs,
-        'artUri': _queue[idx].artUri,
-      });
-    } catch (e) {
-      print('[pathephon] _readTagsAndUpdate failed: $e');
-    }
-  }
-
   void _emitState(PlayerState st) {
     final currentIndex = _player.currentIndex ?? _index;
     _index = currentIndex;

@@ -255,7 +255,7 @@ class JustAudioPlaybackService implements PlaybackService {
     } catch (_) {/* swallow */}
   }
 
-  /// Читает теги из файла и обновляет metadata в MediaSession.
+  /// Читает теги из файла и обновляет metadata в MediaSession + UI.
   Future<void> _readTagsAndUpdate(String filePath) async {
     try {
       final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
@@ -264,22 +264,37 @@ class JustAudioPlaybackService implements PlaybackService {
       final artist = tags['artist'] as String? ?? '';
       final album = tags['album'] as String? ?? '';
       final durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
-      if (title.isNotEmpty || artist.isNotEmpty) {
-        print('[pathephon] tags loaded: title="$title" artist="$artist"');
-        _nativeChannel.invokeMethod('setMediaItem', {
-          'title': title.isNotEmpty ? title : '',
-          'artist': artist.isNotEmpty ? artist : 'Pathephon',
-          'album': album,
-          'durationMs': durationMs,
-          'artUri': '',
-        });
+      print('[pathephon] tags loaded: title="$title" artist="$artist" dur=$durationMs');
+      // Обновляем Track в очереди
+      final idx = _player.currentIndex ?? _index;
+      if (idx >= 0 && idx < _queue.length) {
+        final old = _queue[idx];
+        if (old.artist.isEmpty) {
+          _queue[idx] = old.copyWith(
+            title: title.isNotEmpty ? title : old.title,
+            artist: artist,
+            album: album,
+            albumArtist: tags['albumArtist'] as String? ?? '',
+            durationMs: durationMs > 0 ? durationMs : old.durationMs,
+          );
+          // Пере-эмитим снапшот чтобы UI обновился
+          _emitState(_player.playerState);
+        }
       }
+      // Пушим в MediaSession
+      _nativeChannel.invokeMethod('setMediaItem', {
+        'title': title.isNotEmpty ? title : '',
+        'artist': artist.isNotEmpty ? artist : 'Pathephon',
+        'album': album,
+        'durationMs': durationMs,
+        'artUri': _queue[idx].artUri,
+      });
     } catch (e) {
       print('[pathephon] _readTagsAndUpdate failed: $e');
     }
   }
 
-  /// Читает теги из файла и обновляет metadata в MediaSession.
+  /// Читает теги из файла и обновляет metadata в MediaSession + UI.
   Future<void> _readTagsAndUpdate(String filePath) async {
     try {
       final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
@@ -288,16 +303,31 @@ class JustAudioPlaybackService implements PlaybackService {
       final artist = tags['artist'] as String? ?? '';
       final album = tags['album'] as String? ?? '';
       final durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
-      if (title.isNotEmpty || artist.isNotEmpty) {
-        print('[pathephon] tags loaded: title="$title" artist="$artist"');
-        _nativeChannel.invokeMethod('setMediaItem', {
-          'title': title.isNotEmpty ? title : '',
-          'artist': artist.isNotEmpty ? artist : 'Pathephon',
-          'album': album,
-          'durationMs': durationMs,
-          'artUri': '',
-        });
+      print('[pathephon] tags loaded: title="$title" artist="$artist" dur=$durationMs');
+      // Обновляем Track в очереди
+      final idx = _player.currentIndex ?? _index;
+      if (idx >= 0 && idx < _queue.length) {
+        final old = _queue[idx];
+        if (old.artist.isEmpty) {
+          _queue[idx] = old.copyWith(
+            title: title.isNotEmpty ? title : old.title,
+            artist: artist,
+            album: album,
+            albumArtist: tags['albumArtist'] as String? ?? '',
+            durationMs: durationMs > 0 ? durationMs : old.durationMs,
+          );
+          // Пере-эмитим снапшот чтобы UI обновился
+          _emitState(_player.playerState);
+        }
       }
+      // Пушим в MediaSession
+      _nativeChannel.invokeMethod('setMediaItem', {
+        'title': title.isNotEmpty ? title : '',
+        'artist': artist.isNotEmpty ? artist : 'Pathephon',
+        'album': album,
+        'durationMs': durationMs,
+        'artUri': _queue[idx].artUri,
+      });
     } catch (e) {
       print('[pathephon] _readTagsAndUpdate failed: $e');
     }

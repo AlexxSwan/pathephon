@@ -22,6 +22,7 @@ class NowPlayingScreen extends ConsumerStatefulWidget {
 
 class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   bool _showPlaylist = false;
+  bool _spectrumEnabled = true;
   final _playlistScrollController = ScrollController();
   int _lastScrolledIndex = -1;
 
@@ -43,7 +44,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final p = Preset.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
     final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
-    final spectrum = ref.watch(spectrumProvider).valueOrNull;
+    final spectrum = _spectrumEnabled ? (ref.watch(spectrumProvider).valueOrNull) : null;
     final playback = ref.watch(playbackServiceProvider);
     ref.watch(isPlayingProvider);
 
@@ -113,16 +114,25 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               flex: 2,
               child: _showPlaylist
                   ? _buildPlaylist(queue, currentIndex, playback, p)
-                  : Container(
-                      decoration: BoxDecoration(
-                        color: p.background,
-                        border: Border.all(color: p.brass.withOpacity(0.5), width: 1),
-                        borderRadius: BorderRadius.circular(4),
+                  : _spectrumEnabled
+                    ? Container(
+                        decoration: BoxDecoration(
+                          color: p.background,
+                          border: Border.all(color: p.brass.withOpacity(0.5), width: 1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ClipRect(
+                          child: CustomPaint(size: Size.infinite, painter: SpectrumPainter(bins: bins, brightness: brightness)),
+                        ),
+                      )
+                    : Container(
+                        decoration: BoxDecoration(
+                          color: p.background,
+                          border: Border.all(color: p.brass.withOpacity(0.2), width: 1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Center(child: Icon(Icons.graphic_eq, size: 40, color: p.brass.withOpacity(0.3))),
                       ),
-                      child: ClipRect(
-                        child: CustomPaint(size: Size.infinite, painter: SpectrumPainter(bins: bins, brightness: brightness)),
-                      ),
-                    ),
             ),
           ]),
         ),

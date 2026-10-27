@@ -84,8 +84,21 @@ class VisualizerPlugin(binaryMessenger: BinaryMessenger) {
                     val mag = Math.sqrt((real * real + imag * imag).toDouble()).toFloat()
                     // Normalize: Visualizer magnitudes typically 0..~50 for music
                     val norm = (mag / 50f).coerceIn(0f, 1f)
+                    // Perceptual compensation: music naturally has more bass energy
+                    // (pink noise / 1/f). To make the spectrum look balanced:
+                    // - Attenuate low bins (i=0..7): gain 0.4..0.7
+                    // - Keep mid bins (i=8..23): gain 0.8..1.0
+                    // - Boost high bins (i=24..31): gain 1.0..1.5
+                    val gain = when {
+                        i < 4 -> 0.35f   // very low bass - heavily attenuated
+                        i < 8 -> 0.55f   // bass - attenuated
+                        i < 16 -> 0.80f  // low-mid - slightly attenuated
+                        i < 24 -> 1.0f   // mid-high - neutral
+                        else -> 1.3f     // high - boosted
+                    }
+                    val compensated = (norm * gain).coerceIn(0f, 1f)
                     // Log scaling for better visual response
-                    val logScaled = (Math.log10(1.0 + 9.0 * norm.toDouble()) * 255f).toFloat()
+                    val logScaled = (Math.log10(1.0 + 9.0 * compensated.toDouble()) * 255f).toFloat()
                     result[i] = logScaled
                 }
 

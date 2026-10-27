@@ -211,47 +211,23 @@ class JustAudioPlaybackService implements PlaybackService {
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
     final t = _queue[idx];
-    // Если durationMs=0 (треки из file_picker без тегов) — берём из _player.duration
     final durationMs = (t.durationMs > 0)
         ? t.durationMs
         : (_player.duration?.inMilliseconds ?? 0);
-    // Title: если пустой или = имя файла с .mp3 — улучшаем
-    var title = t.title;
-    if (title.isEmpty || title.endsWith('.mp3') || title.endsWith('.flac') ||
-        title.endsWith('.ogg') || title.endsWith('.m4a') || title.endsWith('.wav')) {
-      title = title.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
-      final slashIdx = title.lastIndexOf('/');
-      if (slashIdx >= 0) title = title.substring(slashIdx + 1);
-      title = title.replaceAll(RegExp(r'^\d+\s*[-\.]\s*'), '');
+    // Если у трека нет artist — читаем теги асинхронно
+    if (t.artist.isEmpty && t.filePath.isNotEmpty) {
+      _readTagsAndUpdate(t.filePath);
     }
-    // Динамический поиск cover.jpg если artUri пустой
-    var artUri = t.artUri;
-    if (artUri.isEmpty && t.filePath.isNotEmpty) {
-      try {
-        final dir = File(t.filePath).parent;
-        if (dir.existsSync()) {
-          for (final e in dir.listSync(recursive: false, followLinks: false)) {
-            final name = e.uri.pathSegments.last.toLowerCase();
-            if (name == 'cover.jpg' || name == 'folder.jpg' ||
-                name == 'album.jpg' || name == 'front.jpg' ||
-                name == 'cover.png' || name == 'folder.png' ||
-                name == 'album.png' || name == 'front.png') {
-              artUri = 'file://${e.path}';
-              break;
-            }
-          }
-        }
-      } catch (_) {}
-    }
+    // Пушим то что есть сейчас (title/artist могут обновиться позже через _readTagsAndUpdate)
     try {
       _nativeChannel.invokeMethod('setMediaItem', {
-        'title': title,
+        'title': t.title,
         'artist': t.artist.isNotEmpty ? t.artist : 'Pathephon',
-        'album': t.album.isNotEmpty ? t.album : '',
+        'album': t.album,
         'durationMs': durationMs,
-        'artUri': artUri,
+        'artUri': t.artUri,
       });
-    } catch (_) {/* swallow */}
+    } catch (_) {}
   }
 
   /// Читает теги из файла и обновляет metadata в MediaSession + UI.

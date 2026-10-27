@@ -52,9 +52,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final queue = snap?.queue ?? const <Track>[];
     final currentIndex = snap?.index ?? 0;
     final duration = snap?.duration ?? Duration.zero;
-    final bins = spectrum?.bins ?? const <double>[];
+
     final isPlaying = snap?.isPlaying ?? false;
-    final brightness = isPlaying ? 1.0 : 0.0;
+
 
     return Scaffold(
       body: SafeArea(
@@ -324,7 +324,7 @@ class _SpectrumView extends ConsumerWidget {
       );
     }
     final spectrum = ref.watch(spectrumProvider).valueOrNull;
-    final bins = spectrum?.bins ?? const <double>[];
+
     return Container(
       decoration: BoxDecoration(
         color: Theme.of(context).scaffoldBackgroundColor,

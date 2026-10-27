@@ -37,7 +37,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) {
-        final c = TextEditingController(text: 'Поиск: \');
+        final c = TextEditingController(text: 'Поиск: $_query');
         return AlertDialog(
           backgroundColor: const Color(0xFF1A1410),
           title: const Text('Сохранить как плейлист', style: TextStyle(color: Color(0xFFF4E9D2))),
@@ -54,14 +54,14 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
     final raw = prefs.getString('pathephon.playlists') ?? '[]';
     final list = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
     list.insert(0, {
-      'id': 'playlist_\',
+      'id': 'playlist_${DateTime.now().millisecondsSinceEpoch}',
       'name': name,
       'createdAt': DateTime.now().toIso8601String(),
       'tracks': _results.map((t) => t.toJson()).toList(),
     });
     await prefs.setString('pathephon.playlists', jsonEncode(list));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Сохранено: \ (\ треков)')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Сохранено: $name (${_results.length} треков)')));
     }
   }
 
@@ -76,7 +76,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   void _showTrackOptions(Track t, int index) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF1A1410),
       builder: (ctx) => SafeArea(
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           ListTile(
@@ -96,7 +95,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
               Navigator.pop(ctx);
               ref.read(libraryStateProvider.notifier).addToCurrentQueue([t], ProviderScope.containerOf(context));
               if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Добавлено: \')));
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Добавлено: ${t.title}')));
               }
             },
           ),

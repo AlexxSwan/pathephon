@@ -9,8 +9,6 @@ import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
 
-/// Читает теги (ID3/Vorbis/MP4) из медиафайлов через MediaMetadataRetriever.
-/// Поддерживает: mp3, flac, ogg, m4a, aac, wav, opus и др.
 class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
     companion object {
         private const val TAG = "Pathephon/TagReader"
@@ -45,9 +43,10 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
                 }
                 try {
                     val tags = readTags(path, uri)
+                    Log.i(TAG, "readTags: path=$path title=${tags["title"]} artist=${tags["artist"]} mime=${tags["mimeType"]}")
                     result.success(tags)
                 } catch (e: Exception) {
-                    Log.e(TAG, "readTags failed: ${'$'}{e.message}", e)
+                    Log.e(TAG, "readTags FAILED: path=$path error=${e.message}", e)
                     result.error("ERROR", e.message, null)
                 }
             }
@@ -59,25 +58,50 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
         val mmr = MediaMetadataRetriever()
         val result = mutableMapOf<String, Any>()
         try {
-            if (uri.isNotEmpty()) {
-                val ctx = context ?: return result
-                mmr.setDataSource(ctx, android.net.Uri.parse(uri))
-            } else {
-                mmr.setDataSource(path)
+            // Пробуем разные способы установки dataSource
+            try {
+                if (uri.isNotEmpty() && uri.startsWith("content://")) {
+                    val ctx = context ?: return result
+                    mmr.setDataSource(ctx, android.net.Uri.parse(uri))
+                } else if (path.isNotEmpty()) {
+                    mmr.setDataSource(path)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "setDataSource failed for path=$path: ${e.message}")
+                // Пробуем через contentResolver если есть uri
+                if (uri.isNotEmpty()) {
+                    val ctx = context ?: return result
+                    mmr.setDataSource(ctx, android.net.Uri.parse(uri))
+                } else {
+                    return result
+                }
             }
 
-            result["title"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) ?: ""
-            result["artist"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: ""
-            result["album"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: ""
-            result["albumArtist"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST) ?: ""
-            result["genre"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE) ?: ""
-            result["year"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR) ?: ""
-            result["trackNumber"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER) ?: ""
-            result["durationMs"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION) ?: "0"
-            result["mimeType"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE) ?: ""
-            result["bitrate"] = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE) ?: "0"
+            val title = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) ?: ""
+            val artist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) ?: ""
+            val album = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUM) ?: ""
+            val albumArtist = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ALBUMARTIST) ?: ""
+            val genre = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_GENRE) ?: ""
+            val year = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_YEAR) ?: ""
+            val trackNumber = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_CD_TRACK_NUMBER) ?: ""
+            val durationMs = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION) ?: "0"
+            val mimeType = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE) ?: ""
+            val bitrate = mmr.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE) ?: "0"
+
+            Log.i(TAG, "  title=$title artist=$artist album=$album mime=$mimeType dur=$durationMs")
+
+            result["title"] = title
+            result["artist"] = artist
+            result["album"] = album
+            result["albumArtist"] = albumArtist
+            result["genre"] = genre
+            result["year"] = year
+            result["trackNumber"] = trackNumber
+            result["durationMs"] = durationMs
+            result["mimeType"] = mimeType
+            result["bitrate"] = bitrate
         } finally {
-            mmr.release()
+            try { mmr.release() } catch (_: Exception) {}
         }
         return result
     }

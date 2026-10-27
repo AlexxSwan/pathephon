@@ -284,24 +284,7 @@ class _ShellState extends ConsumerState<_Shell> {
       child: Scaffold(
         body: Stack(children: [
           IndexedStack(index: _index, children: _screens),
-          if (_index != 3) Positioned(
-            top: MediaQuery.of(context).padding.top + 4,
-            left: 4,
-            child: Container(
-              decoration: BoxDecoration(
-                color: p.surface.withOpacity(0.8),
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: Icon(_themeModeIcons[themeModeIdx], color: p.accent, size: 20),
-                tooltip: _themeModeNames[themeModeIdx],
-                onPressed: _cycleTheme,
-                iconSize: 20,
-                padding: const EdgeInsets.all(8),
-                constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
-              ),
-            ),
-          ),
+
         ]),
         bottomNavigationBar: Container(
           decoration: BoxDecoration(

@@ -41,7 +41,25 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
         ? "Загрузка..."
         : "Версия: $_version ($_buildNumber)";
     return Scaffold(
-      appBar: AppBar(title: const Text("О программе")),
+      appBar: AppBar(
+        title: const Text("О программе"),
+        actions: [
+          Consumer(builder: (context, ref, _) {
+            final themeModeIdx = ref.watch(themeModeProvider);
+            const icons = [Icons.dark_mode, Icons.light_mode, Icons.brightness_auto];
+            const names = ['Тёмная', 'Светлая', 'Системная'];
+            return IconButton(
+              icon: Icon(icons[themeModeIdx], size: 20),
+              tooltip: names[themeModeIdx],
+              onPressed: () {
+                final next = (themeModeIdx + 1) % 3;
+                ref.read(themeModeProvider.notifier).state = next;
+                ref.read(sharedPreferencesProvider).setInt('pathephon.theme_mode', next);
+              },
+            );
+          }),
+        ],
+      ),
       body: Center(child: SingleChildScrollView(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
         Icon(Icons.graphic_eq, size: 80, color: p.accent),
         const SizedBox(height: 24),

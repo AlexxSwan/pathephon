@@ -284,7 +284,7 @@ class _ShellState extends ConsumerState<_Shell> {
       child: Scaffold(
         body: Stack(children: [
           IndexedStack(index: _index, children: _screens),
-          Positioned(
+          if (_index != 3) Positioned(
             top: MediaQuery.of(context).padding.top + 4,
             left: 4,
             child: Container(

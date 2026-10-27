@@ -1,5 +1,6 @@
 // ============================================================================
 //  now_playing_screen.dart - uses Preset.of(context) for theme-aware colors
+//  v0.10.97+191: 3-state toggle (queue/spectrum/off) — detach stops native FFT
 // ============================================================================
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -309,7 +310,7 @@ class _ArtworkImage extends ConsumerWidget {
         // Уже искали — берём из кеша синхронно
         final cached = _coverCache[fp];
         if (cached != null && cached.isNotEmpty) {
-          return Image.file(File(Uri.parse(cached).toFilePath()), 
+          return Image.file(File(Uri.parse(cached).toFilePath()),
               fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
         }
         return _appIconFallback(p); // искали, не нашли
@@ -340,6 +341,3 @@ class _ArtworkImage extends ConsumerWidget {
     );
   }
 }
-
-
-

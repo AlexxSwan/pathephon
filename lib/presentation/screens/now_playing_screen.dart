@@ -507,14 +507,46 @@ class _StatusDialogState extends State<_StatusDialog> {
   Widget _buildMemContent(ThemePreset p) {
     final mem = widget.mem;
     return Container(
-      padding: const EdgeInsets.all(8),
+      padding: const EdgeInsets.all(10),
       decoration: BoxDecoration(color: p.background, borderRadius: BorderRadius.circular(4)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         if (mem != null) ...[
-          _infoRow('RSS', '${(mem['rss']! / 1024).toStringAsFixed(1)} MB', p),
-          _infoRow('Виртуальная', '${(mem['vmsize']! / 1024).toStringAsFixed(1)} MB', p),
-          _infoRow('Потоки', '${mem['threads']!}', p),
-        ] else _infoRow('RSS', '—', p),
+          _memRow('RSS', '${(mem['rss']! / 1024).toStringAsFixed(1)} МБ',
+            'Резидентная — физически занято в ОЗУ', p),
+          const SizedBox(height: 6),
+          _memRow('Виртуальная', '${(mem['vmsize']! / 1024).toStringAsFixed(1)} МБ',
+            'Адресное пространство (включая memory-mapped)', p),
+          const SizedBox(height: 6),
+          _memRow('Потоки', '${mem['threads']!}',
+            'Параллельных потоков: UI, audio, BT и др.', p),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: p.surfaceVariant.withOpacity(0.3),
+              borderRadius: BorderRadius.circular(3),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(Icons.info_outline, size: 11, color: p.textMuted),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    'RSS — реальное потребление. Виртуальная всегда больше '
+                    '(содержит APK, .so-библиотеки и зарезервированные регионы).',
+                    style: TextStyle(
+                      color: p.textMuted,
+                      fontSize: 9,
+                      height: 1.3,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ] else
+          _memRow('RSS', '—', 'Недоступно', p),
       ]),
     );
   }
@@ -580,6 +612,48 @@ class _StatusDialogState extends State<_StatusDialog> {
       ]),
     );
   }
+
+  /// Строка для раздела Память: крупное значение + мелкое пояснение.
+  Widget _memRow(String label, String value, String description, ThemePreset p) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 90,
+          child: Text(label,
+            style: TextStyle(
+              color: p.brass,
+              fontSize: 11,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(value,
+                style: TextStyle(
+                  color: p.textPrimary,
+                  fontSize: 13,
+                  fontFamily: 'monospace',
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 1),
+              Text(description,
+                style: TextStyle(
+                  color: p.textMuted,
+                  fontSize: 9,
+                  height: 1.2,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
 }
 
 // ============================================================================
@@ -590,10 +664,44 @@ class _CpuAreaChartPainter extends CustomPainter {
   final Color color;
   _CpuAreaChartPainter({required this.history, required this.color});
 
+  /// Цвет по значению CPU%: 0=зелёный, 50=жёлтый, 100=красный
+  Color _colorFor(int pct) {
+    final p = pct.clamp(0, 100);
+    if (p <= 50) {
+      return Color.lerp(
+        const Color(0xFF4CAF50), // зелёный
+        const Color(0xFFFFC107), // жёлтый
+        p / 50,
+      )!;
+    } else {
+      return Color.lerp(
+        const Color(0xFFFFC107),
+        const Color(0xFFF44336), // красный
+        (p - 50) / 50,
+      )!;
+    }
+  }
+
+  /// Catmull-Rom сглаживание: по 4 точкам строит кубическую кривую Безье
+  /// между p1 и p2. tension=0.5 — стандартный Catmull-Rom.
+  void _drawSmoothSegment(Path path, Offset p0, Offset p1, Offset p2, Offset p3) {
+    const tension = 0.5;
+    final cp1 = Offset(
+      p1.dx + (p2.dx - p0.dx) / 6 * tension,
+      p1.dy + (p2.dy - p0.dy) / 6 * tension,
+    );
+    final cp2 = Offset(
+      p2.dx - (p3.dx - p1.dx) / 6 * tension,
+      p2.dy - (p3.dy - p1.dy) / 6 * tension,
+    );
+    path.cubicTo(cp1.dx, cp1.dy, cp2.dx, cp2.dy, p2.dx, p2.dy);
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
     if (history.isEmpty) return;
 
+    // === Сетка: горизонтальные линии на 20/40/60/80/100% ===
     final gridPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.7
@@ -605,8 +713,14 @@ class _CpuAreaChartPainter extends CustomPainter {
 
       for (final isLeft in [true, false]) {
         final tp = TextPainter(
-          text: TextSpan(text: '$pct',
-            style: TextStyle(color: color.withOpacity(0.55), fontSize: 8, fontFamily: 'monospace')),
+          text: TextSpan(
+            text: '$pct',
+            style: TextStyle(
+              color: color.withOpacity(0.55),
+              fontSize: 8,
+              fontFamily: 'monospace',
+            ),
+          ),
           textDirection: TextDirection.ltr,
         );
         tp.layout();
@@ -617,52 +731,114 @@ class _CpuAreaChartPainter extends CustomPainter {
     }
 
     final stepX = size.width / (history.length - 1 > 0 ? history.length - 1 : 1);
-    final areaPath = Path();
-    areaPath.moveTo(0, size.height);
+
+    // Точки (x, y) для каждой позиции в истории
+    final points = <Offset>[];
     for (var i = 0; i < history.length; i++) {
       final pct = history[i].clamp(0, 100);
       final x = i * stepX;
       final y = size.height - (pct / 100) * size.height;
-      areaPath.lineTo(x, y);
+      points.add(Offset(x, y));
     }
-    areaPath.lineTo(size.width, size.height);
+
+    // === Площадь (area) со сглаженной верхней границей ===
+    // Используем вертикальный градиент заливки: зелёный внизу → красный вверху
+    // НО Canvas не может залить полигон вертикальным градиентом по цвету точки —
+    // shader всегда один. Поэтому используем несколько горизонтальных полос
+    // разного цвета: для каждой полосы по высоте определяем цвет.
+    //
+    // Проще: заливаем одним вертикальным градиентом red(top)→green(bottom).
+    final areaPath = Path();
+    areaPath.moveTo(0, size.height);
+    areaPath.lineTo(points[0].dx, points[0].dy);
+
+    // Сглаженная линия через все точки (Catmull-Rom)
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+      _drawSmoothSegment(areaPath, p0, p1, p2, p3);
+    }
+
+    areaPath.lineTo(points.last.dx, size.height);
     areaPath.close();
 
+    // Градиент заливки: красный сверху → жёлтый центр → зелёный снизу
     final rect = Rect.fromLTWH(0, 0, size.width, size.height);
     final fillPaint = Paint()
       ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.bottomCenter,
-        colors: [color.withOpacity(0.7), color.withOpacity(0.15)],
+        begin: Alignment.topCenter,    // y=0 → красный (100%)
+        end: Alignment.bottomCenter,   // y=max → зелёный (0%)
+        colors: [
+          const Color(0xFFF44336).withOpacity(0.55), // красный (100%)
+          const Color(0xFFFFC107).withOpacity(0.35), // жёлтый (50%)
+          const Color(0xFF4CAF50).withOpacity(0.20), // зелёный (0%)
+        ],
+        stops: [0.0, 0.5, 1.0],
       ).createShader(rect);
     canvas.drawPath(areaPath, fillPaint);
 
+    // === Линия поверх площади — тоже сглаженная ===
+    // Рисуем сегментами с цветом по значению: каждый сегмент между точками
+    // рисуем цветом, усреднённым между двумя соседними точками.
     final linePath = Path();
-    for (var i = 0; i < history.length; i++) {
-      final pct = history[i].clamp(0, 100);
-      final x = i * stepX;
-      final y = size.height - (pct / 100) * size.height;
-      if (i == 0) linePath.moveTo(x, y);
-      else linePath.lineTo(x, y);
+    linePath.moveTo(points[0].dx, points[0].dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+      _drawSmoothSegment(linePath, p0, p1, p2, p3);
     }
-    final linePaint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.5
-      ..color = color
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-    canvas.drawPath(linePath, linePaint);
 
+    // Чтобы цвет линии менялся по длине, рисуем отдельными сегментами
+    // (по 1 точке = 1 сегмент), каждый своим цветом.
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = i > 0 ? points[i - 1] : points[i];
+      final p1 = points[i];
+      final p2 = points[i + 1];
+      final p3 = i < points.length - 2 ? points[i + 2] : points[i + 1];
+
+      final segPath = Path();
+      segPath.moveTo(p1.dx, p1.dy);
+      _drawSmoothSegment(segPath, p0, p1, p2, p3);
+
+      // Цвет сегмента = среднее между p1 и p2
+      final avgPct = ((history[i] + history[i + 1]) ~/ 2).clamp(0, 100);
+      final segColor = _colorFor(avgPct);
+
+      final segPaint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.8
+        ..color = segColor
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round;
+      canvas.drawPath(segPath, segPaint);
+    }
+
+    // === Точка на последнем значении (акцент) ===
     if (history.isNotEmpty) {
       final lastPct = history.last.clamp(0, 100);
       final lastX = (history.length - 1) * stepX;
       final lastY = size.height - (lastPct / 100) * size.height;
-      canvas.drawCircle(Offset(lastX, lastY), 2.0, Paint()..color = color);
+      final dotColor = _colorFor(lastPct);
+      // Внешний круг (halo)
+      canvas.drawCircle(
+        Offset(lastX, lastY),
+        3.5,
+        Paint()..color = dotColor.withOpacity(0.3),
+      );
+      // Внутренний круг
+      canvas.drawCircle(
+        Offset(lastX, lastY),
+        2.0,
+        Paint()..color = dotColor,
+      );
     }
   }
 
-  @override
-  bool shouldRepaint(_CpuAreaChartPainter old) =>
+  @overridebool shouldRepaint(_CpuAreaChartPainter old) =>
       old.history.length != history.length ||
       (old.history.isNotEmpty && history.isNotEmpty && old.history.last != history.last);
 }

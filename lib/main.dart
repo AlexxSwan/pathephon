@@ -3,6 +3,7 @@
 //  Три слоя защиты: FlutterError.onError + PlatformDispatcher.onError + runZonedGuarded
 // ============================================================================
 import 'dart:async';
+import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -64,7 +65,7 @@ Future<void> main() async {
       ProviderScope(
         overrides: [
           sharedPreferencesProvider.overrideWithValue(prefs),
-          localeProvider.overrideWith((_) => initialLocale),
+          localeProvider.overrideWith((_) => Locale(initialLocale)),
         ],
         child: const AudioPlayerX64App(),
       ),

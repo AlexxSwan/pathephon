@@ -1,11 +1,6 @@
 // ============================================================================
-//  playback_service.dart — v0.10.16+110 — БЕЗ audio_service
-//
-//  audio_service plugin автоматически создавал 2-ю MediaSession 'media-session'
-//  которая перехватывала BT-события у нашего нативного MediaSessionPlugin.
-//  Решение: полностью вырезали audio_service. Теперь только:
-//    - just_audio для воспроизведения
-//    - MediaSessionPlugin (нативный Kotlin) для BT + lock-screen
+//  playback_service.dart — БЕЗ audio_service, С defensive guards + crash logging
+//  v0.11.1+195: все public методы обёрнуты в try/catch с логированием в crash_logger
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -20,6 +15,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/utils/replaygain.dart';
 import '../domain/enums/repeat_mode.dart';
 import '../domain/models/track.dart';
+import 'crash_logger.dart';
 
 abstract class PlaybackService {
   Stream<PlaybackSnapshot> get state;
@@ -73,9 +69,6 @@ class JustAudioPlaybackService implements PlaybackService {
   final _player = AudioPlayer();
   final _initCompleter = Completer<void>();
 
-  /// Нативный MediaSession channel — для BT + lock-screen.
-  /// MediaSessionPlugin.kt создаёт MediaSession с TAG "Pathephon" и
-  /// переадресует BT Callback'и сюда.
   static const _nativeChannel = MethodChannel('pathephon/native_media_session');
   static const _tagChannel = MethodChannel('pathephon/tag_reader');
 
@@ -96,17 +89,15 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<int> get audioSessionIdStream => _sessionIdController.stream;
 
   Future<void> _init() async {
-    print('[pathephon] _init() START');
-
+    crashLogger.log('_init() START');
     try {
       final session = await AudioSession.instance;
       await session.configure(const AudioSessionConfiguration.music());
-      // Запрашиваем audio focus — это даёт системе сигнал что мы —
-      // активный media player. Без этого другая MediaSession (например
-      // Яндекс Музыка) может перехватить приоритет на часах/локскрине.
       await session.setActive(true);
-      print('[pathephon] AudioSession OK + active');
-    } catch (e) { print('[pathephon] AudioSession failed: $e'); }
+      crashLogger.log('AudioSession OK + active');
+    } catch (e, st) {
+      crashLogger.error('AudioSession failed', e, st);
+    }
 
     _stateController.add(PlaybackSnapshot.empty);
 
@@ -124,14 +115,9 @@ class JustAudioPlaybackService implements PlaybackService {
       }
     });
 
-    // Когда just_audio загрузил аудио и узнал duration — пере-пушим metadata
-    // в натив. На старте трека _player.duration ещё null, поэтому первый
-    // setMediaItem шлёт dur=0. После загрузки аудио durationStream эмитит
-    // реальное значение — пушим заново. Без этого lock-screen показывает --:--
-    // пока не переключишь трек.
     _player.durationStream.listen((duration) {
       if (duration != null && _queue.isNotEmpty) {
-        print('[pathephon] durationStream: ${duration.inMilliseconds}ms — re-push metadata');
+        crashLogger.log('durationStream: ${duration.inMilliseconds}ms — re-push metadata');
         _updateMediaItem();
       }
     });
@@ -144,11 +130,8 @@ class JustAudioPlaybackService implements PlaybackService {
       if (_queue.isNotEmpty) { _savePosition(); _emitState(_player.playerState); }
     });
 
-    // Обрабатываем BT события от нативного MediaSessionPlugin.
-    // Plugin создаёт MediaSession с TAG "Pathephon" и переадресует
-    // Callback.onPlay/onPause/onSkipToNext сюда.
     _nativeChannel.setMethodCallHandler((call) async {
-      print('[pathephon] BT event from native: ${call.method}');
+      crashLogger.log('BT event from native: ${call.method}');
       try {
         switch (call.method) {
           case 'play':
@@ -157,12 +140,10 @@ class JustAudioPlaybackService implements PlaybackService {
               await _player.pause();
             } else {
               await _player.play();
-      // Повторно активируем audio session когда реально играем —
-      // это переключает active MediaSession на нас.
-      try {
-        final s = await AudioSession.instance;
-        await s.setActive(true);
-      } catch (_) {}
+              try {
+                final s = await AudioSession.instance;
+                await s.setActive(true);
+              } catch (_) {}
             }
             break;
           case 'pause': await _player.pause(); break;
@@ -180,19 +161,17 @@ class JustAudioPlaybackService implements PlaybackService {
             if (pos != null) await _player.seek(Duration(milliseconds: pos));
             break;
         }
-      } catch (e) {
-        print('[pathephon] BT handler error: $e');
+      } catch (e, st) {
+        crashLogger.error('BT handler error (${call.method})', e, st);
       }
     });
-    print('[pathephon] native channel handler set');
+    crashLogger.log('native channel handler set');
 
-    // Пушим начальный PlaybackState (paused, position=0) чтобы система
-    // увидела что MediaSession готова — без этого часы/локскрин не отображают трек.
     _notifyNativePlaybackState(false);
-    print('[pathephon] initial playbackState pushed');
+    crashLogger.log('initial playbackState pushed');
 
     _initCompleter.complete();
-    print('[pathephon] _init() DONE');
+    crashLogger.log('_init() DONE');
   }
 
   void _notifyNativePlaybackState(bool playing) {
@@ -203,7 +182,7 @@ class JustAudioPlaybackService implements PlaybackService {
         'hasNext': _player.hasNext,
         'hasPrev': _player.hasPrevious,
       });
-    } catch (_) {/* swallow — плагин мог ещё не инициализироваться */}
+    } catch (_) {}
   }
 
   void _updateMediaItem() {
@@ -214,11 +193,9 @@ class JustAudioPlaybackService implements PlaybackService {
     final durationMs = (t.durationMs > 0)
         ? t.durationMs
         : (_player.duration?.inMilliseconds ?? 0);
-    // Если у трека нет artist — читаем теги асинхронно
     if (t.artist.isEmpty && t.filePath.isNotEmpty) {
       _readTagsAndUpdate(t.filePath);
     }
-    // Пушим то что есть сейчас (title/artist могут обновиться позже через _readTagsAndUpdate)
     try {
       _nativeChannel.invokeMethod('setMediaItem', {
         'title': t.title,
@@ -230,7 +207,6 @@ class JustAudioPlaybackService implements PlaybackService {
     } catch (_) {}
   }
 
-  /// Читает теги из файла и обновляет metadata в MediaSession + UI.
   Future<void> _readTagsAndUpdate(String filePath) async {
     try {
       final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
@@ -239,13 +215,11 @@ class JustAudioPlaybackService implements PlaybackService {
       final artist = tags['artist'] as String? ?? '';
       final album = tags['album'] as String? ?? '';
       final durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
-      print('[pathephon] tags loaded: title="$title" artist="$artist" dur=$durationMs');
-      // Обновляем Track в очереди
+      crashLogger.log('tags loaded: title="$title" artist="$artist" dur=$durationMs');
       final idx = _player.currentIndex ?? _index;
       if (idx >= 0 && idx < _queue.length) {
         final old = _queue[idx];
         if (old.artist.isEmpty) {
-          // _queue is unmodifiable — create a new modifiable copy, update, then make unmodifiable again
           final newList = List<Track>.from(_queue);
           newList[idx] = old.copyWith(
             title: title.isNotEmpty ? title : old.title,
@@ -255,11 +229,9 @@ class JustAudioPlaybackService implements PlaybackService {
             durationMs: durationMs > 0 ? durationMs : old.durationMs,
           );
           _queue = List.unmodifiable(newList);
-          // Re-emit snapshot so UI updates
           _emitState(_player.playerState);
         }
       }
-      // Пушим в MediaSession
       _nativeChannel.invokeMethod('setMediaItem', {
         'title': title.isNotEmpty ? title : '',
         'artist': artist.isNotEmpty ? artist : 'Pathephon',
@@ -267,23 +239,26 @@ class JustAudioPlaybackService implements PlaybackService {
         'durationMs': durationMs,
         'artUri': _queue[idx].artUri,
       });
-    } catch (e) {
-      print('[pathephon] _readTagsAndUpdate failed: $e');
+    } catch (e, st) {
+      crashLogger.error('_readTagsAndUpdate failed', e, st);
     }
   }
 
-  /// Читает теги из файла и обновляет metadata в MediaSession + UI.
   void _emitState(PlayerState st) {
-    final currentIndex = _player.currentIndex ?? _index;
-    _index = currentIndex;
-    _stateController.add(PlaybackSnapshot(
-      current: _queue.isEmpty ? null : _queue[currentIndex.clamp(0, _queue.length - 1)],
-      queue: _queue, index: currentIndex,
-      position: _player.position, duration: _player.duration ?? Duration.zero,
-      isPlaying: st.playing,
-      isBuffering: st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering,
-      shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
-    ));
+    try {
+      final currentIndex = _player.currentIndex ?? _index;
+      _index = currentIndex;
+      _stateController.add(PlaybackSnapshot(
+        current: _queue.isEmpty ? null : _queue[currentIndex.clamp(0, _queue.length - 1)],
+        queue: _queue, index: currentIndex,
+        position: _player.position, duration: _player.duration ?? Duration.zero,
+        isPlaying: st.playing,
+        isBuffering: st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering,
+        shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
+      ));
+    } catch (e, st) {
+      crashLogger.error('_emitState failed', e, st);
+    }
   }
 
   Future<void> _saveQueue() async {
@@ -300,8 +275,8 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> restoreSavedQueue() async {
-    await _initCompleter.future;
     try {
+      await _initCompleter.future;
       final raw = _prefs.getString(_queueKey);
       if (raw == null) return;
       final list = jsonDecode(raw) as List;
@@ -317,8 +292,6 @@ class JustAudioPlaybackService implements PlaybackService {
         initialPosition: savedPos, initialIndex: initial,
       );
       _updateMediaItem();
-      // Пушим metadata в нативную MediaSession — иначе часы/локскрин
-      // не увидят трек после восстановления очереди.
       _notifyNativePlaybackState(false);
       _stateController.add(PlaybackSnapshot(
         current: _queue[initial], queue: _queue, index: initial,
@@ -326,33 +299,40 @@ class JustAudioPlaybackService implements PlaybackService {
         isPlaying: false, isBuffering: false,
         shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,
       ));
-    } catch (e) { print('[pathephon] restoreSavedQueue failed: $e'); }
+    } catch (e, st) {
+      crashLogger.error('restoreSavedQueue failed', e, st);
+    }
   }
 
   @override
   Future<void> addToQueue(List<Track> tracks) async {
-    if (tracks.isEmpty) return;
-    _queue = List.unmodifiable([..._queue, ...tracks]);
-    final sources = tracks.map(_toSource).toList();
-    // TODO: добавить в existing ConcatenatingAudioSource
-    // Пока просто переигрываем всю очередь
-    await _saveQueue();
+    try {
+      if (tracks.isEmpty) return;
+      _queue = List.unmodifiable([..._queue, ...tracks]);
+      await _saveQueue();
+    } catch (e, st) {
+      crashLogger.error('addToQueue failed', e, st);
+    }
   }
 
   @override
   Future<void> playSingle(Track track) async {
-    await playQueue(tracks: [track], startIndex: 0);
+    try {
+      await playQueue(tracks: [track], startIndex: 0);
+    } catch (e, st) {
+      crashLogger.error('playSingle failed', e, st);
+    }
   }
 
   @override
   Future<void> playQueue({required List<Track> tracks, required int startIndex}) async {
-    await _initCompleter.future;
-    if (tracks.isEmpty) return;
-    _queue = List.unmodifiable(tracks);
-    _index = startIndex.clamp(0, tracks.length - 1);
-    final sources = tracks.map(_toSource).toList(growable: false);
-    final initial = startIndex.clamp(0, sources.length - 1);
     try {
+      await _initCompleter.future;
+      if (tracks.isEmpty) return;
+      _queue = List.unmodifiable(tracks);
+      _index = startIndex.clamp(0, tracks.length - 1);
+      final sources = tracks.map(_toSource).toList(growable: false);
+      final initial = startIndex.clamp(0, sources.length - 1);
       await _player.setAudioSource(
         ConcatenatingAudioSource(children: sources, useLazyPreparation: true),
         initialPosition: Duration.zero, initialIndex: initial,
@@ -361,21 +341,20 @@ class JustAudioPlaybackService implements PlaybackService {
       _updateMediaItem();
       _notifyNativePlaybackState(false);
       await _player.play();
-      // Повторно активируем audio session когда реально играем —
-      // это переключает active MediaSession на нас.
       try {
         final s = await AudioSession.instance;
         await s.setActive(true);
       } catch (_) {}
-      // После play() пушим playing=true чтобы система отрисовала виджет
       await Future.delayed(const Duration(milliseconds: 100));
       _notifyNativePlaybackState(true);
-      print('[pathephon] playQueue: playing "${tracks[initial].title}"');
+      crashLogger.log('playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
-    } catch (e) {
-      print('[pathephon] playQueue FAILED: $e');
+    } catch (e, st) {
+      // ГЛАВНОЕ ИЗМЕНЕНИЕ: НЕ rethrow! Логируем и восстанавливаем состояние.
+      // Раньше rethrow убивал runZonedGuarded зону → приложение "схлопывалось".
+      crashLogger.error('playQueue(startIndex=$startIndex, count=${tracks.length}) FAILED', e, st);
       _stateController.add(PlaybackSnapshot.empty);
-      rethrow;
+      try { _notifyNativePlaybackState(false); } catch (_) {}
     }
   }
 
@@ -393,87 +372,162 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   @override
-  Future<void> play() async { await _initCompleter.future; await _player.play(); }
+  Future<void> play() async {
+    try {
+      await _initCompleter.future;
+      await _player.play();
+    } catch (e, st) {
+      crashLogger.error('play() failed', e, st);
+    }
+  }
+
   @override
-  Future<void> pause() async { await _initCompleter.future; await _player.pause(); await _savePosition(); }
+  Future<void> pause() async {
+    try {
+      await _initCompleter.future;
+      await _player.pause();
+      await _savePosition();
+    } catch (e, st) {
+      crashLogger.error('pause() failed', e, st);
+    }
+  }
 
   @override
   Future<void> stop() async {
-    await _initCompleter.future;
-    await _player.pause();
-    await _player.seek(Duration.zero);
-    await _savePosition();
-    _emitState(_player.playerState);
+    try {
+      await _initCompleter.future;
+      await _player.pause();
+      await _player.seek(Duration.zero);
+      await _savePosition();
+      _emitState(_player.playerState);
+    } catch (e, st) {
+      crashLogger.error('stop() failed', e, st);
+    }
   }
 
   @override
   Future<void> clearQueue() async {
-    await _initCompleter.future;
-    await _player.stop();
-    // Освобождаем audio focus — другая MediaSession может стать active.
     try {
-      final s = await AudioSession.instance;
-      await s.setActive(false);
-    } catch (_) {}
-    _queue = const [];
-    _index = 0;
-    await _prefs.remove(_queueKey);
-    await _prefs.remove(_indexKey);
-    await _prefs.remove(_positionKey);
-    _stateController.add(PlaybackSnapshot.empty);
+      await _initCompleter.future;
+      await _player.stop();
+      try {
+        final s = await AudioSession.instance;
+        await s.setActive(false);
+      } catch (_) {}
+      _queue = const [];
+      _index = 0;
+      await _prefs.remove(_queueKey);
+      await _prefs.remove(_indexKey);
+      await _prefs.remove(_positionKey);
+      _stateController.add(PlaybackSnapshot.empty);
+    } catch (e, st) {
+      crashLogger.error('clearQueue() failed', e, st);
+    }
   }
 
   @override
-  Future<void> seekTo(Duration position) async { await _initCompleter.future; await _player.seek(position); await _savePosition(); }
+  Future<void> seekTo(Duration position) async {
+    try {
+      await _initCompleter.future;
+      await _player.seek(position);
+      await _savePosition();
+    } catch (e, st) {
+      crashLogger.error('seekTo($position) failed', e, st);
+    }
+  }
 
   @override
   Future<void> skipToNext() async {
-    await _initCompleter.future;
-    if (_queue.isEmpty) return;
-    if (_player.hasNext) {
-      await _player.seekToNext();
-      _index = _player.currentIndex ?? _index;
-      _updateMediaItem();
-      await _saveQueue();
+    try {
+      await _initCompleter.future;
+      if (_queue.isEmpty) return;
+      if (_player.hasNext) {
+        await _player.seekToNext();
+        _index = _player.currentIndex ?? _index;
+        _updateMediaItem();
+        await _saveQueue();
+      }
+    } catch (e, st) {
+      crashLogger.error('skipToNext() failed', e, st);
     }
   }
 
   @override
   Future<void> skipToPrevious() async {
-    await _initCompleter.future;
-    if (_queue.isEmpty) return;
-    if (_player.hasPrevious) {
-      await _player.seekToPrevious();
-      _index = _player.currentIndex ?? _index;
-      _updateMediaItem();
-      await _saveQueue();
+    try {
+      await _initCompleter.future;
+      if (_queue.isEmpty) return;
+      if (_player.hasPrevious) {
+        await _player.seekToPrevious();
+        _index = _player.currentIndex ?? _index;
+        _updateMediaItem();
+        await _saveQueue();
+      }
+    } catch (e, st) {
+      crashLogger.error('skipToPrevious() failed', e, st);
     }
   }
 
   @override
-  Future<void> setShuffle(bool enabled) async { await _initCompleter.future; _shuffle = enabled; await _player.setShuffleModeEnabled(enabled); }
-  @override
-  Future<void> setRepeatMode(RepeatMode mode) async {
-    await _initCompleter.future;
-    _repeat = mode;
-    final am = switch (mode) {
-      RepeatMode.off => LoopMode.off, RepeatMode.all => LoopMode.all, RepeatMode.one => LoopMode.one,
-    };
-    await _player.setLoopMode(am);
+  Future<void> setShuffle(bool enabled) async {
+    try {
+      await _initCompleter.future;
+      _shuffle = enabled;
+      await _player.setShuffleModeEnabled(enabled);
+    } catch (e, st) {
+      crashLogger.error('setShuffle($enabled) failed', e, st);
+    }
   }
 
   @override
-  Future<void> setVolume(double volume) => _player.setVolume(volume.clamp(0.0, 1.0));
+  Future<void> setRepeatMode(RepeatMode mode) async {
+    try {
+      await _initCompleter.future;
+      _repeat = mode;
+      final am = switch (mode) {
+        RepeatMode.off => LoopMode.off, RepeatMode.all => LoopMode.all, RepeatMode.one => LoopMode.one,
+      };
+      await _player.setLoopMode(am);
+    } catch (e, st) {
+      crashLogger.error('setRepeatMode($mode) failed', e, st);
+    }
+  }
+
   @override
-  Future<void> setSpeed(double speed) => _player.setSpeed(speed.clamp(0.5, 3.0));
+  Future<void> setVolume(double volume) async {
+    try {
+      await _player.setVolume(volume.clamp(0.0, 1.0));
+    } catch (e, st) {
+      crashLogger.error('setVolume($volume) failed', e, st);
+    }
+  }
+
+  @override
+  Future<void> setSpeed(double speed) async {
+    try {
+      await _player.setSpeed(speed.clamp(0.5, 3.0));
+    } catch (e, st) {
+      crashLogger.error('setSpeed($speed) failed', e, st);
+    }
+  }
+
   @override
   Future<void> setReplayGain(ReplayGainMode mode) async {
-    _rg = mode;
-    if (_queue.isEmpty) return;
-    final current = _queue[_index];
-    final volume = ReplayGainApplier.selectGain(trackGain: current.replayGainTrack, albumGain: current.replayGainAlbum, mode: mode);
-    await _player.setVolume(volume);
+    try {
+      _rg = mode;
+      if (_queue.isEmpty) return;
+      final current = _queue[_index];
+      final volume = ReplayGainApplier.selectGain(
+        trackGain: current.replayGainTrack,
+        albumGain: current.replayGainAlbum,
+        mode: mode,
+      );
+      await _player.setVolume(volume);
+    } catch (e, st) {
+      crashLogger.error('setReplayGain($mode) failed', e, st);
+    }
   }
+
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 

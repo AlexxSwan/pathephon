@@ -128,7 +128,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       final fields = stat.substring(lastParen + 2).split(RegExp(r'\s+'));
       if (fields.length < 22) return null;
       // starttime (fields[20] после смещения -1) в jiffies since boot
-      final starttime = int.parse(fields[20]);
+      final starttime = int.parse(fields[19]); // поле 22 (starttime), не 23 (vsize)
       // uptime системы
       final uptimeStr = File('/proc/uptime').readAsStringSync();
       final uptimeSec = double.parse(uptimeStr.split(' ')[0]);
@@ -577,6 +577,36 @@ class _CpuChartPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     if (history.isEmpty) return;
+
+    // === Сетка: тонкие горизонтальные линии на 20/40/60/80/100% ===
+    final gridPaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.5
+      ..color = color.withOpacity(0.12);
+
+    for (final pct in [20, 40, 60, 80, 100]) {
+      final y = size.height - (pct / 100) * size.height;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
+
+      // Маленькая метка процента справа
+      final tp = TextPainter(
+        text: TextSpan(
+          text: '$pct',
+          style: TextStyle(
+            color: color.withOpacity(0.35),
+            fontSize: 7,
+            fontFamily: 'monospace',
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout();
+      // Для 100% (y=0) метку кладём сверху, для остальных — чуть выше линии
+      final labelY = (y == 0) ? 0.0 : (y - 3.5).clamp(0.0, size.height - 7.0);
+      tp.paint(canvas, Offset(size.width - tp.width - 1, labelY));
+    }
+
+    // === Бары ===
     final barWidth = size.width / history.length;
     final paint = Paint()..style = PaintingStyle.fill;
 
@@ -586,7 +616,6 @@ class _CpuChartPainter extends CustomPainter {
       final x = i * barWidth;
       final y = size.height - barHeight;
 
-      // Цвет по значению
       if (pct <= 50) {
         paint.color = Color.lerp(
           const Color(0xFF4CAF50),
@@ -601,7 +630,6 @@ class _CpuChartPainter extends CustomPainter {
         )!;
       }
 
-      // Бар с небольшим отступом
       canvas.drawRect(
         Rect.fromLTWH(x + 0.5, y, barWidth - 1, barHeight),
         paint,

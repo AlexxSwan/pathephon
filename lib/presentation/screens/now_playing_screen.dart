@@ -838,7 +838,8 @@ class _CpuAreaChartPainter extends CustomPainter {
     }
   }
 
-  @overridebool shouldRepaint(_CpuAreaChartPainter old) =>
+  @override
+  bool shouldRepaint(_CpuAreaChartPainter old) =>
       old.history.length != history.length ||
       (old.history.isNotEmpty && history.isNotEmpty && old.history.last != history.last);
 }

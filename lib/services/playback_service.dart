@@ -1,6 +1,5 @@
 // ============================================================================
-//  playback_service.dart — БЕЗ audio_service, С defensive guards + crash logging
-//  v0.11.1+195: все public методы обёрнуты в try/catch с логированием в crash_logger
+//  playback_service.dart — v0.11.9+203 — БЕЗ audio_service, С DJ mode
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -39,6 +38,7 @@ abstract class PlaybackService {
   Future<void> setReplayGain(ReplayGainMode mode);
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled});
   Future<void> restoreSavedQueue();
+  void setDjMode(bool enabled);
 }
 
 class PlaybackSnapshot {
@@ -78,6 +78,14 @@ class JustAudioPlaybackService implements PlaybackService {
   RepeatMode _repeat = RepeatMode.off;
   ReplayGainMode _rg = ReplayGainMode.off;
 
+  // === DJ mode ===
+  bool _djMode = false;
+  bool _isFadingOut = false;
+  Timer? _fadeTimer;
+  double _baseVolume = 1.0;
+  double _fadeMultiplier = 1.0;
+  StreamSubscription<Duration>? _djPositionSub;
+
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
 
@@ -87,6 +95,86 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<Duration> get positionStream => _player.positionStream;
   @override
   Stream<int> get audioSessionIdStream => _sessionIdController.stream;
+
+  // === DJ: применить итоговую громкость = base * fade ===
+  void _applyVolume() {
+    try {
+      final v = (_baseVolume * _fadeMultiplier).clamp(0.0, 1.0);
+      _player.setVolume(v);
+    } catch (_) {}
+  }
+
+  void _checkDjFadeOut(Duration pos) {
+    if (!_djMode || _isFadingOut) return;
+    try {
+      final duration = _player.duration;
+      if (duration == null || duration.inMilliseconds == 0) return;
+      final remaining = duration - pos;
+      if (remaining.inMilliseconds <= 3000 && remaining.inMilliseconds > 200) {
+        _startDjFadeOut();
+      }
+    } catch (_) {}
+  }
+
+  void _startDjFadeOut() {
+    _isFadingOut = true;
+    _fadeTimer?.cancel();
+    _fadeMultiplier = 1.0;
+    _applyVolume();
+    const steps = 30;
+    const stepMs = 100;
+    final decrement = 1.0 / steps;
+    var i = 0;
+    _fadeTimer = Timer.periodic(const Duration(milliseconds: stepMs), (t) {
+      try {
+        i++;
+        _fadeMultiplier = (1.0 - i * decrement).clamp(0.0, 1.0);
+        _applyVolume();
+        if (i >= steps) {
+          _fadeMultiplier = 0.0;
+          _applyVolume();
+          t.cancel();
+        }
+      } catch (_) { t.cancel(); }
+    });
+  }
+
+  void _startDjFadeIn() {
+    _isFadingOut = false;
+    _fadeTimer?.cancel();
+    _fadeMultiplier = 0.0;
+    _applyVolume();
+    const steps = 20;
+    const stepMs = 100;
+    final increment = 1.0 / steps;
+    var i = 0;
+    _fadeTimer = Timer.periodic(const Duration(milliseconds: stepMs), (t) {
+      try {
+        i++;
+        _fadeMultiplier = (i * increment).clamp(0.0, 1.0);
+        _applyVolume();
+        if (i >= steps) {
+          _fadeMultiplier = 1.0;
+          _applyVolume();
+          t.cancel();
+        }
+      } catch (_) { t.cancel(); }
+    });
+  }
+
+  @override
+  void setDjMode(bool enabled) {
+    try {
+      _djMode = enabled;
+      _fadeTimer?.cancel();
+      _isFadingOut = false;
+      _fadeMultiplier = 1.0;
+      _applyVolume();
+      crashLogger.log('DJ mode ${enabled ? 'ON' : 'OFF'}');
+    } catch (e, st) {
+      crashLogger.error('setDjMode failed', e, st);
+    }
+  }
 
   Future<void> _init() async {
     crashLogger.log('_init() START');
@@ -109,6 +197,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
+        if (_djMode) _startDjFadeIn();
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
         _updateMediaItem();
@@ -117,13 +206,18 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.durationStream.listen((duration) {
       if (duration != null && _queue.isNotEmpty) {
-        crashLogger.log('durationStream: ${duration.inMilliseconds}ms — re-push metadata');
+        crashLogger.log('durationStream: ${duration.inMilliseconds}ms');
         _updateMediaItem();
       }
     });
 
     _player.androidAudioSessionIdStream.listen((id) {
       if (id != null) _sessionIdController.add(id);
+    });
+
+    // DJ: мониторим позицию для fade out
+    _djPositionSub = _player.positionStream.listen((pos) {
+      _checkDjFadeOut(pos);
     });
 
     Timer.periodic(const Duration(seconds: 5), (_) {
@@ -317,11 +411,8 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> playSingle(Track track) async {
-    try {
-      await playQueue(tracks: [track], startIndex: 0);
-    } catch (e, st) {
-      crashLogger.error('playSingle failed', e, st);
-    }
+    try { await playQueue(tracks: [track], startIndex: 0); }
+    catch (e, st) { crashLogger.error('playSingle failed', e, st); }
   }
 
   @override
@@ -340,6 +431,8 @@ class JustAudioPlaybackService implements PlaybackService {
       await _player.seek(Duration.zero, index: initial);
       _updateMediaItem();
       _notifyNativePlaybackState(false);
+      // DJ: fade in на старте
+      if (_djMode) _startDjFadeIn();
       await _player.play();
       try {
         final s = await AudioSession.instance;
@@ -350,8 +443,6 @@ class JustAudioPlaybackService implements PlaybackService {
       crashLogger.log('playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
     } catch (e, st) {
-      // ГЛАВНОЕ ИЗМЕНЕНИЕ: НЕ rethrow! Логируем и восстанавливаем состояние.
-      // Раньше rethrow убивал runZonedGuarded зону → приложение "схлопывалось".
       crashLogger.error('playQueue(startIndex=$startIndex, count=${tracks.length}) FAILED', e, st);
       _stateController.add(PlaybackSnapshot.empty);
       try { _notifyNativePlaybackState(false); } catch (_) {}
@@ -376,9 +467,7 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       await _initCompleter.future;
       await _player.play();
-    } catch (e, st) {
-      crashLogger.error('play() failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('play() failed', e, st); }
   }
 
   @override
@@ -386,10 +475,12 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       await _initCompleter.future;
       await _player.pause();
+      _fadeTimer?.cancel();
+      _isFadingOut = false;
+      _fadeMultiplier = 1.0;
+      _applyVolume();
       await _savePosition();
-    } catch (e, st) {
-      crashLogger.error('pause() failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('pause() failed', e, st); }
   }
 
   @override
@@ -398,11 +489,13 @@ class JustAudioPlaybackService implements PlaybackService {
       await _initCompleter.future;
       await _player.pause();
       await _player.seek(Duration.zero);
+      _fadeTimer?.cancel();
+      _isFadingOut = false;
+      _fadeMultiplier = 1.0;
+      _applyVolume();
       await _savePosition();
       _emitState(_player.playerState);
-    } catch (e, st) {
-      crashLogger.error('stop() failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('stop() failed', e, st); }
   }
 
   @override
@@ -420,9 +513,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _prefs.remove(_indexKey);
       await _prefs.remove(_positionKey);
       _stateController.add(PlaybackSnapshot.empty);
-    } catch (e, st) {
-      crashLogger.error('clearQueue() failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('clearQueue() failed', e, st); }
   }
 
   @override
@@ -431,9 +522,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _initCompleter.future;
       await _player.seek(position);
       await _savePosition();
-    } catch (e, st) {
-      crashLogger.error('seekTo($position) failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('seekTo($position) failed', e, st); }
   }
 
   @override
@@ -447,9 +536,7 @@ class JustAudioPlaybackService implements PlaybackService {
         _updateMediaItem();
         await _saveQueue();
       }
-    } catch (e, st) {
-      crashLogger.error('skipToNext() failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('skipToNext() failed', e, st); }
   }
 
   @override
@@ -463,9 +550,7 @@ class JustAudioPlaybackService implements PlaybackService {
         _updateMediaItem();
         await _saveQueue();
       }
-    } catch (e, st) {
-      crashLogger.error('skipToPrevious() failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('skipToPrevious() failed', e, st); }
   }
 
   @override
@@ -474,9 +559,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _initCompleter.future;
       _shuffle = enabled;
       await _player.setShuffleModeEnabled(enabled);
-    } catch (e, st) {
-      crashLogger.error('setShuffle($enabled) failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('setShuffle($enabled) failed', e, st); }
   }
 
   @override
@@ -488,27 +571,22 @@ class JustAudioPlaybackService implements PlaybackService {
         RepeatMode.off => LoopMode.off, RepeatMode.all => LoopMode.all, RepeatMode.one => LoopMode.one,
       };
       await _player.setLoopMode(am);
-    } catch (e, st) {
-      crashLogger.error('setRepeatMode($mode) failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('setRepeatMode($mode) failed', e, st); }
   }
 
   @override
   Future<void> setVolume(double volume) async {
     try {
-      await _player.setVolume(volume.clamp(0.0, 1.0));
-    } catch (e, st) {
-      crashLogger.error('setVolume($volume) failed', e, st);
-    }
+      _baseVolume = volume.clamp(0.0, 1.0);
+      _applyVolume();
+    } catch (e, st) { crashLogger.error('setVolume($volume) failed', e, st); }
   }
 
   @override
   Future<void> setSpeed(double speed) async {
     try {
       await _player.setSpeed(speed.clamp(0.5, 3.0));
-    } catch (e, st) {
-      crashLogger.error('setSpeed($speed) failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('setSpeed($speed) failed', e, st); }
   }
 
   @override
@@ -517,21 +595,21 @@ class JustAudioPlaybackService implements PlaybackService {
       _rg = mode;
       if (_queue.isEmpty) return;
       final current = _queue[_index];
-      final volume = ReplayGainApplier.selectGain(
+      _baseVolume = ReplayGainApplier.selectGain(
         trackGain: current.replayGainTrack,
         albumGain: current.replayGainAlbum,
         mode: mode,
       );
-      await _player.setVolume(volume);
-    } catch (e, st) {
-      crashLogger.error('setReplayGain($mode) failed', e, st);
-    }
+      _applyVolume();
+    } catch (e, st) { crashLogger.error('setReplayGain($mode) failed', e, st); }
   }
 
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 
   void dispose() {
+    _fadeTimer?.cancel();
+    _djPositionSub?.cancel();
     _stateController.close();
     _sessionIdController.close();
     _player.dispose();

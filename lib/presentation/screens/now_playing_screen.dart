@@ -1,10 +1,6 @@
 // ============================================================================
 //  now_playing_screen.dart
-//  v0.11.8+202:
-//   - Uptime через DateTime.now().difference(appStartTime) — надёжно
-//   - Status dialog: accordion (один раздел открыт)
-//   - Uptime в заголовке справа
-//   - График выше (100px), легенда с обеих сторон, линии виднее
+//  v0.11.9+203: area chart + remaining time + DJ toggle
 // ============================================================================
 import 'dart:async';
 import 'dart:io';
@@ -32,12 +28,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   final _playlistScrollController = ScrollController();
   int _lastScrolledIndex = -1;
 
-  // === Время старта приложения — для надёжного расчёта uptime ===
-  // Используется в диалоге "Состояние" вместо /proc/self/stat (который
-  // иногда недоступен на Android release-сборках из-за SELinux).
   final DateTime _appStartTime = DateTime.now();
+  bool _djMode = false;
 
-  // === CPU мониторинг ===
   final _cpuController = StreamController<int>.broadcast();
   final List<int> _cpuHistory = List.filled(30, 0);
   Timer? _cpuTimer;
@@ -45,10 +38,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   int _prevStime = 0;
 
   @override
-  void initState() {
-    super.initState();
-    _startCpuMonitor();
-  }
+  void initState() { super.initState(); _startCpuMonitor(); }
 
   @override
   void dispose() {
@@ -72,7 +62,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       if (fields.length < 13) return;
       final utime = int.parse(fields[11]);
       final stime = int.parse(fields[12]);
-
       if (_prevUtime > 0 || _prevStime > 0) {
         final deltaJiffies = (utime - _prevUtime) + (stime - _prevStime);
         final pct = deltaJiffies.clamp(0, 100);
@@ -89,21 +78,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
   Color _cpuColor(int pct) {
     if (pct <= 50) {
-      return Color.lerp(
-        const Color(0xFF4CAF50),
-        const Color(0xFFFFC107),
-        pct / 50,
-      )!;
+      return Color.lerp(const Color(0xFF4CAF50), const Color(0xFFFFC107), pct / 50)!;
     } else {
-      return Color.lerp(
-        const Color(0xFFFFC107),
-        const Color(0xFFF44336),
-        (pct - 50) / 50,
-      )!;
+      return Color.lerp(const Color(0xFFFFC107), const Color(0xFFF44336), (pct - 50) / 50)!;
     }
   }
 
-  /// Читает RSS и Threads из /proc/self/status.
   Map<String, int>? _readMemInfo() {
     try {
       final status = File('/proc/self/status').readAsStringSync();
@@ -115,25 +95,15 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         'vmsize': vmsizeMatch != null ? int.parse(vmsizeMatch.group(1)!) : 0,
         'threads': threadsMatch != null ? int.parse(threadsMatch.group(1)!) : 0,
       };
-    } catch (_) {
-      return null;
-    }
+    } catch (_) { return null; }
   }
 
-  /// Uptime — через DateTime.now().difference(_appStartTime).
-  /// Надёжно: не зависит от procfs, не падает на SELinux.
-  Duration _readUptime() {
-    return DateTime.now().difference(_appStartTime);
-  }
+  Duration _readUptime() => DateTime.now().difference(_appStartTime);
 
   String _formatDuration(Duration d) {
-    if (d.inHours > 0) {
-      return '${d.inHours}ч ${d.inMinutes.remainder(60)}м';
-    } else if (d.inMinutes > 0) {
-      return '${d.inMinutes}м ${d.inSeconds.remainder(60)}с';
-    } else {
-      return '${d.inSeconds}с';
-    }
+    if (d.inHours > 0) return '${d.inHours}ч ${d.inMinutes.remainder(60)}м';
+    if (d.inMinutes > 0) return '${d.inMinutes}м ${d.inSeconds.remainder(60)}с';
+    return '${d.inSeconds}с';
   }
 
   void _showStatusDialog() {
@@ -153,18 +123,17 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     showDialog<void>(
       context: context,
       builder: (ctx) => _StatusDialog(
-        mem: mem,
-        uptimeStr: uptimeStr,
-        currentTrack: currentTrack,
-        queueSize: queueSize,
-        currentIndex: currentIndex,
-        position: pos,
-        duration: duration,
-        isPlaying: isPlaying,
-        cpuHistory: cpuHistoryCopy,
-        themePreset: p,
+        mem: mem, uptimeStr: uptimeStr, currentTrack: currentTrack,
+        queueSize: queueSize, currentIndex: currentIndex,
+        position: pos, duration: duration, isPlaying: isPlaying,
+        cpuHistory: cpuHistoryCopy, themePreset: p,
       ),
     );
+  }
+
+  void _toggleDjMode() {
+    setState(() => _djMode = !_djMode);
+    try { ref.read(playbackServiceProvider).setDjMode(_djMode); } catch (_) {}
   }
 
   @override
@@ -180,6 +149,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final queue = snap?.queue ?? const <Track>[];
     final currentIndex = snap?.index ?? 0;
     final duration = snap?.duration ?? Duration.zero;
+    final remaining = (duration - pos).clamp(Duration.zero, duration);
 
     return Scaffold(
       body: SafeArea(
@@ -188,42 +158,70 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
           child: Column(children: [
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                StreamBuilder<int>(
-                  stream: _cpuController.stream,
-                  initialData: 0,
-                  builder: (context, snapshot) {
-                    final pct = snapshot.data ?? 0;
-                    final color = _cpuColor(pct);
-                    return GestureDetector(
-                      onTap: _showStatusDialog,
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    StreamBuilder<int>(
+                      stream: _cpuController.stream,
+                      initialData: 0,
+                      builder: (context, snapshot) {
+                        final pct = snapshot.data ?? 0;
+                        final color = _cpuColor(pct);
+                        return GestureDetector(
+                          onTap: _showStatusDialog,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: color, width: 1),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.memory, size: 12, color: color),
+                                const SizedBox(width: 3),
+                                Text('$pct%',
+                                  style: TextStyle(color: color, fontSize: 11,
+                                    fontWeight: FontWeight.bold,
+                                    fontFamily: 'monospace', height: 1.0)),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 4),
+                    GestureDetector(
+                      onTap: _toggleDjMode,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                         decoration: BoxDecoration(
-                          color: color.withOpacity(0.15),
+                          color: _djMode ? p.accentHot.withOpacity(0.15) : Colors.transparent,
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: color, width: 1),
+                          border: Border.all(
+                            color: _djMode ? p.accentHot : p.textMuted.withOpacity(0.4),
+                            width: 1),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.memory, size: 12, color: color),
+                            Icon(Icons.waves, size: 12,
+                              color: _djMode ? p.accentHot : p.textMuted),
                             const SizedBox(width: 3),
-                            Text(
-                              '$pct%',
+                            Text('DJ',
                               style: TextStyle(
-                                color: color,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                fontFamily: 'monospace',
-                                height: 1.0,
-                              ),
-                            ),
+                                color: _djMode ? p.accentHot : p.textMuted,
+                                fontSize: 10, fontWeight: FontWeight.bold,
+                                fontFamily: 'monospace', height: 1.0)),
                           ],
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ],
                 ),
                 Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),
                 IconButton(
@@ -266,16 +264,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 value: pos.inMilliseconds.toDouble().clamp(0, duration.inMilliseconds.toDouble()),
                 onChanged: (v) => playback.seekTo(Duration(milliseconds: v.toInt())),
               )),
-              Text(formatDuration(duration), style: Theme.of(context).textTheme.labelSmall),
+              Text('-${formatDuration(remaining)}', style: Theme.of(context).textTheme.labelSmall),
             ]),
             const SizedBox(height: 8),
             const PlaybackControls(),
             const SizedBox(height: 12),
             if (_showPlaylist)
-              Expanded(
-                flex: 2,
-                child: _buildPlaylist(queue, currentIndex, playback, p),
-              ),
+              Expanded(flex: 2, child: _buildPlaylist(queue, currentIndex, playback, p)),
           ]),
         ),
       ),
@@ -371,19 +366,13 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 }
 
 // ============================================================================
-//  _StatusDialog — отдельный StatefulWidget с accordion-логикой
+//  _StatusDialog — accordion
 // ============================================================================
 class _StatusDialog extends StatefulWidget {
   const _StatusDialog({
-    required this.mem,
-    required this.uptimeStr,
-    required this.currentTrack,
-    required this.queueSize,
-    required this.currentIndex,
-    required this.position,
-    required this.duration,
-    required this.isPlaying,
-    required this.cpuHistory,
+    required this.mem, required this.uptimeStr, required this.currentTrack,
+    required this.queueSize, required this.currentIndex, required this.position,
+    required this.duration, required this.isPlaying, required this.cpuHistory,
     required this.themePreset,
   });
 
@@ -403,17 +392,10 @@ class _StatusDialog extends StatefulWidget {
 }
 
 class _StatusDialogState extends State<_StatusDialog> {
-  /// Какой раздел открыт. null = все закрыты.
-  /// По умолчанию открываем CPU.
   String? _expandedSection = 'CPU';
-
-  bool _isExpanded(String section) => _expandedSection == section;
-
-  void _toggle(String section) {
-    setState(() {
-      // Тап по уже открытому — закрыть. Тап по закрытому — открыть его, остальные скрыть.
-      _expandedSection = _expandedSection == section ? null : section;
-    });
+  bool _isExpanded(String s) => _expandedSection == s;
+  void _toggle(String s) {
+    setState(() => _expandedSection = _expandedSection == s ? null : s);
   }
 
   @override
@@ -424,23 +406,14 @@ class _StatusDialogState extends State<_StatusDialog> {
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              Icon(Icons.monitor_heart, color: p.accentHot, size: 20),
-              const SizedBox(width: 8),
-              Text('Состояние', style: TextStyle(color: p.accent, fontSize: 16)),
-            ],
-          ),
-          // Uptime в правом углу заголовка — без подписи, моноширинный
-          Text(
-            widget.uptimeStr,
-            style: TextStyle(
-              color: p.textMuted,
-              fontSize: 12,
-              fontFamily: 'monospace',
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Row(children: [
+            Icon(Icons.monitor_heart, color: p.accentHot, size: 20),
+            const SizedBox(width: 8),
+            Text('Состояние', style: TextStyle(color: p.accent, fontSize: 16)),
+          ]),
+          Text(widget.uptimeStr,
+            style: TextStyle(color: p.textMuted, fontSize: 12,
+              fontFamily: 'monospace', fontWeight: FontWeight.bold)),
         ],
       ),
       content: SizedBox(
@@ -459,205 +432,135 @@ class _StatusDialogState extends State<_StatusDialog> {
         ),
       ),
       actions: [
-        TextButton(
-          onPressed: () async {
-            try {
-              final logPath = crashLogger.publicLogPath;
-              if (logPath != null && File(logPath).existsSync()) {
-                await Share.shareXFiles([XFile(logPath)], subject: 'Pathephon crash log');
-              } else {
-                final log = await crashLogger.readLog();
-                await Share.share(log, subject: 'Pathephon crash log');
-              }
-            } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Ошибка: $e')),
-                );
-              }
+        TextButton(onPressed: () async {
+          try {
+            final logPath = crashLogger.publicLogPath;
+            if (logPath != null && File(logPath).existsSync()) {
+              await Share.shareXFiles([XFile(logPath)], subject: 'Pathephon crash log');
+            } else {
+              final log = await crashLogger.readLog();
+              await Share.share(log, subject: 'Pathephon crash log');
             }
-          },
-          child: Text('Поделиться логом', style: TextStyle(color: p.accentHot)),
-        ),
-        TextButton(
-          onPressed: () async {
-            try {
-              await crashLogger.clear();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Лог очищен')),
-                );
-              }
-            } catch (_) {}
-          },
-          child: Text('Очистить лог', style: TextStyle(color: p.textMuted)),
-        ),
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: Text('Закрыть', style: TextStyle(color: p.brass)),
-        ),
+          } catch (e) {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
+            }
+          }
+        }, child: Text('Поделиться логом', style: TextStyle(color: p.accentHot))),
+        TextButton(onPressed: () async {
+          try {
+            await crashLogger.clear();
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Лог очищен')));
+            }
+          } catch (_) {}
+        }, child: Text('Очистить лог', style: TextStyle(color: p.textMuted))),
+        TextButton(onPressed: () => Navigator.of(context).pop(),
+          child: Text('Закрыть', style: TextStyle(color: p.brass))),
       ],
     );
   }
 
-  /// Заголовок раздела — кликабельный, разворачивает/сворачивает секцию.
   Widget _buildSection(String title, ThemePreset p, Widget content) {
     final isExpanded = _isExpanded(title);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: () => _toggle(title),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            decoration: BoxDecoration(
-              color: p.background,
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: isExpanded ? p.accentHot.withOpacity(0.5) : p.brass.withOpacity(0.2),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  isExpanded ? Icons.expand_less : Icons.expand_more,
-                  color: isExpanded ? p.accentHot : p.textMuted,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: isExpanded ? p.accentHot : p.brass,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.0,
-                  ),
-                ),
-              ],
-            ),
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+      InkWell(
+        onTap: () => _toggle(title),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: p.background,
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: isExpanded ? p.accentHot.withOpacity(0.5) : p.brass.withOpacity(0.2),
+              width: 1),
           ),
+          child: Row(children: [
+            Icon(isExpanded ? Icons.expand_less : Icons.expand_more,
+              color: isExpanded ? p.accentHot : p.textMuted, size: 18),
+            const SizedBox(width: 8),
+            Text(title, style: TextStyle(
+              color: isExpanded ? p.accentHot : p.brass,
+              fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 1.0)),
+          ]),
         ),
-        if (isExpanded) ...[
-          const SizedBox(height: 4),
-          content,
-        ],
-        const SizedBox(height: 6),
-      ],
-    );
+      ),
+      if (isExpanded) ...[const SizedBox(height: 4), content],
+      const SizedBox(height: 6),
+    ]);
   }
 
-  // === CPU раздел ===
   Widget _buildCpuContent(ThemePreset p) {
     return Container(
       height: 100,
       width: double.infinity,
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: p.background,
-        borderRadius: BorderRadius.circular(4),
-      ),
+      decoration: BoxDecoration(color: p.background, borderRadius: BorderRadius.circular(4)),
       child: CustomPaint(
         size: Size.infinite,
-        painter: _CpuChartPainter(history: widget.cpuHistory, color: p.accentHot),
+        painter: _CpuAreaChartPainter(history: widget.cpuHistory, color: p.accentHot),
       ),
     );
   }
 
-  // === Память раздел ===
   Widget _buildMemContent(ThemePreset p) {
     final mem = widget.mem;
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: p.background,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (mem != null) ...[
-            _infoRow('RSS', '${(mem['rss']! / 1024).toStringAsFixed(1)} MB', p),
-            _infoRow('Виртуальная', '${(mem['vmsize']! / 1024).toStringAsFixed(1)} MB', p),
-            _infoRow('Потоки', '${mem['threads']!}', p),
-          ] else
-            _infoRow('RSS', '—', p),
-        ],
-      ),
+      decoration: BoxDecoration(color: p.background, borderRadius: BorderRadius.circular(4)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (mem != null) ...[
+          _infoRow('RSS', '${(mem['rss']! / 1024).toStringAsFixed(1)} MB', p),
+          _infoRow('Виртуальная', '${(mem['vmsize']! / 1024).toStringAsFixed(1)} MB', p),
+          _infoRow('Потоки', '${mem['threads']!}', p),
+        ] else _infoRow('RSS', '—', p),
+      ]),
     );
   }
 
-  // === Воспроизведение раздел ===
   Widget _buildPlaybackContent(ThemePreset p) {
     final t = widget.currentTrack;
     return Container(
       padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: p.background,
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _infoRow('Состояние', widget.isPlaying ? '▶ Играет' : '⏸ Пауза', p),
-          if (t != null) ...[
-            _infoRow('Трек', t.title, p, maxLines: 1),
-            if (t.artist.isNotEmpty)
-              _infoRow('Исполнитель', t.artist, p, maxLines: 1),
-          ] else
-            _infoRow('Трек', '—', p),
-          _infoRow('Позиция', formatDuration(widget.position), p),
-          _infoRow('Длительность', formatDuration(widget.duration), p),
-          _infoRow('Очередь', '${widget.queueSize} треков (текущий #${widget.currentIndex + 1})', p),
-        ],
-      ),
+      decoration: BoxDecoration(color: p.background, borderRadius: BorderRadius.circular(4)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _infoRow('Состояние', widget.isPlaying ? '▶ Играет' : '⏸ Пауза', p),
+        if (t != null) ...[
+          _infoRow('Трек', t.title, p, maxLines: 1),
+          if (t.artist.isNotEmpty) _infoRow('Исполнитель', t.artist, p, maxLines: 1),
+        ] else _infoRow('Трек', '—', p),
+        _infoRow('Позиция', formatDuration(widget.position), p),
+        _infoRow('Длительность', formatDuration(widget.duration), p),
+        _infoRow('Очередь', '${widget.queueSize} треков (текущий #${widget.currentIndex + 1})', p),
+      ]),
     );
   }
 
-  // === Лог раздел ===
   Widget _buildLogContent(ThemePreset p) {
     return FutureBuilder<String>(
       future: crashLogger.readLog(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
-          return Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: p.background,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text('загрузка...', style: TextStyle(color: p.textMuted, fontSize: 11)),
-          );
+          return Container(padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: p.background, borderRadius: BorderRadius.circular(4)),
+            child: Text('загрузка...', style: TextStyle(color: p.textMuted, fontSize: 11)));
         }
         final lines = snapshot.data!.split('\n').where((l) => l.trim().isNotEmpty).toList();
         final last10 = lines.length > 10 ? lines.sublist(lines.length - 10) : lines;
         if (last10.isEmpty) {
-          return Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: p.background,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text('(пусто)', style: TextStyle(color: p.textMuted, fontSize: 11)),
-          );
+          return Container(padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: p.background, borderRadius: BorderRadius.circular(4)),
+            child: Text('(пусто)', style: TextStyle(color: p.textMuted, fontSize: 11)));
         }
         return Container(
           constraints: const BoxConstraints(maxHeight: 200),
           padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: p.background,
-            borderRadius: BorderRadius.circular(4),
-          ),
+          decoration: BoxDecoration(color: p.background, borderRadius: BorderRadius.circular(4)),
           child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: last10.map((l) => Text(
-                l,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start,
+              children: last10.map((l) => Text(l,
                 style: TextStyle(color: p.textSecondary, fontSize: 10, fontFamily: 'monospace', height: 1.3),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-              )).toList(),
+                maxLines: 2, overflow: TextOverflow.ellipsis)).toList(),
             ),
           ),
         );
@@ -668,39 +571,28 @@ class _StatusDialogState extends State<_StatusDialog> {
   Widget _infoRow(String label, String value, ThemePreset p, {int? maxLines}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 100,
-            child: Text(label, style: TextStyle(color: p.textMuted, fontSize: 11)),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: TextStyle(color: p.textPrimary, fontSize: 11, fontFamily: 'monospace'),
-              maxLines: maxLines,
-              overflow: maxLines != null ? TextOverflow.ellipsis : null,
-            ),
-          ),
-        ],
-      ),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(width: 100, child: Text(label, style: TextStyle(color: p.textMuted, fontSize: 11))),
+        Expanded(child: Text(value,
+          style: TextStyle(color: p.textPrimary, fontSize: 11, fontFamily: 'monospace'),
+          maxLines: maxLines, overflow: maxLines != null ? TextOverflow.ellipsis : null)),
+      ]),
     );
   }
 }
 
-/// Кастомный painter для мини-графика истории CPU.
-/// v0.11.8: линии сетки виднее (0.7px, opacity 0.25), легенда с обеих сторон.
-class _CpuChartPainter extends CustomPainter {
+// ============================================================================
+//  _CpuAreaChartPainter — площадная диаграмма
+// ============================================================================
+class _CpuAreaChartPainter extends CustomPainter {
   final List<int> history;
   final Color color;
-  _CpuChartPainter({required this.history, required this.color});
+  _CpuAreaChartPainter({required this.history, required this.color});
 
   @override
   void paint(Canvas canvas, Size size) {
     if (history.isEmpty) return;
 
-    // === Сетка: тонкие горизонтальные линии на 20/40/60/80/100% ===
     final gridPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 0.7
@@ -710,71 +602,66 @@ class _CpuChartPainter extends CustomPainter {
       final y = size.height - (pct / 100) * size.height;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
 
-      // Метка процента СЛЕВА
-      final tpLeft = TextPainter(
-        text: TextSpan(
-          text: '$pct',
-          style: TextStyle(
-            color: color.withOpacity(0.55),
-            fontSize: 8,
-            fontFamily: 'monospace',
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      tpLeft.layout();
-      final labelY = (y == 0) ? 0.0 : (y - 4.0).clamp(0.0, size.height - 8.0);
-      tpLeft.paint(canvas, Offset(1, labelY));
-
-      // Метка процента СПРАВА
-      final tpRight = TextPainter(
-        text: TextSpan(
-          text: '$pct',
-          style: TextStyle(
-            color: color.withOpacity(0.55),
-            fontSize: 8,
-            fontFamily: 'monospace',
-          ),
-        ),
-        textDirection: TextDirection.ltr,
-      );
-      tpRight.layout();
-      tpRight.paint(canvas, Offset(size.width - tpRight.width - 1, labelY));
+      for (final isLeft in [true, false]) {
+        final tp = TextPainter(
+          text: TextSpan(text: '$pct',
+            style: TextStyle(color: color.withOpacity(0.55), fontSize: 8, fontFamily: 'monospace')),
+          textDirection: TextDirection.ltr,
+        );
+        tp.layout();
+        final labelY = (y == 0) ? 0.0 : (y - 4.0).clamp(0.0, size.height - 8.0);
+        final x = isLeft ? 1.0 : size.width - tp.width - 1;
+        tp.paint(canvas, Offset(x, labelY));
+      }
     }
 
-    // === Бары ===
-    final barWidth = size.width / history.length;
-    final paint = Paint()..style = PaintingStyle.fill;
-
+    final stepX = size.width / (history.length - 1 > 0 ? history.length - 1 : 1);
+    final areaPath = Path();
+    areaPath.moveTo(0, size.height);
     for (var i = 0; i < history.length; i++) {
       final pct = history[i].clamp(0, 100);
-      final barHeight = (pct / 100) * size.height;
-      final x = i * barWidth;
-      final y = size.height - barHeight;
+      final x = i * stepX;
+      final y = size.height - (pct / 100) * size.height;
+      areaPath.lineTo(x, y);
+    }
+    areaPath.lineTo(size.width, size.height);
+    areaPath.close();
 
-      if (pct <= 50) {
-        paint.color = Color.lerp(
-          const Color(0xFF4CAF50),
-          const Color(0xFFFFC107),
-          pct / 50,
-        )!;
-      } else {
-        paint.color = Color.lerp(
-          const Color(0xFFFFC107),
-          const Color(0xFFF44336),
-          (pct - 50) / 50,
-        )!;
-      }
+    final rect = Rect.fromLTWH(0, 0, size.width, size.height);
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [color.withOpacity(0.7), color.withOpacity(0.15)],
+      ).createShader(rect);
+    canvas.drawPath(areaPath, fillPaint);
 
-      canvas.drawRect(
-        Rect.fromLTWH(x + 0.5, y, barWidth - 1, barHeight),
-        paint,
-      );
+    final linePath = Path();
+    for (var i = 0; i < history.length; i++) {
+      final pct = history[i].clamp(0, 100);
+      final x = i * stepX;
+      final y = size.height - (pct / 100) * size.height;
+      if (i == 0) linePath.moveTo(x, y);
+      else linePath.lineTo(x, y);
+    }
+    final linePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5
+      ..color = color
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    canvas.drawPath(linePath, linePaint);
+
+    if (history.isNotEmpty) {
+      final lastPct = history.last.clamp(0, 100);
+      final lastX = (history.length - 1) * stepX;
+      final lastY = size.height - (lastPct / 100) * size.height;
+      canvas.drawCircle(Offset(lastX, lastY), 2.0, Paint()..color = color);
     }
   }
 
   @override
-  bool shouldRepaint(_CpuChartPainter old) =>
+  bool shouldRepaint(_CpuAreaChartPainter old) =>
       old.history.length != history.length ||
       (old.history.isNotEmpty && history.isNotEmpty && old.history.last != history.last);
 }
@@ -816,7 +703,6 @@ class _ArtworkImage extends ConsumerWidget {
     final t = track;
     if (t == null) return _appIconFallback(p);
     String? artUri = t.artUri;
-
     if (artUri.isEmpty) {
       final fp = t.filePath.isNotEmpty ? t.filePath : null;
       if (fp != null && _coverCache.containsKey(fp)) {
@@ -830,7 +716,6 @@ class _ArtworkImage extends ConsumerWidget {
       _findCoverInDir(fp);
       return _appIconFallback(p);
     }
-
     final ms = ref.read(mediaStoreSourceProvider);
     final cachedBytes = ms.getCoverBytes(artUri);
     if (cachedBytes != null) {

@@ -85,6 +85,8 @@ class JustAudioPlaybackService implements PlaybackService {
   double _baseVolume = 1.0;
   double _fadeMultiplier = 1.0;
   StreamSubscription<Duration>? _djPositionSub;
+  bool _isReadingTags = false;
+  int? _lastDurationMs; // для дедупликации durationStream // guard от рекурсии в _readTagsAndUpdate
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
@@ -205,10 +207,13 @@ class JustAudioPlaybackService implements PlaybackService {
     });
 
     _player.durationStream.listen((duration) {
-      if (duration != null && _queue.isNotEmpty) {
-        crashLogger.log('durationStream: ${duration.inMilliseconds}ms');
-        _updateMediaItem();
-      }
+      if (duration == null || _queue.isEmpty) return;
+      // Дедупликация: только если значение изменилось
+      final ms = duration.inMilliseconds;
+      if (ms == _lastDurationMs) return;
+      _lastDurationMs = ms;
+      crashLogger.log('durationStream: ms');
+      _updateMediaItem();
     });
 
     _player.androidAudioSessionIdStream.listen((id) {
@@ -287,7 +292,7 @@ class JustAudioPlaybackService implements PlaybackService {
     final durationMs = (t.durationMs > 0)
         ? t.durationMs
         : (_player.duration?.inMilliseconds ?? 0);
-    if (t.artist.isEmpty && t.filePath.isNotEmpty) {
+    if (t.artist.isEmpty && t.filePath.isNotEmpty && !_isReadingTags) {
       _readTagsAndUpdate(t.filePath);
     }
     try {
@@ -302,6 +307,12 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   Future<void> _readTagsAndUpdate(String filePath) async {
+    // Guard от рекурсии: если уже читаем теги для этого файла — выходим
+    if (_isReadingTags) {
+      crashLogger.log('_readTagsAndUpdate: already in progress, skipping');
+      return;
+    }
+    _isReadingTags = true;
     try {
       final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
       if (tags == null) return;
@@ -333,7 +344,8 @@ class JustAudioPlaybackService implements PlaybackService {
         'durationMs': durationMs,
         'artUri': _queue[idx].artUri,
       });
-    } catch (e, st) {
+    } finally { _isReadingTags = false; }
+} catch (e, st) {
       crashLogger.error('_readTagsAndUpdate failed', e, st);
     }
   }

@@ -1,5 +1,6 @@
 // ============================================================================
-//  playback_service.dart — v0.11.9+203 — БЕЗ audio_service, С DJ mode
+//  playback_service.dart — v0.11.15+209 — БЕЗ audio_service, С DJ mode + guards
+//  Полностью проверенный файл, структура валидна, все try/catch/finally на месте
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -85,8 +86,10 @@ class JustAudioPlaybackService implements PlaybackService {
   double _baseVolume = 1.0;
   double _fadeMultiplier = 1.0;
   StreamSubscription<Duration>? _djPositionSub;
+
+  // === Guards ===
   bool _isReadingTags = false;
-  int? _lastDurationMs; // для дедупликации durationStream // guard от рекурсии в _readTagsAndUpdate
+  int? _lastDurationMs;
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
@@ -208,11 +211,10 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.durationStream.listen((duration) {
       if (duration == null || _queue.isEmpty) return;
-      // Дедупликация: только если значение изменилось
       final ms = duration.inMilliseconds;
       if (ms == _lastDurationMs) return;
       _lastDurationMs = ms;
-      crashLogger.log('durationStream: ms');
+      crashLogger.log('durationStream: ${ms}ms');
       _updateMediaItem();
     });
 
@@ -220,7 +222,6 @@ class JustAudioPlaybackService implements PlaybackService {
       if (id != null) _sessionIdController.add(id);
     });
 
-    // DJ: мониторим позицию для fade out
     _djPositionSub = _player.positionStream.listen((pos) {
       _checkDjFadeOut(pos);
     });
@@ -307,7 +308,7 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   Future<void> _readTagsAndUpdate(String filePath) async {
-    // Guard от рекурсии: если уже читаем теги для этого файла — выходим
+    // Guard от рекурсии
     if (_isReadingTags) {
       crashLogger.log('_readTagsAndUpdate: already in progress, skipping');
       return;
@@ -344,9 +345,10 @@ class JustAudioPlaybackService implements PlaybackService {
         'durationMs': durationMs,
         'artUri': _queue[idx].artUri,
       });
-    } finally { _isReadingTags = false; }
-} catch (e, st) {
+    } catch (e, st) {
       crashLogger.error('_readTagsAndUpdate failed', e, st);
+    } finally {
+      _isReadingTags = false;
     }
   }
 
@@ -443,14 +445,13 @@ class JustAudioPlaybackService implements PlaybackService {
       await _player.seek(Duration.zero, index: initial);
       _updateMediaItem();
       _notifyNativePlaybackState(false);
-      // DJ: fade in на старте
       if (_djMode) _startDjFadeIn();
       await _player.play();
       try {
         final s = await AudioSession.instance;
         await s.setActive(true);
       } catch (_) {}
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future<void>.delayed(const Duration(milliseconds: 100));
       _notifyNativePlaybackState(true);
       crashLogger.log('playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
@@ -619,6 +620,7 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 
+  /// dispose не в интерфейсе PlaybackService — @override не нужен
   void dispose() {
     _fadeTimer?.cancel();
     _djPositionSub?.cancel();

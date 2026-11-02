@@ -274,14 +274,18 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                     ),
                   ],
                 ),
-                Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),
                 IconButton(
                   icon: Icon(_showPlaylist ? Icons.queue_music : Icons.queue_music_outlined),
                   tooltip: _showPlaylist ? 'Скрыть очередь' : 'Показать очередь',
                   color: _showPlaylist ? p.accentHot : p.textMuted,
                   onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
                 ),
-              ],
+              ],,
+            Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Center(
+                child: Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),
+              ),
             ),
             const SizedBox(height: 8),
             Expanded(

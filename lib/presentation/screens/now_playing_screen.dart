@@ -41,7 +41,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   Timer? _cpuTimer;
   int _prevUtime = 0;
   int _prevStime = 0;
-  int _prevTotalJiffies = 0;
   int _prevTotalJiffies = 0; // суммарные jiffies системы из /proc/stat
 
   @override
@@ -149,7 +148,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final duration = snap?.duration ?? Duration.zero;
     final isPlaying = snap?.isPlaying ?? false;
     final p = Preset.of(context);
-    final cpuHistoryCopy = List<int>.from(_cpuHistory);
+    final cpuHistoryCopy = List<double>.from(_cpuHistory);
     final uptimeStr = _formatDuration(uptime);
 
     showDialog<void>(
@@ -773,13 +772,18 @@ class _CpuAreaChartPainter extends CustomPainter {
       ..strokeWidth = 0.7
       ..color = color.withOpacity(0.25);
 
-    for (final pct in [20, 40, 60, 80, 100]) {
-      final y = size.height - (pct / 100) * size.height;
+    final cMax = chartMax;
+    for (final fraction in [0.2, 0.4, 0.6, 0.8, 1.0]) {
+      final pctVal = cMax * fraction;
+      final y = size.height - fraction * size.height;
       canvas.drawLine(Offset(0, y), Offset(size.width, y), gridPaint);
 
+      final label = cMax < 20
+          ? pctVal.toStringAsFixed(1)
+          : pctVal.round().toString();
       for (final isLeft in [true, false]) {
         final tp = TextPainter(
-          text: TextSpan(text: '$pct',
+          text: TextSpan(text: label,
             style: TextStyle(color: color.withOpacity(0.55), fontSize: 8, fontFamily: 'monospace')),
           textDirection: TextDirection.ltr,
         );

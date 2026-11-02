@@ -16,6 +16,7 @@ import '../core/utils/replaygain.dart';
 import '../domain/enums/repeat_mode.dart';
 import '../domain/models/track.dart';
 import 'crash_logger.dart';
+import 'media_session_service.dart';
 
 abstract class PlaybackService {
   Stream<PlaybackSnapshot> get state;
@@ -83,6 +84,8 @@ class JustAudioPlaybackService implements PlaybackService {
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
+  final MediaSessionService _mediaSession = MediaSessionService();
+  bool _mediaSessionStarted = false;
 
   @override
   Stream<PlaybackSnapshot> get state => _stateController.stream;
@@ -180,6 +183,18 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   void _notifyNativePlaybackState(bool playing) {
+    if (playing && !_mediaSessionStarted) {
+      _mediaSessionStarted = true;
+      _mediaSession.start().then((_) {
+        crashLogger.log('MediaSession (foreground service) started');
+      }).catchError((e) {
+        crashLogger.error('MediaSession start failed', e, StackTrace.current);
+      });
+    }
+    _mediaSession.updatePlaybackState(
+      state: playing ? 'playing' : 'paused',
+      positionMs: _player.position.inMilliseconds,
+    );
     try {
       _nativeChannel.invokeMethod('setPlaybackState', {
         'playing': playing,
@@ -201,6 +216,12 @@ class JustAudioPlaybackService implements PlaybackService {
     if (t.artist.isEmpty && t.filePath.isNotEmpty && !_isReadingTags) {
       _readTagsAndUpdate(t.filePath);
     }
+    _mediaSession.updateMetadata(
+      title: t.title,
+      artist: t.artist.isNotEmpty ? t.artist : 'Pathephon',
+      album: t.album,
+      durationMs: durationMs,
+    );
     try {
       _nativeChannel.invokeMethod('setMediaItem', {
         'title': t.title,
@@ -516,6 +537,11 @@ class JustAudioPlaybackService implements PlaybackService {
 
   /// dispose не в интерфейсе PlaybackService — @override не нужен
   void dispose() {
+    if (_mediaSessionStarted) {
+      _mediaSession.updatePlaybackState(state: 'stopped', positionMs: 0);
+      _mediaSession.stop();
+      _mediaSessionStarted = false;
+    }
     _stateController.close();
     _sessionIdController.close();
     _player.dispose();

@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
     private var visualizerPlugin: VisualizerPlugin? = null
     private var equalizerPlugin: EqualizerPlugin? = null
     private var folderScannerPlugin: FolderScannerPlugin? = null
+    private var mediaSessionHelper: MediaSessionHelper? = null
     private var pendingLaunchUri: String? = null
     private var pendingLaunchName: String? = null
     private var pendingLaunchContent: String? = null
@@ -121,6 +122,8 @@ class MainActivity : FlutterActivity() {
         visualizerPlugin = VisualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         equalizerPlugin = EqualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
+        mediaSessionHelper = MediaSessionHelper(flutterEngine.dartExecutor.binaryMessenger, this)
+        Log.i(TAG, ">>> MediaSessionHelper registered (foreground service bridge)")
         flutterEngine.plugins.add(MediaSessionPlugin())
         flutterEngine.plugins.add(TagReaderPlugin())
         Log.i(TAG, ">>> TagReaderPlugin registered")
@@ -158,9 +161,11 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         visualizerPlugin?.dispose()
         equalizerPlugin?.dispose()
+        mediaSessionHelper?.dispose()
         visualizerPlugin = null
         equalizerPlugin = null
         folderScannerPlugin = null
+        mediaSessionHelper = null
         launchChannel = null
         super.onDestroy()
     }

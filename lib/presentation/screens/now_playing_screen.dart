@@ -212,68 +212,53 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    StreamBuilder<double>(
-                      stream: _cpuController.stream,
-                      initialData: 0.0,
-                      builder: (context, snapshot) {
-                        final pct = snapshot.data ?? 0.0;
-                        final color = _cpuColor(pct);
-                        return GestureDetector(
-                          onTap: _showStatusDialog,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: color.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: color, width: 1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(Icons.memory, size: 12, color: color),
-                                const SizedBox(width: 3),
-                                Text('${pct.toStringAsFixed(2)}%',
-                                  style: TextStyle(color: color, fontSize: 11,
-                                    fontWeight: FontWeight.bold,
-                                    fontFamily: 'monospace', height: 1.0)),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
+                // Share button (LEFT)
+                GestureDetector(
+                  onTap: _shareCurrentTrack,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.transparent,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: p.brass.withOpacity(0.5),
+                        width: 1),
                     ),
-                    const SizedBox(height: 4),
-                    GestureDetector(
-                      onTap: _shareCurrentTrack,
+                    child: Icon(Icons.ios_share, size: 14, color: p.brass),
+                  ),
+                ),
+                // CPU badge (CENTER)
+                StreamBuilder<double>(
+                  stream: _cpuController.stream,
+                  initialData: 0.0,
+                  builder: (context, snapshot) {
+                    final pct = snapshot.data ?? 0.0;
+                    final color = _cpuColor(pct);
+                    return GestureDetector(
+                      onTap: _showStatusDialog,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                         decoration: BoxDecoration(
-                          color: Colors.transparent,
+                          color: color.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(6),
-                          border: Border.all(
-                            color: p.brass.withOpacity(0.5),
-                            width: 1),
+                          border: Border.all(color: color, width: 1),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.ios_share, size: 12, color: p.brass),
+                            Icon(Icons.memory, size: 12, color: color),
                             const SizedBox(width: 3),
-                            Text('',
-                              style: TextStyle(
-                                color: p.brass,
-                                fontSize: 10, fontWeight: FontWeight.bold,
+                            Text('${pct.toStringAsFixed(2)}%',
+                              style: TextStyle(color: color, fontSize: 11,
+                                fontWeight: FontWeight.bold,
                                 fontFamily: 'monospace', height: 1.0)),
                           ],
                         ),
                       ),
-                    ),
-                  ],
+                    );
+                  },
                 ),
+                // Playlist toggle (RIGHT)
                 IconButton(
                   icon: Icon(_showPlaylist ? Icons.queue_music : Icons.queue_music_outlined),
                   tooltip: _showPlaylist ? 'Скрыть очередь' : 'Показать очередь',
@@ -281,8 +266,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
                 ),
               ],
-            ),
-            Padding(
+            ),            Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Center(
                 child: Text(l.nowPlayingTitle, style: Theme.of(context).textTheme.titleMedium),

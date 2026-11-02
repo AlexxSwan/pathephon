@@ -281,7 +281,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: p.brass, width: 3),
-                      boxShadow: [BoxShadow(color: p.accentHot.withOpacity(0.25), blurRadius: 30, spreadRadius: 4)],
+                      boxShadow: [BoxShadow(color: p.accentHot.withOpacity(0.25), blurRadius: 12, spreadRadius: 2)],
                     ),
                     child: RepaintBoundary(child: _ArtworkImage(track: track)),
                   ),

@@ -283,7 +283,16 @@ class _ShellState extends ConsumerState<_Shell> {
       onPopInvokedWithResult: (didPop, _) { if (!didPop) _handleBack(); },
       child: Scaffold(
         body: Stack(children: [
-          IndexedStack(index: _index, children: _screens),
+          IndexedStack(
+            index: _index,
+            children: [
+              TickerMode(enabled: _index == 0, child: _screens[0]),
+              TickerMode(enabled: _index == 1, child: _screens[1]),
+              TickerMode(enabled: _index == 2, child: _screens[2]),
+              TickerMode(enabled: _index == 3, child: _screens[3]),
+              TickerMode(enabled: _index == 4, child: _screens[4]),
+            ],
+          ),
 
         ]),
         bottomNavigationBar: Container(

@@ -36,7 +36,7 @@ class TrackListTile extends ConsumerWidget {
             SizedBox(
               width: 32,
               child: isCurrent
-                  ? _PlayingDots()
+                  ? RepaintBoundary(child: _PlayingDots())
                   : Text(
                       (track.trackNumber > 0 ? track.trackNumber : index + 1)
                           .toString()
@@ -114,7 +114,18 @@ class _PlayingDotsState extends State<_PlayingDots> with TickerProviderStateMixi
     _c = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 600),
-    )..repeat();
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Stop animation when screen is not visible (TickerMode disabled by IndexedStack)
+    if (TickerMode.of(context)) {
+      if (!_c.isAnimating) _c.repeat();
+    } else {
+      if (_c.isAnimating) _c.stop();
+    }
   }
 
   @override

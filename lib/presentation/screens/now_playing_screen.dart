@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  now_playing_screen.dart
 //  v0.11.16+210:
 //   - DJ mode ПОЛНОСТЬЮ УБРАН
@@ -279,7 +279,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   child: Container(
                     decoration: BoxDecoration(
                       border: Border.all(color: p.brass, width: 3),
-                      boxShadow: [BoxShadow(color: p.accentHot.withOpacity(0.25), blurRadius: 12, spreadRadius: 2)],
+                      boxShadow: [],
                     ),
                     child: RepaintBoundary(child: _ArtworkImage(track: track)),
                   ),

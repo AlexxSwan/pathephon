@@ -1,4 +1,4 @@
-import "package:flutter/material.dart";
+﻿import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
 import "package:shared_preferences/shared_preferences.dart";
@@ -340,7 +340,7 @@ class _NavButton extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? p.accent.withOpacity(0.12) : Colors.transparent,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: selected ? [BoxShadow(color: p.accent.withOpacity(0.3), blurRadius: 8, spreadRadius: 1)] : [],
+          boxShadow: [],
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,

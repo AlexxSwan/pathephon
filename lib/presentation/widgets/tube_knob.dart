@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  tube_knob.dart — rotary knob widget for EQ band sliders
 //  Draggable in a circular gesture; reports 0..1.
 // ============================================================================
@@ -88,13 +88,7 @@ class _KnobGraphic extends StatelessWidget {
                 end: Alignment.bottomRight,
                 colors: [TubeColors.brass, TubeColors.brassDark, TubeColors.brass],
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.6),
-                  blurRadius: 4,
-                  offset: const Offset(0, 2),
-                ),
-              ],
+              boxShadow: [],
             ),
           ),
           // Tick ring

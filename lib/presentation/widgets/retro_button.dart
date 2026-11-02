@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  retro_button.dart — chassis button with brass bezel + amber glow when pressed
 // ============================================================================
 import 'package:flutter/material.dart';
@@ -50,15 +50,7 @@ class _RetroButtonState extends State<RetroButton> {
               shape: BoxShape.circle,
               color: TubeColors.surface,
               border: Border.all(color: color, width: 2),
-              boxShadow: _down || widget.active
-                  ? [
-                      BoxShadow(
-                        color: TubeColors.amberHot.withOpacity(0.45),
-                        blurRadius: 14,
-                        spreadRadius: 2,
-                      ),
-                    ]
-                  : [],
+              boxShadow: [],
             ),
             child: Icon(
               widget.icon,

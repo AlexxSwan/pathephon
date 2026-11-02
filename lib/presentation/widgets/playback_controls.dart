@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  playback_controls.dart — Play/Pause/Next/Prev/Shuffle/Repeat cluster
 // ============================================================================
 import 'package:flutter/material.dart';
@@ -43,15 +43,7 @@ class PlaybackControls extends ConsumerWidget {
           decoration: BoxDecoration(
             shape: BoxShape.circle,
             border: Border.all(color: TubeColors.brass, width: 2),
-            boxShadow: isPlaying
-                ? [
-                    BoxShadow(
-                      color: TubeColors.amberHot.withOpacity(0.5),
-                      blurRadius: 24,
-                      spreadRadius: 4,
-                    ),
-                  ]
-                : [],
+            boxShadow: [],
           ),
           child: Material(
             color: Colors.transparent,

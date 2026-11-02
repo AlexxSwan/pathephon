@@ -280,7 +280,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   color: _showPlaylist ? p.accentHot : p.textMuted,
                   onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
                 ),
-              ],,
+              ],
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Center(

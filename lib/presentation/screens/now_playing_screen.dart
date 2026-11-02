@@ -192,7 +192,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final l = AppLocalizations.of(context);
     final p = Preset.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;
-    final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
+    // position removed from main build (causes 5x/sec rebuilds → GPU 90%)
     final playback = ref.watch(playbackServiceProvider);
     ref.watch(isPlayingProvider);
 

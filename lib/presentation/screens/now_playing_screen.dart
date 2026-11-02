@@ -200,8 +200,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final queue = snap?.queue ?? const <Track>[];
     final currentIndex = snap?.index ?? 0;
     final duration = snap?.duration ?? Duration.zero;
-    final remainingMs = (duration.inMilliseconds - pos.inMilliseconds).clamp(0, duration.inMilliseconds);
-    final remaining = Duration(milliseconds: remainingMs);
 
     return Scaffold(
       body: SafeArea(

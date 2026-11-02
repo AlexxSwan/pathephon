@@ -283,7 +283,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                       border: Border.all(color: p.brass, width: 3),
                       boxShadow: [BoxShadow(color: p.accentHot.withOpacity(0.25), blurRadius: 30, spreadRadius: 4)],
                     ),
-                    child: _ArtworkImage(track: track),
+                    child: RepaintBoundary(child: _ArtworkImage(track: track)),
                   ),
                 ),
               ),
@@ -296,16 +296,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: p.textSecondary),
                 textAlign: TextAlign.center, maxLines: 1, overflow: TextOverflow.ellipsis),
             const SizedBox(height: 8),
-            Row(children: [
-              Text(formatDuration(pos), style: Theme.of(context).textTheme.labelSmall),
-              Expanded(child: Slider(
-                min: 0,
-                max: duration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
-                value: pos.inMilliseconds.toDouble().clamp(0, duration.inMilliseconds.toDouble()),
-                onChanged: (v) => playback.seekTo(Duration(milliseconds: v.toInt())),
-              )),
-              Text('-${formatDuration(remaining)}', style: Theme.of(context).textTheme.labelSmall),
-            ]),
+            _SeekBar(duration: duration, playback: playback, theme: p),
             const SizedBox(height: 8),
             const PlaybackControls(),
             const SizedBox(height: 12),
@@ -402,6 +393,31 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
         ],
       ),
     );
+  }
+}
+
+/// Изолированный seek bar — перестраивается 5x/sec, но НЕ затрагивает остальной экран.
+class _SeekBar extends ConsumerWidget {
+  const _SeekBar({required this.duration, required this.playback, required this.theme});
+  final Duration duration;
+  final PlaybackService playback;
+  final ThemePreset theme;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final pos = ref.watch(playbackPositionProvider).valueOrNull ?? Duration.zero;
+    final remainingMs = (duration.inMilliseconds - pos.inMilliseconds).clamp(0, duration.inMilliseconds);
+    final remaining = Duration(milliseconds: remainingMs);
+    return Row(children: [
+      Text(formatDuration(pos), style: Theme.of(context).textTheme.labelSmall),
+      Expanded(child: Slider(
+        min: 0,
+        max: duration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
+        value: pos.inMilliseconds.toDouble().clamp(0, duration.inMilliseconds.toDouble()),
+        onChanged: (v) => playback.seekTo(Duration(milliseconds: v.toInt())),
+      )),
+      Text('-${formatDuration(remaining)}', style: Theme.of(context).textTheme.labelSmall),
+    ]);
   }
 }
 

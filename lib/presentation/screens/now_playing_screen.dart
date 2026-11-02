@@ -281,6 +281,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   onPressed: () => setState(() => _showPlaylist = !_showPlaylist),
                 ),
               ],
+            ),
             Padding(
               padding: const EdgeInsets.only(top: 4),
               child: Center(

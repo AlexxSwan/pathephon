@@ -55,7 +55,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
   void _startCpuMonitor() {
     _readCpuStat();
-    _cpuTimer = Timer.periodic(const Duration(seconds: 1), (_) => _readCpuStat());
+    _cpuTimer = Timer.periodic(const Duration(seconds: 3), (_) => _readCpuStat());
   }
 
     void _readCpuStat() {
@@ -907,7 +907,7 @@ class _ArtworkImage extends ConsumerWidget {
         final cached = _coverCache[fp];
         if (cached != null && cached.isNotEmpty) {
           return Image.file(File(Uri.parse(cached).toFilePath()),
-              fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+              fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
         }
         return _appIconFallback(p);
       }
@@ -917,19 +917,19 @@ class _ArtworkImage extends ConsumerWidget {
     final ms = ref.read(mediaStoreSourceProvider);
     final cachedBytes = ms.getCoverBytes(artUri);
     if (cachedBytes != null) {
-      return Image.memory(cachedBytes, fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+      return Image.memory(cachedBytes, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
     }
     if (artUri.startsWith('file://')) {
-      return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+      return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
     }
-    return Image.network(artUri, fit: BoxFit.cover, errorBuilder: (_, e, __) => _appIconFallback(p));
+    return Image.network(artUri, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
   }
 
   Widget _appIconFallback(ThemePreset p) {
     return Container(
       color: p.surfaceVariant,
       alignment: Alignment.center,
-      child: Image.asset('assets/pathephon_fallback.png', fit: BoxFit.cover, width: double.infinity, height: double.infinity,
+      child: Image.asset('assets/pathephon_fallback.png', fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, width: double.infinity, height: double.infinity,
           errorBuilder: (_, e, __) => Icon(Icons.album, size: 100, color: p.brass)),
     );
   }

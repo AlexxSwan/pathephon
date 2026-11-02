@@ -7,6 +7,8 @@ import android.content.Intent
 import android.database.Cursor
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.provider.OpenableColumns
 import android.util.Log
 import io.flutter.embedding.android.FlutterActivity
@@ -18,6 +20,7 @@ class MainActivity : FlutterActivity() {
         private const val TAG = "Pathephon/Main"
         private const val CHANNEL_ID = "pathephon_playback"
         private const val LAUNCH_CHANNEL = "pathephon/launch_intent"
+        private const val BATTERY_CHANNEL = "pathephon/battery"
     }
 
     private var visualizerPlugin: VisualizerPlugin? = null
@@ -27,6 +30,7 @@ class MainActivity : FlutterActivity() {
     private var pendingLaunchName: String? = null
     private var pendingLaunchContent: String? = null
     private var launchChannel: MethodChannel? = null
+    private var batteryChannel: MethodChannel? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -153,6 +157,39 @@ class MainActivity : FlutterActivity() {
         Log.i(TAG, ">>> launch_intent channel registered")
         // Если intent пришёл ДО регистрации channel — отправляем сейчас
         trySendLaunchIntent()
+
+        // Battery optimization exemption channel
+        batteryChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL)
+        batteryChannel!!.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isIgnoringBatteryOptimizations" -> {
+                    try {
+                        val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+                        val isIgnoring = pm.isIgnoringBatteryOptimizations(packageName)
+                        Log.i(TAG, ">>> isIgnoringBatteryOptimizations: $isIgnoring")
+                        result.success(isIgnoring)
+                    } catch (e: Exception) {
+                        Log.w(TAG, ">>> isIgnoringBatteryOptimizations failed: ${e.message}")
+                        result.success(false)
+                    }
+                }
+                "requestIgnoreBatteryOptimizations" -> {
+                    try {
+                        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+                        intent.data = android.net.Uri.parse("package:$packageName")
+                        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(intent)
+                        Log.i(TAG, ">>> requestIgnoreBatteryOptimizations: dialog shown")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.w(TAG, ">>> requestIgnoreBatteryOptimizations failed: ${e.message}")
+                        result.success(false)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+        Log.i(TAG, ">>> battery channel registered")
     }
 
     override fun onDestroy() {
@@ -162,6 +199,7 @@ class MainActivity : FlutterActivity() {
         equalizerPlugin = null
         folderScannerPlugin = null
         launchChannel = null
+        batteryChannel = null
         super.onDestroy()
     }
 

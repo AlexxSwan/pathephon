@@ -71,6 +71,7 @@ class JustAudioPlaybackService implements PlaybackService {
   final _initCompleter = Completer<void>();
 
   static const _nativeChannel = MethodChannel('pathephon/native_media_session');
+  static const _batteryChannel = MethodChannel('pathephon/battery');
   static const _tagChannel = MethodChannel('pathephon/tag_reader');
 
   List<Track> _queue = const [];
@@ -359,7 +360,8 @@ class JustAudioPlaybackService implements PlaybackService {
       _notifyNativePlaybackState(true);
       crashLogger.log('playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
-    } catch (e, st) {
+      _requestBatteryExemptionIfNeeded();
+     } catch (e, st) {
       crashLogger.error('playQueue(startIndex=$startIndex, count=${tracks.length}) FAILED', e, st);
       _stateController.add(PlaybackSnapshot.empty);
       try { _notifyNativePlaybackState(false); } catch (_) {}
@@ -514,6 +516,27 @@ class JustAudioPlaybackService implements PlaybackService {
 
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
+
+  /// Запросить exemption от оптимизации батареи (один раз).
+  /// ColorOS перестаёт убивать процесс после разрешения пользователя.
+  Future<void> _requestBatteryExemptionIfNeeded() async {
+    try {
+      final alreadyAsked = _prefs.getBool('pathephon.battery_exempt_requested') ?? false;
+      if (alreadyAsked) return;
+      final isIgnoring = await _batteryChannel.invokeMethod<bool>('isIgnoringBatteryOptimizations') ?? false;
+      if (isIgnoring) {
+        await _prefs.setBool('pathephon.battery_exempt_requested', true);
+        crashLogger.log('Battery optimization already exempt');
+        return;
+      }
+      crashLogger.log('Requesting battery optimization exemption...');
+      await _batteryChannel.invokeMethod<bool>('requestIgnoreBatteryOptimizations');
+      await _prefs.setBool('pathephon.battery_exempt_requested', true);
+      crashLogger.log('Battery optimization exemption requested (user saw dialog)');
+    } catch (e, st) {
+      crashLogger.error('_requestBatteryExemptionIfNeeded failed', e, st);
+    }
+  }
 
   /// dispose не в интерфейсе PlaybackService — @override не нужен
   void dispose() {

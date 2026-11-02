@@ -187,8 +187,8 @@ class JustAudioPlaybackService implements PlaybackService {
       _mediaSessionStarted = true;
       _mediaSession.start().then((_) {
         crashLogger.log('MediaSession (foreground service) started');
-      }).catchError((e) {
-        crashLogger.error('MediaSession start failed', e, StackTrace.current);
+      }).catchError((Object error, StackTrace stack) {
+        crashLogger.error('MediaSession start failed', error, stack);
       });
     }
     _mediaSession.updatePlaybackState(

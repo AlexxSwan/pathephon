@@ -69,9 +69,12 @@
             android:value="2" />
 
         <service
-            android:name=".MediaPlaybackService"
+            android:name="com.ryanheise.audioservice.AudioService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="false">
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
         </service>
 <!-- Наш receiver для BT-кнопок — приоритет выше чем у audio_service -->
         <receiver

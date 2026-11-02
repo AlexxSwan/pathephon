@@ -41,7 +41,6 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   Timer? _cpuTimer;
   int _prevUtime = 0;
   int _prevStime = 0;
-  int _prevTotalJiffies = 0; // суммарные jiffies системы из /proc/stat
 
   @override
   void initState() { super.initState(); _startCpuMonitor(); }
@@ -71,29 +70,14 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       final stime = int.parse(fields[12]);
       final processJiffies = utime + stime;
 
-      // /proc/stat — суммарные jiffies системы (по всем ядрам)
-      // Первая строка: "cpu  user nice system idle iowait irq softirq ..."
-      var totalJiffies = 0;
-      try {
-        final cpuLine = File('/proc/stat').readAsStringSync().split('\n').first;
-        final cpuFields = cpuLine.split(RegExp(r'\s+'));
-        for (var i = 1; i < cpuFields.length && i < 11; i++) {
-          totalJiffies += int.tryParse(cpuFields[i]) ?? 0;
-        }
-      } catch (_) {
-        // /proc/stat недоступен — fallback: считаем % от одного ядра
-        // clk_tck=100 → 100 jiffies/sec = 100%
-        totalJiffies = _prevTotalJiffies + 100;
-      }
-
       if (_prevUtime > 0 || _prevStime > 0) {
         final processDelta = (processJiffies - (_prevUtime + _prevStime)).toDouble();
-        final totalDelta = (totalJiffies - _prevTotalJiffies).toDouble();
-        // cpu% = processDelta / totalDelta * 100
-        // double precision — не округляем до int!
-        final pct = totalDelta > 0
-            ? (processDelta * 100.0 / totalDelta).clamp(0.0, 100.0)
-            : 0.0;
+        // Нормализуем по числу ядер: processDelta это jiffies на ОДНОМ ядре за 1 сек.
+        // clk_tck = 100 на ARM64 → 100 jiffies/sec = 100% одного ядра.
+        // Делим на число ядер чтобы получить % от ВСЕГО CPU.
+        // На 8-ядерном телефоне: 30 jiffies → 30/8 = 3.75% (реальная нагрузка).
+        final cores = Platform.numberOfProcessors.toDouble().clamp(1.0, 16.0);
+        final pct = (processDelta / cores).clamp(0.0, 100.0);
         _cpuController.add(pct);
         for (var i = 0; i < _cpuHistory.length - 1; i++) {
           _cpuHistory[i] = _cpuHistory[i + 1];
@@ -102,10 +86,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       }
       _prevUtime = utime;
       _prevStime = stime;
-      _prevTotalJiffies = totalJiffies;
     } catch (_) {}
   }
-
   Color _cpuColor(double pct) {
     final p = pct.clamp(0.0, 100.0);
     if (p <= 50) {

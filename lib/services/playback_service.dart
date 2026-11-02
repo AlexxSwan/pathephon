@@ -1,6 +1,6 @@
 // ============================================================================
-//  playback_service.dart — v0.11.15+209 — БЕЗ audio_service, С DJ mode + guards
-//  Полностью проверенный файл, структура валидна, все try/catch/finally на месте
+//  playback_service.dart — v0.11.16+210
+//  DJ mode ПОЛНОСТЬЮ УБРАН. Оставлены guards от рекурсии и дедупликация.
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -39,7 +39,6 @@ abstract class PlaybackService {
   Future<void> setReplayGain(ReplayGainMode mode);
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled});
   Future<void> restoreSavedQueue();
-  void setDjMode(bool enabled);
 }
 
 class PlaybackSnapshot {
@@ -79,15 +78,6 @@ class JustAudioPlaybackService implements PlaybackService {
   RepeatMode _repeat = RepeatMode.off;
   ReplayGainMode _rg = ReplayGainMode.off;
 
-  // === DJ mode ===
-  bool _djMode = false;
-  bool _isFadingOut = false;
-  Timer? _fadeTimer;
-  double _baseVolume = 1.0;
-  double _fadeMultiplier = 1.0;
-  StreamSubscription<Duration>? _djPositionSub;
-
-  // === Guards ===
   bool _isReadingTags = false;
   int? _lastDurationMs;
 
@@ -100,86 +90,6 @@ class JustAudioPlaybackService implements PlaybackService {
   Stream<Duration> get positionStream => _player.positionStream;
   @override
   Stream<int> get audioSessionIdStream => _sessionIdController.stream;
-
-  // === DJ: применить итоговую громкость = base * fade ===
-  void _applyVolume() {
-    try {
-      final v = (_baseVolume * _fadeMultiplier).clamp(0.0, 1.0);
-      _player.setVolume(v);
-    } catch (_) {}
-  }
-
-  void _checkDjFadeOut(Duration pos) {
-    if (!_djMode || _isFadingOut) return;
-    try {
-      final duration = _player.duration;
-      if (duration == null || duration.inMilliseconds == 0) return;
-      final remaining = duration - pos;
-      if (remaining.inMilliseconds <= 3000 && remaining.inMilliseconds > 200) {
-        _startDjFadeOut();
-      }
-    } catch (_) {}
-  }
-
-  void _startDjFadeOut() {
-    _isFadingOut = true;
-    _fadeTimer?.cancel();
-    _fadeMultiplier = 1.0;
-    _applyVolume();
-    const steps = 30;
-    const stepMs = 100;
-    final decrement = 1.0 / steps;
-    var i = 0;
-    _fadeTimer = Timer.periodic(const Duration(milliseconds: stepMs), (t) {
-      try {
-        i++;
-        _fadeMultiplier = (1.0 - i * decrement).clamp(0.0, 1.0);
-        _applyVolume();
-        if (i >= steps) {
-          _fadeMultiplier = 0.0;
-          _applyVolume();
-          t.cancel();
-        }
-      } catch (_) { t.cancel(); }
-    });
-  }
-
-  void _startDjFadeIn() {
-    _isFadingOut = false;
-    _fadeTimer?.cancel();
-    _fadeMultiplier = 0.0;
-    _applyVolume();
-    const steps = 20;
-    const stepMs = 100;
-    final increment = 1.0 / steps;
-    var i = 0;
-    _fadeTimer = Timer.periodic(const Duration(milliseconds: stepMs), (t) {
-      try {
-        i++;
-        _fadeMultiplier = (i * increment).clamp(0.0, 1.0);
-        _applyVolume();
-        if (i >= steps) {
-          _fadeMultiplier = 1.0;
-          _applyVolume();
-          t.cancel();
-        }
-      } catch (_) { t.cancel(); }
-    });
-  }
-
-  @override
-  void setDjMode(bool enabled) {
-    try {
-      _djMode = enabled;
-      _fadeTimer?.cancel();
-      _isFadingOut = false;
-      _fadeMultiplier = 1.0;
-      _applyVolume();
-      crashLogger.log('DJ mode ${enabled ? 'ON' : 'OFF'}');
-    } catch (e, st) {
-      crashLogger.error('setDjMode failed', e, st);
-    }
-  }
 
   Future<void> _init() async {
     crashLogger.log('_init() START');
@@ -202,7 +112,6 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
-        if (_djMode) _startDjFadeIn();
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
         _updateMediaItem();
@@ -220,10 +129,6 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.androidAudioSessionIdStream.listen((id) {
       if (id != null) _sessionIdController.add(id);
-    });
-
-    _djPositionSub = _player.positionStream.listen((pos) {
-      _checkDjFadeOut(pos);
     });
 
     Timer.periodic(const Duration(seconds: 5), (_) {
@@ -308,7 +213,6 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   Future<void> _readTagsAndUpdate(String filePath) async {
-    // Guard от рекурсии
     if (_isReadingTags) {
       crashLogger.log('_readTagsAndUpdate: already in progress, skipping');
       return;
@@ -445,7 +349,6 @@ class JustAudioPlaybackService implements PlaybackService {
       await _player.seek(Duration.zero, index: initial);
       _updateMediaItem();
       _notifyNativePlaybackState(false);
-      if (_djMode) _startDjFadeIn();
       await _player.play();
       try {
         final s = await AudioSession.instance;
@@ -488,10 +391,6 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       await _initCompleter.future;
       await _player.pause();
-      _fadeTimer?.cancel();
-      _isFadingOut = false;
-      _fadeMultiplier = 1.0;
-      _applyVolume();
       await _savePosition();
     } catch (e, st) { crashLogger.error('pause() failed', e, st); }
   }
@@ -502,10 +401,6 @@ class JustAudioPlaybackService implements PlaybackService {
       await _initCompleter.future;
       await _player.pause();
       await _player.seek(Duration.zero);
-      _fadeTimer?.cancel();
-      _isFadingOut = false;
-      _fadeMultiplier = 1.0;
-      _applyVolume();
       await _savePosition();
       _emitState(_player.playerState);
     } catch (e, st) { crashLogger.error('stop() failed', e, st); }
@@ -590,8 +485,7 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> setVolume(double volume) async {
     try {
-      _baseVolume = volume.clamp(0.0, 1.0);
-      _applyVolume();
+      await _player.setVolume(volume.clamp(0.0, 1.0));
     } catch (e, st) { crashLogger.error('setVolume($volume) failed', e, st); }
   }
 
@@ -608,12 +502,12 @@ class JustAudioPlaybackService implements PlaybackService {
       _rg = mode;
       if (_queue.isEmpty) return;
       final current = _queue[_index];
-      _baseVolume = ReplayGainApplier.selectGain(
+      final volume = ReplayGainApplier.selectGain(
         trackGain: current.replayGainTrack,
         albumGain: current.replayGainAlbum,
         mode: mode,
       );
-      _applyVolume();
+      await _player.setVolume(volume);
     } catch (e, st) { crashLogger.error('setReplayGain($mode) failed', e, st); }
   }
 
@@ -622,8 +516,6 @@ class JustAudioPlaybackService implements PlaybackService {
 
   /// dispose не в интерфейсе PlaybackService — @override не нужен
   void dispose() {
-    _fadeTimer?.cancel();
-    _djPositionSub?.cancel();
     _stateController.close();
     _sessionIdController.close();
     _player.dispose();

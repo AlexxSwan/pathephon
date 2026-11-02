@@ -36,11 +36,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
   final DateTime _appStartTime = DateTime.now();
 
-  final _cpuController = StreamController<int>.broadcast();
-  final List<int> _cpuHistory = List.filled(30, 0);
+  final _cpuController = StreamController<double>.broadcast();
+  final List<double> _cpuHistory = List.filled(30, 0.0);
   Timer? _cpuTimer;
   int _prevUtime = 0;
   int _prevStime = 0;
+  int _prevTotalJiffies = 0;
   int _prevTotalJiffies = 0; // суммарные jiffies системы из /proc/stat
 
   @override
@@ -59,9 +60,9 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     _cpuTimer = Timer.periodic(const Duration(seconds: 1), (_) => _readCpuStat());
   }
 
-  void _readCpuStat() {
+    void _readCpuStat() {
     try {
-      // 1. /proc/self/stat — jiffies потраченные НАШИМ процессом
+      // /proc/self/stat — jiffies нашего процесса (utime + stime)
       final stat = File('/proc/self/stat').readAsStringSync();
       final lastParen = stat.lastIndexOf(') ');
       if (lastParen < 0) return;
@@ -71,28 +72,29 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       final stime = int.parse(fields[12]);
       final processJiffies = utime + stime;
 
-      // 2. /proc/stat — суммарные jiffies ВСЕЙ системы (по всем ядрам)
-      // Первая строка: "cpu  user nice system idle iowait irq softirq steal guest guest_nice"
-      // Суммируем все поля кроме idle и iowait — это "active" jiffies
-      // НО для доли процесса лучше использовать ВСЕ поля (включая idle) как знаменатель
-      final cpuLine = File('/proc/stat').readAsStringSync().split('\n').first;
-      final cpuFields = cpuLine.split(RegExp(r'\s+'));
-      // cpuFields[0] = "cpu", [1..10] = числа
+      // /proc/stat — суммарные jiffies системы (по всем ядрам)
+      // Первая строка: "cpu  user nice system idle iowait irq softirq ..."
       var totalJiffies = 0;
-      for (var i = 1; i < cpuFields.length && i < 11; i++) {
-        totalJiffies += int.tryParse(cpuFields[i]) ?? 0;
+      try {
+        final cpuLine = File('/proc/stat').readAsStringSync().split('\n').first;
+        final cpuFields = cpuLine.split(RegExp(r'\s+'));
+        for (var i = 1; i < cpuFields.length && i < 11; i++) {
+          totalJiffies += int.tryParse(cpuFields[i]) ?? 0;
+        }
+      } catch (_) {
+        // /proc/stat недоступен — fallback: считаем % от одного ядра
+        // clk_tck=100 → 100 jiffies/sec = 100%
+        totalJiffies = _prevTotalJiffies + 100;
       }
 
-      // 3. Считаем долю процесса от общего CPU
       if (_prevUtime > 0 || _prevStime > 0) {
-        final processDelta = processJiffies - (_prevUtime + _prevStime);
-        final totalDelta = totalJiffies - _prevTotalJiffies;
+        final processDelta = (processJiffies - (_prevUtime + _prevStime)).toDouble();
+        final totalDelta = (totalJiffies - _prevTotalJiffies).toDouble();
         // cpu% = processDelta / totalDelta * 100
-        // На многоядерной системе totalDelta может быть > processDelta в N раз,
-        // где N = число ядер. Это правильно — отображаем ДОЛЮ от общего CPU.
+        // double precision — не округляем до int!
         final pct = totalDelta > 0
-            ? (processDelta * 100 / totalDelta).round().clamp(0, 100)
-            : 0;
+            ? (processDelta * 100.0 / totalDelta).clamp(0.0, 100.0)
+            : 0.0;
         _cpuController.add(pct);
         for (var i = 0; i < _cpuHistory.length - 1; i++) {
           _cpuHistory[i] = _cpuHistory[i + 1];
@@ -105,11 +107,12 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     } catch (_) {}
   }
 
-  Color _cpuColor(int pct) {
-    if (pct <= 50) {
-      return Color.lerp(const Color(0xFF4CAF50), const Color(0xFFFFC107), pct / 50)!;
+  Color _cpuColor(double pct) {
+    final p = pct.clamp(0.0, 100.0);
+    if (p <= 50) {
+      return Color.lerp(const Color(0xFF4CAF50), const Color(0xFFFFC107), p / 50)!;
     } else {
-      return Color.lerp(const Color(0xFFFFC107), const Color(0xFFF44336), (pct - 50) / 50)!;
+      return Color.lerp(const Color(0xFFFFC107), const Color(0xFFF44336), (p - 50) / 50)!;
     }
   }
 
@@ -232,11 +235,11 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    StreamBuilder<int>(
+                    StreamBuilder<double>(
                       stream: _cpuController.stream,
-                      initialData: 0,
+                      initialData: 0.0,
                       builder: (context, snapshot) {
-                        final pct = snapshot.data ?? 0;
+                        final pct = snapshot.data ?? 0.0;
                         final color = _cpuColor(pct);
                         return GestureDetector(
                           onTap: _showStatusDialog,
@@ -448,7 +451,7 @@ class _StatusDialog extends StatefulWidget {
   final Duration position;
   final Duration duration;
   final bool isPlaying;
-  final List<int> cpuHistory;
+  final List<double> cpuHistory;
   final ThemePreset themePreset;
 
   @override
@@ -719,23 +722,31 @@ class _StatusDialogState extends State<_StatusDialog> {
 }
 
 class _CpuAreaChartPainter extends CustomPainter {
-  final List<int> history;
+  final List<double> history;
   final Color color;
   _CpuAreaChartPainter({required this.history, required this.color});
 
-  Color _colorFor(int pct) {
-    final p = pct.clamp(0, 100);
+  /// Адаптивный максимум шкалы: max(max_history * 1.3, 5.0)
+  /// Минимум 5% чтобы при простое график не был плоским.
+  double get chartMax {
+    if (history.isEmpty) return 10.0;
+    final maxVal = history.reduce((a, b) => a > b ? a : b);
+    return (maxVal * 1.3).clamp(5.0, 100.0);
+  }
+
+  Color _colorFor(double pct) {
+    final p = pct.clamp(0.0, 100.0);
     if (p <= 50) {
       return Color.lerp(
         const Color(0xFF4CAF50),
         const Color(0xFFFFC107),
-        p / 50,
+        p / 50.0,
       )!;
     } else {
       return Color.lerp(
         const Color(0xFFFFC107),
         const Color(0xFFF44336),
-        (p - 50) / 50,
+        (p - 50.0) / 50.0,
       )!;
     }
   }
@@ -783,9 +794,9 @@ class _CpuAreaChartPainter extends CustomPainter {
 
     final points = <Offset>[];
     for (var i = 0; i < history.length; i++) {
-      final pct = history[i].clamp(0, 100);
+      final pct = history[i].clamp(0.0, 100.0);
       final x = i * stepX;
-      final y = size.height - (pct / 100) * size.height;
+      final y = size.height - (pct / cMax) * size.height;
       points.add(Offset(x, y));
     }
 
@@ -828,7 +839,7 @@ class _CpuAreaChartPainter extends CustomPainter {
       segPath.moveTo(p1.dx, p1.dy);
       _drawSmoothSegment(segPath, p0, p1, p2, p3);
 
-      final avgPct = ((history[i] + history[i + 1]) ~/ 2).clamp(0, 100);
+      final avgPct = ((history[i] + history[i + 1]) / 2).clamp(0.0, 100.0);
       final segColor = _colorFor(avgPct);
 
       final segPaint = Paint()
@@ -841,7 +852,7 @@ class _CpuAreaChartPainter extends CustomPainter {
     }
 
     if (history.isNotEmpty) {
-      final lastPct = history.last.clamp(0, 100);
+      final lastPct = history.last.clamp(0.0, 100.0);
       final lastX = (history.length - 1) * stepX;
       final lastY = size.height - (lastPct / 100) * size.height;
       final dotColor = _colorFor(lastPct);

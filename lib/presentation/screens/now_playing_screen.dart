@@ -236,7 +236,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                               children: [
                                 Icon(Icons.memory, size: 12, color: color),
                                 const SizedBox(width: 3),
-                                Text('$pct%',
+                                Text('${pct.toStringAsFixed(2)}%',
                                   style: TextStyle(color: color, fontSize: 11,
                                     fontWeight: FontWeight.bold,
                                     fontFamily: 'monospace', height: 1.0)),

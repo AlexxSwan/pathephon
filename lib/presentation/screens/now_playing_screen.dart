@@ -41,6 +41,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
   Timer? _cpuTimer;
   int _prevUtime = 0;
   int _prevStime = 0;
+  int _prevTotalJiffies = 0; // суммарные jiffies системы из /proc/stat
 
   @override
   void initState() { super.initState(); _startCpuMonitor(); }
@@ -60,6 +61,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
   void _readCpuStat() {
     try {
+      // 1. /proc/self/stat — jiffies потраченные НАШИМ процессом
       final stat = File('/proc/self/stat').readAsStringSync();
       final lastParen = stat.lastIndexOf(') ');
       if (lastParen < 0) return;
@@ -67,9 +69,30 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       if (fields.length < 13) return;
       final utime = int.parse(fields[11]);
       final stime = int.parse(fields[12]);
+      final processJiffies = utime + stime;
+
+      // 2. /proc/stat — суммарные jiffies ВСЕЙ системы (по всем ядрам)
+      // Первая строка: "cpu  user nice system idle iowait irq softirq steal guest guest_nice"
+      // Суммируем все поля кроме idle и iowait — это "active" jiffies
+      // НО для доли процесса лучше использовать ВСЕ поля (включая idle) как знаменатель
+      final cpuLine = File('/proc/stat').readAsStringSync().split('\n').first;
+      final cpuFields = cpuLine.split(RegExp(r'\s+'));
+      // cpuFields[0] = "cpu", [1..10] = числа
+      var totalJiffies = 0;
+      for (var i = 1; i < cpuFields.length && i < 11; i++) {
+        totalJiffies += int.tryParse(cpuFields[i]) ?? 0;
+      }
+
+      // 3. Считаем долю процесса от общего CPU
       if (_prevUtime > 0 || _prevStime > 0) {
-        final deltaJiffies = (utime - _prevUtime) + (stime - _prevStime);
-        final pct = deltaJiffies.clamp(0, 100);
+        final processDelta = processJiffies - (_prevUtime + _prevStime);
+        final totalDelta = totalJiffies - _prevTotalJiffies;
+        // cpu% = processDelta / totalDelta * 100
+        // На многоядерной системе totalDelta может быть > processDelta в N раз,
+        // где N = число ядер. Это правильно — отображаем ДОЛЮ от общего CPU.
+        final pct = totalDelta > 0
+            ? (processDelta * 100 / totalDelta).round().clamp(0, 100)
+            : 0;
         _cpuController.add(pct);
         for (var i = 0; i < _cpuHistory.length - 1; i++) {
           _cpuHistory[i] = _cpuHistory[i + 1];
@@ -78,6 +101,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
       }
       _prevUtime = utime;
       _prevStime = stime;
+      _prevTotalJiffies = totalJiffies;
     } catch (_) {}
   }
 

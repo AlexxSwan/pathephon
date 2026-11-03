@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 //  playback_controls.dart — Play/Pause/Next/Prev/Shuffle/Repeat cluster
 // ============================================================================
 import 'package:flutter/material.dart';
@@ -29,6 +29,7 @@ class PlaybackControls extends ConsumerWidget {
           onPressed: () {
             final next = !shuffle;
             ref.read(shuffleProvider.notifier).state = next;
+            ref.read(sharedPreferencesProvider).setBool('pathephon.shuffle.v1', next);
             playback.setShuffle(next);
           },
         ),
@@ -73,6 +74,7 @@ class PlaybackControls extends ConsumerWidget {
           onPressed: () {
             final next = repeat.next;
             ref.read(repeatModeProvider.notifier).state = next;
+            ref.read(sharedPreferencesProvider).setInt('pathephon.repeat.v1', next.index);
             playback.setRepeatMode(next);
           },
         ),

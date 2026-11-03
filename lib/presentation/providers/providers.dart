@@ -56,15 +56,10 @@ final playbackServiceProvider = Provider<PlaybackService>((ref) {
   final prefs = ref.watch(sharedPreferencesProvider);
   final svc = JustAudioPlaybackService(prefs);
   ref.onDispose(svc.dispose);
-
-  // On startup: restore queue in playback service.
-  // Library is restored separately by libraryRestoreProvider (see below).
   Future.microtask(() => svc.restoreSavedQueue());
-
   return svc;
 });
 
-// Separate provider to restore library - called from app startup
 final libraryRestoreProvider = FutureProvider<void>((ref) async {
   final prefs = ref.watch(sharedPreferencesProvider);
   try {
@@ -133,8 +128,6 @@ class LibraryNotifier extends StateNotifier<AsyncValue<List<Track>>> {
     state = AsyncValue.data(tracks);
   }
 
-  /// Добавляет треки в конец текущей очереди воспроизведения.
-  /// container передаётся снаружи (из виджета где есть ProviderScope).
   Future<void> addToCurrentQueue(List<Track> newTracks, ProviderContainer container) async {
     final current = state.valueOrNull ?? const <Track>[];
     final combined = [...current, ...newTracks];
@@ -195,13 +188,19 @@ final replayGainModeProvider = StateProvider<ReplayGainMode>((ref) {
 
 final isPlayingProvider = StateProvider<bool>((ref) => false);
 
-// Theme mode: 0=dark, 1=light, 2=system
 final themeModeProvider = StateProvider<int>((ref) {
   return ref.watch(sharedPreferencesProvider).getInt('pathephon.theme_mode') ?? 0;
 });
 
-final repeatModeProvider = StateProvider<RepeatMode>((ref) => RepeatMode.off);
-final shuffleProvider = StateProvider<bool>((ref) => false);
+final repeatModeProvider = StateProvider<RepeatMode>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return RepeatMode.values[prefs.getInt('pathephon.repeat.v1') ?? 0];
+});
+
+final shuffleProvider = StateProvider<bool>((ref) {
+  final prefs = ref.watch(sharedPreferencesProvider);
+  return prefs.getBool('pathephon.shuffle.v1') ?? false;
+});
 
 final audiobooksStateProvider =
     StateNotifierProvider<AudiobooksNotifier, AsyncValue<List<Audiobook>>>((ref) {

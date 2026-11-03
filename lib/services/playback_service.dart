@@ -1,7 +1,7 @@
-п»ї// ============================================================================
-//  playback_service.dart вЂ” v0.11.28+222
-//  РћС‚РєР°С‚ foreground service (РєСЂР°С€РёР» РїСЂРёР»РѕР¶РµРЅРёРµ РїСЂРё Р·Р°РїСѓСЃРєРµ РІРѕСЃРїСЂРѕРёР·РІРµРґРµРЅРёСЏ).
-//  Р’РѕР·РІСЂР°С‰РµРЅС‹ guards РѕС‚ СЂРµРєСѓСЂСЃРёРё Рё РґРµРґСѓРїР»РёРєР°С†РёСЏ durationStream.
+// ============================================================================
+//  playback_service.dart — v0.11.28+222
+//  Откат foreground service (крашил приложение при запуске воспроизведения).
+//  Возвращены guards от рекурсии и дедупликация durationStream.
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -66,8 +66,6 @@ class JustAudioPlaybackService implements PlaybackService {
   static const _queueKey = 'pathephon.queue.v1';
   static const _indexKey = 'pathephon.queue.index.v1';
   static const _positionKey = 'pathephon.queue.position.v1';
-  static const _shuffleKey = 'pathephon.shuffle.v1';
-  static const _repeatKey = 'pathephon.repeat.v1';
   static const _shuffleKey = 'pathephon.shuffle.v1';
   static const _repeatKey = 'pathephon.repeat.v1';
 
@@ -536,8 +534,8 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 
-  /// Р—Р°РїСЂРѕСЃРёС‚СЊ exemption РѕС‚ РѕРїС‚РёРјРёР·Р°С†РёРё Р±Р°С‚Р°СЂРµРё (РѕРґРёРЅ СЂР°Р·).
-  /// ColorOS РїРµСЂРµСЃС‚Р°С‘С‚ СѓР±РёРІР°С‚СЊ РїСЂРѕС†РµСЃСЃ РїРѕСЃР»Рµ СЂР°Р·СЂРµС€РµРЅРёСЏ РїРѕР»СЊР·РѕРІР°С‚РµР»СЏ.
+  /// Запросить exemption от оптимизации батареи (один раз).
+  /// ColorOS перестаёт убивать процесс после разрешения пользователя.
   Future<void> _requestBatteryExemptionIfNeeded() async {
     try {
       final alreadyAsked = _prefs.getBool('pathephon.battery_exempt_requested') ?? false;
@@ -557,7 +555,7 @@ class JustAudioPlaybackService implements PlaybackService {
     }
   }
 
-  /// dispose РЅРµ РІ РёРЅС‚РµСЂС„РµР№СЃРµ PlaybackService вЂ” @override РЅРµ РЅСѓР¶РµРЅ
+  /// dispose не в интерфейсе PlaybackService — @override не нужен
   void dispose() {
     _stateController.close();
     _sessionIdController.close();

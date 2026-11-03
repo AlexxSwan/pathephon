@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 //  playback_service.dart — v0.11.28+222
 //  Откат foreground service (крашил приложение при запуске воспроизведения).
 //  Возвращены guards от рекурсии и дедупликация durationStream.
@@ -66,6 +66,10 @@ class JustAudioPlaybackService implements PlaybackService {
   static const _queueKey = 'pathephon.queue.v1';
   static const _indexKey = 'pathephon.queue.index.v1';
   static const _positionKey = 'pathephon.queue.position.v1';
+  static const _shuffleKey = 'pathephon.shuffle.v1';
+  static const _repeatKey = 'pathephon.repeat.v1';
+  static const _shuffleKey = 'pathephon.shuffle.v1';
+  static const _repeatKey = 'pathephon.repeat.v1';
 
   final _player = AudioPlayer();
   final _initCompleter = Completer<void>();
@@ -291,6 +295,17 @@ class JustAudioPlaybackService implements PlaybackService {
   Future<void> restoreSavedQueue() async {
     try {
       await _initCompleter.future;
+      _shuffle = _prefs.getBool(_shuffleKey) ?? false;
+      _repeat = RepeatMode.values[_prefs.getInt(_repeatKey) ?? 0];
+      try { await _player.setShuffleModeEnabled(_shuffle); } catch (_) {}
+      try {
+        final am = switch (_repeat) {
+          RepeatMode.off => LoopMode.off, RepeatMode.all => LoopMode.all, RepeatMode.one => LoopMode.one,
+        };
+        await _player.setLoopMode(am);
+      } catch (_) {}
+      crashLogger.log('Restored: shuffle=$_shuffle, repeat=$_repeat');
+
       final raw = _prefs.getString(_queueKey);
       if (raw == null) return;
       final list = jsonDecode(raw) as List;
@@ -470,6 +485,8 @@ class JustAudioPlaybackService implements PlaybackService {
       await _initCompleter.future;
       _shuffle = enabled;
       await _player.setShuffleModeEnabled(enabled);
+      try { await _prefs.setBool(_shuffleKey, enabled); } catch (_) {}
+      try { await _prefs.setBool(_shuffleKey, enabled); } catch (_) {}
     } catch (e, st) { crashLogger.error('setShuffle($enabled) failed', e, st); }
   }
 
@@ -482,6 +499,8 @@ class JustAudioPlaybackService implements PlaybackService {
         RepeatMode.off => LoopMode.off, RepeatMode.all => LoopMode.all, RepeatMode.one => LoopMode.one,
       };
       await _player.setLoopMode(am);
+      try { await _prefs.setInt(_repeatKey, mode.index); } catch (_) {}
+      try { await _prefs.setInt(_repeatKey, mode.index); } catch (_) {}
     } catch (e, st) { crashLogger.error('setRepeatMode($mode) failed', e, st); }
   }
 

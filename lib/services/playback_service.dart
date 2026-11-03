@@ -1,7 +1,6 @@
 // ============================================================================
-//  playback_service.dart — v0.11.28+222
-//  Откат foreground service (крашил приложение при запуске воспроизведения).
-//  Возвращены guards от рекурсии и дедупликация durationStream.
+//  playback_service.dart вЂ” v0.11.36+230
+//  РЎРѕС…СЂР°РЅРµРЅРёРµ/РІРѕСЃСЃС‚Р°РЅРѕРІР»РµРЅРёРµ: queue, index, position, shuffle, repeat, EQ
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -73,8 +72,8 @@ class JustAudioPlaybackService implements PlaybackService {
   final _initCompleter = Completer<void>();
 
   static const _nativeChannel = MethodChannel('pathephon/native_media_session');
-  static const _batteryChannel = MethodChannel('pathephon/battery');
   static const _tagChannel = MethodChannel('pathephon/tag_reader');
+  static const _batteryChannel = MethodChannel('pathephon/battery');
 
   List<Track> _queue = const [];
   int _index = 0;
@@ -374,10 +373,29 @@ class JustAudioPlaybackService implements PlaybackService {
       crashLogger.log('playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
       _requestBatteryExemptionIfNeeded();
-     } catch (e, st) {
+    } catch (e, st) {
       crashLogger.error('playQueue(startIndex=$startIndex, count=${tracks.length}) FAILED', e, st);
       _stateController.add(PlaybackSnapshot.empty);
       try { _notifyNativePlaybackState(false); } catch (_) {}
+    }
+  }
+
+  Future<void> _requestBatteryExemptionIfNeeded() async {
+    try {
+      final alreadyAsked = _prefs.getBool('pathephon.battery_exempt_requested') ?? false;
+      if (alreadyAsked) return;
+      final isIgnoring = await _batteryChannel.invokeMethod<bool>('isIgnoringBatteryOptimizations') ?? false;
+      if (isIgnoring) {
+        await _prefs.setBool('pathephon.battery_exempt_requested', true);
+        crashLogger.log('Battery optimization already exempt');
+        return;
+      }
+      crashLogger.log('Requesting battery optimization exemption...');
+      await _batteryChannel.invokeMethod<bool>('requestIgnoreBatteryOptimizations');
+      await _prefs.setBool('pathephon.battery_exempt_requested', true);
+      crashLogger.log('Battery optimization exemption requested');
+    } catch (e, st) {
+      crashLogger.error('_requestBatteryExemptionIfNeeded failed', e, st);
     }
   }
 
@@ -484,7 +502,6 @@ class JustAudioPlaybackService implements PlaybackService {
       _shuffle = enabled;
       await _player.setShuffleModeEnabled(enabled);
       try { await _prefs.setBool(_shuffleKey, enabled); } catch (_) {}
-      try { await _prefs.setBool(_shuffleKey, enabled); } catch (_) {}
     } catch (e, st) { crashLogger.error('setShuffle($enabled) failed', e, st); }
   }
 
@@ -497,7 +514,6 @@ class JustAudioPlaybackService implements PlaybackService {
         RepeatMode.off => LoopMode.off, RepeatMode.all => LoopMode.all, RepeatMode.one => LoopMode.one,
       };
       await _player.setLoopMode(am);
-      try { await _prefs.setInt(_repeatKey, mode.index); } catch (_) {}
       try { await _prefs.setInt(_repeatKey, mode.index); } catch (_) {}
     } catch (e, st) { crashLogger.error('setRepeatMode($mode) failed', e, st); }
   }
@@ -534,28 +550,6 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 
-  /// Запросить exemption от оптимизации батареи (один раз).
-  /// ColorOS перестаёт убивать процесс после разрешения пользователя.
-  Future<void> _requestBatteryExemptionIfNeeded() async {
-    try {
-      final alreadyAsked = _prefs.getBool('pathephon.battery_exempt_requested') ?? false;
-      if (alreadyAsked) return;
-      final isIgnoring = await _batteryChannel.invokeMethod<bool>('isIgnoringBatteryOptimizations') ?? false;
-      if (isIgnoring) {
-        await _prefs.setBool('pathephon.battery_exempt_requested', true);
-        crashLogger.log('Battery optimization already exempt');
-        return;
-      }
-      crashLogger.log('Requesting battery optimization exemption...');
-      await _batteryChannel.invokeMethod<bool>('requestIgnoreBatteryOptimizations');
-      await _prefs.setBool('pathephon.battery_exempt_requested', true);
-      crashLogger.log('Battery optimization exemption requested (user saw dialog)');
-    } catch (e, st) {
-      crashLogger.error('_requestBatteryExemptionIfNeeded failed', e, st);
-    }
-  }
-
-  /// dispose не в интерфейсе PlaybackService — @override не нужен
   void dispose() {
     _stateController.close();
     _sessionIdController.close();

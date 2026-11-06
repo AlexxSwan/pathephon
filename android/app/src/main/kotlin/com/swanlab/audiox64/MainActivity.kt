@@ -192,7 +192,27 @@ class MainActivity : FlutterActivity() {
         Log.i(TAG, ">>> battery channel registered")
     }
 
-    override fun onDestroy() {
+    override fun onTrimMemory(level: Int) {
+    super.onTrimMemory(level)
+    val levelStr = when (level) {
+        TRIM_MEMORY_COMPLETE -> 'COMPLETE (critical)'
+        TRIM_MEMORY_MODERATE -> 'MODERATE'
+        TRIM_MEMORY_BACKGROUND -> 'BACKGROUND'
+        TRIM_MEMORY_UI_HIDDEN -> 'UI_HIDDEN'
+        TRIM_MEMORY_RUNNING_CRITICAL -> 'RUNNING_CRITICAL'
+        TRIM_MEMORY_RUNNING_LOW -> 'RUNNING_LOW'
+        TRIM_MEMORY_RUNNING_MODERATE -> 'RUNNING_MODERATE'
+        else -> 'UNKNOWN()'
+    }
+    Log.w(TAG, '>>> onTrimMemory: ')
+  }
+
+  override fun onLowMemory() {
+    super.onLowMemory()
+    Log.w(TAG, '>>> onLowMemory: about to be killed!')
+  }
+
+  override fun onDestroy() {
         visualizerPlugin?.dispose()
         equalizerPlugin?.dispose()
         visualizerPlugin = null

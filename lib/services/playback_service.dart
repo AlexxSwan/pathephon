@@ -101,6 +101,15 @@ class JustAudioPlaybackService implements PlaybackService {
       await session.configure(const AudioSessionConfiguration.music());
       await session.setActive(true);
       crashLogger.log('AudioSession OK + active');
+
+      session.interruptionEventStream.listen((event) {
+        crashLogger.log('Audio interruption: type=${event.type}, begin=${event.begin}');
+      });
+      session.devicesChangedEventStream.listen((devices) {
+        crashLogger.log('Audio devices changed: ${devices.devicesRemoved.length} removed, ${devices.devicesAdded.length} added');
+        for (final d in devices.devicesRemoved) { crashLogger.log('  Device REMOVED: ${d.name}'); }
+        for (final d in devices.devicesAdded) { crashLogger.log('  Device ADDED: ${d.name}'); }
+      });
     } catch (e, st) {
       crashLogger.error('AudioSession failed', e, st);
     }
@@ -449,6 +458,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _initCompleter.future;
       await _player.pause();
       await _savePosition();
+      try { await _prefs.setString('pathephon.last_exit', 'clean'); } catch (_) {}
     } catch (e, st) { crashLogger.error('pause() failed', e, st); }
   }
 

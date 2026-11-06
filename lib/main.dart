@@ -32,6 +32,21 @@ void setLaunchIntentCallback(void Function(String uri, String name) callback) {
   });
 }
 
+/// Логирует изменения жизненного цикла приложения.
+class _LifecycleLogger extends WidgetsBindingObserver {
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    crashLogger.log('AppLifecycle: ');
+    if (state == AppLifecycleState.paused) {
+      crashLogger.log('App paused (going to background)');
+    } else if (state == AppLifecycleState.detached) {
+      crashLogger.log('App detached (being killed)');
+    } else if (state == AppLifecycleState.resumed) {
+      crashLogger.log('App resumed (back to foreground)');
+    }
+  }
+}
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
@@ -43,6 +58,9 @@ Future<void> main() async {
       crashLogger.error('FlutterError', details.exception, details.stack);
       FlutterError.presentError(details);
     };
+
+    // Логирование жизненного цикла приложения
+    WidgetsBinding.instance.addObserver(_LifecycleLogger());
 
     // 2. Unhandled ошибки UI thread
     PlatformDispatcher.instance.onError = (Object error, StackTrace stack) {

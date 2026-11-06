@@ -1,6 +1,6 @@
 // ============================================================================
-//  playback_service.dart — v0.11.36+230
-//  Сохранение/восстановление: queue, index, position, shuffle, repeat, EQ
+//  playback_service.dart — v0.11.39+233
+//  Фиксы: auto-advance on track complete + position clamp + shuffle/repeat persist
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -67,13 +67,13 @@ class JustAudioPlaybackService implements PlaybackService {
   static const _positionKey = 'pathephon.queue.position.v1';
   static const _shuffleKey = 'pathephon.shuffle.v1';
   static const _repeatKey = 'pathephon.repeat.v1';
+  static const _batteryChannel = MethodChannel('pathephon/battery');
 
   final _player = AudioPlayer();
   final _initCompleter = Completer<void>();
 
   static const _nativeChannel = MethodChannel('pathephon/native_media_session');
   static const _tagChannel = MethodChannel('pathephon/tag_reader');
-  static const _batteryChannel = MethodChannel('pathephon/battery');
 
   List<Track> _queue = const [];
   int _index = 0;
@@ -108,6 +108,19 @@ class JustAudioPlaybackService implements PlaybackService {
     _stateController.add(PlaybackSnapshot.empty);
 
     _player.playerStateStream.listen((st) {
+      if (st.processingState == ProcessingState.completed) {
+        crashLogger.log('Track completed, auto-advancing');
+        if (_player.hasNext) {
+          _player.seekToNext().then((_) {
+            _player.play();
+            _notifyNativePlaybackState(true);
+          });
+        } else {
+          _player.seek(Duration.zero);
+          _notifyNativePlaybackState(false);
+        }
+        return;
+      }
       _emitState(st);
       _savePosition();
       _notifyNativePlaybackState(st.playing);
@@ -184,9 +197,14 @@ class JustAudioPlaybackService implements PlaybackService {
 
   void _notifyNativePlaybackState(bool playing) {
     try {
+      var posMs = _player.position.inMilliseconds;
+      final durMs = _player.duration?.inMilliseconds ?? 0;
+      if (durMs > 0 && posMs >= durMs) {
+        posMs = (durMs - 500).clamp(0, durMs);
+      }
       _nativeChannel.invokeMethod('setPlaybackState', {
         'playing': playing,
-        'position': _player.position.inMilliseconds,
+        'position': posMs,
         'hasNext': _player.hasNext,
         'hasPrev': _player.hasPrevious,
       });
@@ -263,10 +281,15 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       final currentIndex = _player.currentIndex ?? _index;
       _index = currentIndex;
+      var pos = _player.position;
+      final dur = _player.duration ?? Duration.zero;
+      if (dur.inMilliseconds > 0 && pos.inMilliseconds >= dur.inMilliseconds) {
+        pos = Duration(milliseconds: (dur.inMilliseconds - 500).clamp(0, dur.inMilliseconds));
+      }
       _stateController.add(PlaybackSnapshot(
         current: _queue.isEmpty ? null : _queue[currentIndex.clamp(0, _queue.length - 1)],
         queue: _queue, index: currentIndex,
-        position: _player.position, duration: _player.duration ?? Duration.zero,
+        position: pos, duration: dur,
         isPlaying: st.playing,
         isBuffering: st.processingState == ProcessingState.loading || st.processingState == ProcessingState.buffering,
         shuffle: _shuffle, repeatMode: _repeat, replayGainMode: _rg,

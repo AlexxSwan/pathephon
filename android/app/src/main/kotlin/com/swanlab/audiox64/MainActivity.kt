@@ -195,14 +195,14 @@ class MainActivity : FlutterActivity() {
     override fun onTrimMemory(level: Int) {
     super.onTrimMemory(level)
     val levelStr = when (level) {
-        TRIM_MEMORY_COMPLETE -> 'COMPLETE (critical)'
-        TRIM_MEMORY_MODERATE -> 'MODERATE'
-        TRIM_MEMORY_BACKGROUND -> 'BACKGROUND'
-        TRIM_MEMORY_UI_HIDDEN -> 'UI_HIDDEN'
-        TRIM_MEMORY_RUNNING_CRITICAL -> 'RUNNING_CRITICAL'
-        TRIM_MEMORY_RUNNING_LOW -> 'RUNNING_LOW'
-        TRIM_MEMORY_RUNNING_MODERATE -> 'RUNNING_MODERATE'
-        else -> 'UNKNOWN()'
+        TRIM_MEMORY_COMPLETE -> "COMPLETE (critical)"
+        TRIM_MEMORY_MODERATE -> "MODERATE"
+        TRIM_MEMORY_BACKGROUND -> "BACKGROUND"
+        TRIM_MEMORY_UI_HIDDEN -> "UI_HIDDEN"
+        TRIM_MEMORY_RUNNING_CRITICAL -> "RUNNING_CRITICAL"
+        TRIM_MEMORY_RUNNING_LOW -> "RUNNING_LOW"
+        TRIM_MEMORY_RUNNING_MODERATE -> "RUNNING_MODERATE"
+        else -> "UNKNOWN()"
     }
     Log.w(TAG, '>>> onTrimMemory: ')
   }

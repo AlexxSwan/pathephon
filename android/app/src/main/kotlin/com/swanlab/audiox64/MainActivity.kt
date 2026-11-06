@@ -204,12 +204,12 @@ class MainActivity : FlutterActivity() {
         TRIM_MEMORY_RUNNING_MODERATE -> "RUNNING_MODERATE"
         else -> "UNKNOWN()"
     }
-    Log.w(TAG, '>>> onTrimMemory: ')
+    Log.w(TAG, ">>> onTrimMemory: " + levelStr)
   }
 
   override fun onLowMemory() {
     super.onLowMemory()
-    Log.w(TAG, '>>> onLowMemory: about to be killed!')
+    Log.w(TAG, ">>> onLowMemory: about to be killed!")
   }
 
   override fun onDestroy() {

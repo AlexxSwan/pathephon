@@ -31,16 +31,15 @@ class MainActivity : FlutterActivity() {
     private var pendingLaunchContent: String? = null
     private var launchChannel: MethodChannel? = null
     private var batteryChannel: MethodChannel? = null
-    private var mediaSessionHelper: MediaSessionHelper? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.i(TAG, ">>> onCreate")
         try {
-            MediaPlaybackService.start(this)
-            Log.i(TAG, ">>> MediaPlaybackService started from onCreate")
+            KeepAliveService.start(this)
+            Log.i(TAG, ">>> KeepAliveService started")
         } catch (e: Exception) {
-            Log.e(TAG, ">>> Failed to start service: ${e.message}")
+            Log.e(TAG, ">>> KeepAliveService start failed: ${e.message}")
         }
         handleLaunchIntent(intent)
     }
@@ -126,7 +125,6 @@ class MainActivity : FlutterActivity() {
         visualizerPlugin = VisualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         equalizerPlugin = EqualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
-        mediaSessionHelper = MediaSessionHelper(flutterEngine.dartExecutor.binaryMessenger, this)
         flutterEngine.plugins.add(MediaSessionPlugin())
         flutterEngine.plugins.add(TagReaderPlugin())
         Log.i(TAG, ">>> TagReaderPlugin registered")
@@ -192,7 +190,7 @@ class MainActivity : FlutterActivity() {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         val levelStr = when (level) {
-            TRIM_MEMORY_COMPLETE -> "COMPLETE (critical)"
+            TRIM_MEMORY_COMPLETE -> "COMPLETE"
             TRIM_MEMORY_MODERATE -> "MODERATE"
             TRIM_MEMORY_BACKGROUND -> "BACKGROUND"
             TRIM_MEMORY_UI_HIDDEN -> "UI_HIDDEN"
@@ -212,13 +210,12 @@ class MainActivity : FlutterActivity() {
     override fun onDestroy() {
         visualizerPlugin?.dispose()
         equalizerPlugin?.dispose()
-        mediaSessionHelper?.dispose()
         visualizerPlugin = null
         equalizerPlugin = null
         folderScannerPlugin = null
-        mediaSessionHelper = null
         launchChannel = null
         batteryChannel = null
+        KeepAliveService.stop(this)
         super.onDestroy()
     }
 

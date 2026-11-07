@@ -140,7 +140,7 @@ class MediaPlaybackService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 Log.i("MediaService", "START command")
-                startForeground(NOTIFICATION_ID, buildNotification(false))
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) { startForeground(NOTIFICATION_ID, buildNotification(false), ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK) } else { startForeground(NOTIFICATION_ID, buildNotification(false)) }
             }
             ACTION_STOP -> {
                 Log.i("MediaService", "STOP command")

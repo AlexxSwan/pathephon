@@ -70,13 +70,10 @@
             android:value="2" />
 
         <service
-            android:name="com.ryanheise.audioservice.AudioService"
+            android:name=".MediaPlaybackService"
             android:foregroundServiceType="mediaPlayback"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.media.browse.MediaBrowserService" />
-            </intent-filter>
-        </service>
+            android:exported="false">
+            </service>
 <!-- Наш receiver для BT-кнопок — приоритет выше чем у audio_service -->
         <receiver
             android:name="com.swanlab.audiox64.PathephonMediaButtonReceiver"

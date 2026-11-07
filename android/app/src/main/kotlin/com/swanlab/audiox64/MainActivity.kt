@@ -30,7 +30,7 @@ class MainActivity : FlutterActivity() {
     private var pendingLaunchName: String? = null
     private var pendingLaunchContent: String? = null
     private var launchChannel: MethodChannel? = null
-    private var batteryChannel: MethodChannel? = null
+    private var batteryChannel: MethodChannel? = null`n    private var mediaSessionHelper: MediaSessionHelper? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -124,7 +124,7 @@ class MainActivity : FlutterActivity() {
         createPlaybackNotificationChannel()
         visualizerPlugin = VisualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         equalizerPlugin = EqualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
-        folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
+        folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)`n        mediaSessionHelper = MediaSessionHelper(flutterEngine.dartExecutor.binaryMessenger, this)
         flutterEngine.plugins.add(MediaSessionPlugin())
         flutterEngine.plugins.add(TagReaderPlugin())
         Log.i(TAG, ">>> TagReaderPlugin registered")
@@ -217,7 +217,7 @@ class MainActivity : FlutterActivity() {
         equalizerPlugin?.dispose()
         visualizerPlugin = null
         equalizerPlugin = null
-        folderScannerPlugin = null
+        folderScannerPlugin = null`n        mediaSessionHelper = null
         launchChannel = null
         batteryChannel = null
         super.onDestroy()

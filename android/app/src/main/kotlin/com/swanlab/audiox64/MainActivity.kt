@@ -30,11 +30,18 @@ class MainActivity : FlutterActivity() {
     private var pendingLaunchName: String? = null
     private var pendingLaunchContent: String? = null
     private var launchChannel: MethodChannel? = null
-    private var batteryChannel: MethodChannel? = null`n    private var mediaSessionHelper: MediaSessionHelper? = null
+    private var batteryChannel: MethodChannel? = null
+    private var mediaSessionHelper: MediaSessionHelper? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         Log.i(TAG, ">>> onCreate")
+        try {
+            MediaPlaybackService.start(this)
+            Log.i(TAG, ">>> MediaPlaybackService started from onCreate")
+        } catch (e: Exception) {
+            Log.e(TAG, ">>> Failed to start service: ${e.message}")
+        }
         handleLaunchIntent(intent)
     }
 
@@ -50,7 +57,6 @@ class MainActivity : FlutterActivity() {
             if (data != null) {
                 pendingLaunchUri = data.toString()
                 pendingLaunchName = queryFileName(data)
-                // Для .m3u файлов — читаем контент
                 val isM3u = pendingLaunchName?.endsWith(".m3u") == true ||
                              pendingLaunchName?.endsWith(".m3u8") == true ||
                              data.toString().contains(".m3u")
@@ -65,7 +71,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /// Читает текстовый файл из Uri (для .m3u).
     private fun readFileContent(uri: android.net.Uri): String? {
         return try {
             contentResolver.openInputStream(uri)?.use { input ->
@@ -77,7 +82,6 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    /// Получает имя файла из Uri (работает для content:// и file://).
     private fun queryFileName(uri: android.net.Uri): String? {
         if (uri.scheme == "file") {
             return uri.lastPathSegment
@@ -101,9 +105,6 @@ class MainActivity : FlutterActivity() {
     private fun trySendLaunchIntent() {
         val uri = pendingLaunchUri ?: return
         val ch = launchChannel ?: return
-        // Отправляем имя файла вместе с uri через pathephon/launch_intent channel.
-        // SystemChannels.navigation не позволяет передать extra данные, поэтому
-        // используем свой channel.
         launchChannel?.invokeMethod(
             "onLaunchIntent",
             mapOf("uri" to uri, "name" to (pendingLaunchName ?: ""))
@@ -124,15 +125,13 @@ class MainActivity : FlutterActivity() {
         createPlaybackNotificationChannel()
         visualizerPlugin = VisualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
         equalizerPlugin = EqualizerPlugin(flutterEngine.dartExecutor.binaryMessenger)
-        folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)`n        mediaSessionHelper = MediaSessionHelper(flutterEngine.dartExecutor.binaryMessenger, this)
+        folderScannerPlugin = FolderScannerPlugin(flutterEngine.dartExecutor.binaryMessenger, this)
+        mediaSessionHelper = MediaSessionHelper(flutterEngine.dartExecutor.binaryMessenger, this)
         flutterEngine.plugins.add(MediaSessionPlugin())
         flutterEngine.plugins.add(TagReaderPlugin())
         Log.i(TAG, ">>> TagReaderPlugin registered")
         Log.i(TAG, ">>> MediaSessionPlugin registered")
 
-        // Channel для передачи ACTION_VIEW intent в Dart.
-        // Используем push-модель: Kotlin сам вызывает onLaunchIntent когда
-        // есть данные, а не ждёт пока Dart попросит.
         launchChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, LAUNCH_CHANNEL)
         launchChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -155,10 +154,8 @@ class MainActivity : FlutterActivity() {
             }
         }
         Log.i(TAG, ">>> launch_intent channel registered")
-        // Если intent пришёл ДО регистрации channel — отправляем сейчас
         trySendLaunchIntent()
 
-        // Battery optimization exemption channel
         batteryChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, BATTERY_CHANNEL)
         batteryChannel!!.setMethodCallHandler { call, result ->
             when (call.method) {
@@ -193,31 +190,33 @@ class MainActivity : FlutterActivity() {
     }
 
     override fun onTrimMemory(level: Int) {
-    super.onTrimMemory(level)
-    val levelStr = when (level) {
-        TRIM_MEMORY_COMPLETE -> "COMPLETE (critical)"
-        TRIM_MEMORY_MODERATE -> "MODERATE"
-        TRIM_MEMORY_BACKGROUND -> "BACKGROUND"
-        TRIM_MEMORY_UI_HIDDEN -> "UI_HIDDEN"
-        TRIM_MEMORY_RUNNING_CRITICAL -> "RUNNING_CRITICAL"
-        TRIM_MEMORY_RUNNING_LOW -> "RUNNING_LOW"
-        TRIM_MEMORY_RUNNING_MODERATE -> "RUNNING_MODERATE"
-        else -> "UNKNOWN()"
+        super.onTrimMemory(level)
+        val levelStr = when (level) {
+            TRIM_MEMORY_COMPLETE -> "COMPLETE (critical)"
+            TRIM_MEMORY_MODERATE -> "MODERATE"
+            TRIM_MEMORY_BACKGROUND -> "BACKGROUND"
+            TRIM_MEMORY_UI_HIDDEN -> "UI_HIDDEN"
+            TRIM_MEMORY_RUNNING_CRITICAL -> "RUNNING_CRITICAL"
+            TRIM_MEMORY_RUNNING_LOW -> "RUNNING_LOW"
+            TRIM_MEMORY_RUNNING_MODERATE -> "RUNNING_MODERATE"
+            else -> "UNKNOWN($level)"
+        }
+        Log.w(TAG, ">>> onTrimMemory: " + levelStr)
     }
-    Log.w(TAG, ">>> onTrimMemory: " + levelStr)
-  }
 
-  override fun onLowMemory() {
-    super.onLowMemory()
-    Log.w(TAG, ">>> onLowMemory: about to be killed!")
-  }
+    override fun onLowMemory() {
+        super.onLowMemory()
+        Log.w(TAG, ">>> onLowMemory: about to be killed!")
+    }
 
-  override fun onDestroy() {
+    override fun onDestroy() {
         visualizerPlugin?.dispose()
         equalizerPlugin?.dispose()
+        mediaSessionHelper?.dispose()
         visualizerPlugin = null
         equalizerPlugin = null
-        folderScannerPlugin = null`n        mediaSessionHelper = null
+        folderScannerPlugin = null
+        mediaSessionHelper = null
         launchChannel = null
         batteryChannel = null
         super.onDestroy()

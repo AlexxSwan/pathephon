@@ -5,6 +5,7 @@ import "package:package_info_plus/package_info_plus.dart";
 import "package:share_plus/share_plus.dart";
 import "../../core/theme/retro_theme.dart";
 import "../../services/crash_logger.dart";
+import "../../services/playback_service.dart";
 import "../providers/providers.dart";
 
 class AboutScreen extends ConsumerStatefulWidget {
@@ -90,6 +91,40 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     );
   }
 
+  Future<void> _showStatistics() async {
+    final playback = ref.read(playbackServiceProvider);
+    final stats = playback.getStatistics();
+    final p = Preset.of(context);
+    String fmt(int ms) {
+      final s = ms ~/ 1000;
+      final y = s ~/ 31536000; final mo = (s % 31536000) ~/ 2592000;
+      final d = (s % 2592000) ~/ 86400; final h = (s % 86400) ~/ 3600;
+      final mi = (s % 3600) ~/ 60; final se = s % 60;
+      final parts = <String>[];
+      if (y > 0) parts.add('$y г.'); if (mo > 0) parts.add('$mo мес.');
+      if (d > 0) parts.add('$d дн.'); if (h > 0) parts.add('$h ч.');
+      if (mi > 0) parts.add('$mi мин.'); parts.add('$se сек.');
+      return parts.join(' ');
+    }
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surfaceVariant,
+        title: Text('Статистика', style: TextStyle(color: p.accent, fontSize: 16)),
+        content: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('За всё время:', style: TextStyle(color: p.brass, fontSize: 13, fontWeight: FontWeight.bold)),
+          Text('Время: ${fmt(stats['alltime_play_ms'] as int)}', style: TextStyle(color: p.textPrimary, fontSize: 12, fontFamily: 'monospace')),
+          Text('Треков: ${stats['alltime_tracks']}', style: TextStyle(color: p.textPrimary, fontSize: 12, fontFamily: 'monospace')),
+          SizedBox(height: 16),
+          Text('Текущая сессия:', style: TextStyle(color: p.brass, fontSize: 13, fontWeight: FontWeight.bold)),
+          Text('Время: ${fmt(stats['session_play_ms'] as int)}', style: TextStyle(color: p.textPrimary, fontSize: 12, fontFamily: 'monospace')),
+          Text('Треков: ${stats['session_tracks']}', style: TextStyle(color: p.textPrimary, fontSize: 12, fontFamily: 'monospace')),
+        ]),
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Закрыть', style: TextStyle(color: p.brass)))],
+      ),
+    );
+  }
+
   Future<void> _shareLog() async {
     try {
       final logPath = crashLogger.publicLogPath;
@@ -158,6 +193,16 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
           label: Text("Лог крашей", style: TextStyle(color: p.accentHot)),
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: p.accentHot.withOpacity(0.5)),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: _showStatistics,
+          icon: Icon(Icons.bar_chart, size: 18, color: p.brass),
+          label: Text('Статистика', style: TextStyle(color: p.brass)),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: p.brass.withOpacity(0.5)),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
         ),

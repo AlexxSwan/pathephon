@@ -83,6 +83,10 @@ class JustAudioPlaybackService implements PlaybackService {
 
   bool _isReadingTags = false;
   int? _lastDurationMs;
+  DateTime _sessionStart = DateTime.now();
+  int _sessionTracksPlayed = 0;
+  int _sessionPlayTimeMs = 0;
+  DateTime? _playStartTime;
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
@@ -137,6 +141,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
+        if (seqState.currentIndex != _index) { _sessionTracksPlayed++; }
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
         _updateMediaItem();
@@ -205,6 +210,8 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   void _notifyNativePlaybackState(bool playing) {
+    if (playing && _playStartTime == null) { _playStartTime = DateTime.now(); }
+    else if (!playing && _playStartTime != null) { _sessionPlayTimeMs += DateTime.now().difference(_playStartTime!).inMilliseconds; _playStartTime = null; }
     try {
       var posMs = _player.position.inMilliseconds;
       final durMs = _player.duration?.inMilliseconds ?? 0;
@@ -367,6 +374,11 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       if (tracks.isEmpty) return;
       _queue = List.unmodifiable([..._queue, ...tracks]);
+      final sources = tracks.map(_toSource).toList();
+      final currentSource = _player.audioSource;
+      if (currentSource is ConcatenatingAudioSource) {
+        for (final s in sources) { await currentSource.add(s); }
+      }
       await _saveQueue();
     } catch (e, st) {
       crashLogger.error('addToQueue failed', e, st);
@@ -583,7 +595,27 @@ class JustAudioPlaybackService implements PlaybackService {
   @override
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled}) async {}
 
+  Map<String, dynamic> getStatistics() {
+    var totalPlayMs = _sessionPlayTimeMs;
+    if (_playStartTime != null) { totalPlayMs += DateTime.now().difference(_playStartTime!).inMilliseconds; }
+    final allTimeMs = _prefs.getInt('pathephon.stats.playtime_ms') ?? 0;
+    final allTimeTracks = _prefs.getInt('pathephon.stats.tracks_played') ?? 0;
+    return { 'session_play_ms': totalPlayMs, 'session_tracks': _sessionTracksPlayed, 'alltime_play_ms': allTimeMs + totalPlayMs, 'alltime_tracks': allTimeTracks + _sessionTracksPlayed };
+  }
+
+  void saveStatistics() {
+    try {
+      var totalPlayMs = _sessionPlayTimeMs;
+      if (_playStartTime != null) { totalPlayMs += DateTime.now().difference(_playStartTime!).inMilliseconds; }
+      final allTimeMs = _prefs.getInt('pathephon.stats.playtime_ms') ?? 0;
+      final allTimeTracks = _prefs.getInt('pathephon.stats.tracks_played') ?? 0;
+      _prefs.setInt('pathephon.stats.playtime_ms', allTimeMs + totalPlayMs);
+      _prefs.setInt('pathephon.stats.tracks_played', allTimeTracks + _sessionTracksPlayed);
+    } catch (_) {}
+  }
+
   void dispose() {
+    saveStatistics();
     _stateController.close();
     _sessionIdController.close();
     _player.dispose();

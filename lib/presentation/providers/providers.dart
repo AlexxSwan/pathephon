@@ -139,10 +139,7 @@ class LibraryNotifier extends StateNotifier<AsyncValue<List<Track>>> {
       if (existing.isEmpty) {
         await playback.playQueue(tracks: combined, startIndex: 0);
       } else {
-        await playback.playQueue(
-          tracks: [...existing, ...newTracks],
-          startIndex: snap?.index ?? 0,
-        );
+        await playback.addToQueue(newTracks);
       }
     } catch (e) {
       print('[pathephon] addToCurrentQueue failed: $e');

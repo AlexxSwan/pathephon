@@ -164,7 +164,7 @@ class JustAudioPlaybackService implements PlaybackService {
     });
 
     Timer.periodic(const Duration(seconds: 5), (_) {
-      if (_queue.isNotEmpty) { _savePosition(); _emitState(_player.playerState); }
+      if (_queue.isNotEmpty) { _savePosition(); _emitState(_player.playerState); saveStatistics(); }
     });
 
     _nativeChannel.setMethodCallHandler((call) async {
@@ -472,6 +472,7 @@ class JustAudioPlaybackService implements PlaybackService {
       await _initCompleter.future;
       await _player.pause();
       await _savePosition();
+      saveStatistics();
       try { await _prefs.setString('pathephon.last_exit', 'clean'); } catch (_) {}
     } catch (e, st) { crashLogger.error('pause() failed', e, st); }
   }

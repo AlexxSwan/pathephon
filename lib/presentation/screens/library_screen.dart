@@ -45,6 +45,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     try {
       final result = await ref.read(mediaStoreSourceProvider).pickDirectoryWithDiagnostic();
       if (result.tracks.isEmpty) {
+        if (result.diagnostic.contains('null')) return;
         if (mounted) {
           await showDialog<void>(
             context: context,
@@ -73,6 +74,7 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
     try {
       final result = await ref.read(mediaStoreSourceProvider).pickDirectoryWithDiagnostic();
       if (result.tracks.isEmpty) {
+        if (result.diagnostic.contains('null')) return;
         if (mounted) {
           await showDialog<void>(
             context: context,

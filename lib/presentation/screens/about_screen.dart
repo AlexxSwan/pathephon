@@ -38,59 +38,6 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     }
   }
 
-  Future<void> _showLogDialog() async {
-    setState(() { _logLoading = true; });
-    final log = await crashLogger.readLog();
-    setState(() {
-      _logPreview = log.isEmpty ? "(лог пуст)" : log;
-      _logLoading = false;
-    });
-    if (!mounted) return;
-    final p = Preset.of(context);
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: p.surfaceVariant,
-        title: Text("Лог крашей", style: TextStyle(color: p.accent, fontSize: 16)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _logLoading
-            ? const Center(child: CircularProgressIndicator())
-            : SingleChildScrollView(
-                child: SelectableText(
-                  _logPreview,
-                  style: TextStyle(color: p.textPrimary, fontSize: 11, fontFamily: 'monospace', height: 1.3),
-                ),
-              ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text("Закрыть", style: TextStyle(color: p.brass)),
-          ),
-          TextButton(
-            onPressed: () async {
-              await _shareLog();
-              if (ctx.mounted) Navigator.of(ctx).pop();
-            },
-            child: Text("Поделиться", style: TextStyle(color: p.accentHot)),
-          ),
-          TextButton(
-            onPressed: () async {
-              await crashLogger.clear();
-              if (ctx.mounted) Navigator.of(ctx).pop();
-              setState(() { _logPreview = ""; });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Лог очищен")),
-              );
-            },
-            child: Text("Очистить", style: TextStyle(color: p.textMuted)),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _showStatistics() async {
     final playback = ref.read(playbackServiceProvider);
     final stats = playback.getStatistics();
@@ -125,16 +72,122 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
     );
   }
 
+  Future<void> _showLogDialog() async {
+    setState(() { _logLoading = true; });
+    final log = await crashLogger.readLog();
+    setState(() {
+      _logPreview = log.isEmpty ? "(лог пуст)" : log;
+      _logLoading = false;
+    });
+    if (!mounted) return;
+    final p = Preset.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surfaceVariant,
+        title: Text("Лог", style: TextStyle(color: p.accent, fontSize: 16)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: _logLoading
+            ? const Center(child: CircularProgressIndicator())
+            : SingleChildScrollView(
+                child: SelectableText(
+                  _logPreview,
+                  style: TextStyle(color: p.textPrimary, fontSize: 11, fontFamily: "monospace", height: 1.3),
+                ),
+              ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text("Закрыть", style: TextStyle(color: p.brass)),
+          ),
+          TextButton(
+            onPressed: () async {
+              await _shareLog();
+              if (ctx.mounted) Navigator.of(ctx).pop();
+            },
+            child: Text("Поделиться", style: TextStyle(color: p.accentHot)),
+          ),
+          TextButton(
+            onPressed: () async {
+              await crashLogger.clear();
+              if (ctx.mounted) Navigator.of(ctx).pop();
+              setState(() { _logPreview = ""; });
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text("Лог очищен")),
+              );
+            },
+            child: Text("Очистить", style: TextStyle(color: p.textMuted)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDescription() {
+    final p = Preset.of(context);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surfaceVariant,
+        title: Text("Описание", style: TextStyle(color: p.accent, fontSize: 16)),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text("Патефон — ретро-трубный аудиоплеер для Android.", style: TextStyle(color: p.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+              SizedBox(height: 12),
+              Text("Возможности:", style: TextStyle(color: p.brass, fontSize: 12, fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("\u2022 Воспроизведение всех аудиоформатов (MP3, FLAC, OGG, M4A, WAV, AAC, Opus)\n"
+                   "\u2022 Управление очередью воспроизведения\n"
+                   "\u2022 Случайный порядок (Shuffle) и повтор (Repeat all/one)\n"
+                   "\u2022 Эквалайзер (5 полос)\n"
+                   "\u2022 Поиск по библиотеке\n"
+                   "\u2022 Импорт/экспорт плейлистов .m3u\n"
+                   "\u2022 Открытие аудио файлов из других приложений\n"
+                   "\u2022 Bluetooth-управление (play/pause/next/prev)\n"
+                   "\u2022 Блокировка экрана и виджет управления\n"
+                   "\u2022 Тёмная и светлая темы\n"
+                   "\u2022 Датчик загрузки процессора в реальном времени\n"
+                   "\u2022 Поделиться текущим треком\n"
+                   "\u2022 Статистика прослушивания\n"
+                   "\u2022 Сохранение состояния при закрытии (очередь, позиция, настройки)",
+                style: TextStyle(color: p.textSecondary, fontSize: 11, height: 1.5)),
+              SizedBox(height: 12),
+              Text("Интерфейс:", style: TextStyle(color: p.brass, fontSize: 12, fontWeight: FontWeight.bold)),
+              SizedBox(height: 4),
+              Text("\u2022 Таб 'Сейчас играет' — обложка, контролы, плейлист, датчик CPU\n"
+                   "\u2022 Таб 'Библиотека' — все треки, выбор папок\n"
+                   "\u2022 Таб 'Эквалайзер' — 5-полосный EQ с пресетами\n"
+                   "\u2022 Таб 'Поиск' — поиск по названию/артисту/альбому\n"
+                   "\u2022 Тап по CPU% — диалог состояния (память, время работы, лог)\n"
+                   "\u2022 Тап по названию трека в плейлисте — путь к файлу\n"
+                   "\u2022 Кнопка Share — отправка файла текущего трека",
+                style: TextStyle(color: p.textSecondary, fontSize: 11, height: 1.5)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text("Закрыть", style: TextStyle(color: p.brass)),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _shareLog() async {
     try {
       final logPath = crashLogger.publicLogPath;
       if (logPath != null && File(logPath).existsSync()) {
-        // Шарим файл (можно отправить в Telegram/email/сохранить)
-        await Share.shareXFiles([XFile(logPath)], subject: 'Pathephon crash log');
+        await Share.shareXFiles([XFile(logPath)], subject: "Pathephon log");
       } else {
-        // Файл недоступен — шарим текст
         final log = await crashLogger.readLog();
-        await Share.share(log, subject: 'Pathephon crash log');
+        await Share.share(log, subject: "Pathephon log");
       }
     } catch (e) {
       if (mounted) {
@@ -186,11 +239,20 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
         const SizedBox(height: 8),
         Text("github.com/AlexxSwan/pathephon", style: TextStyle(color: p.textMuted)),
         const SizedBox(height: 32),
-        // === Кнопка просмотра/шаринга лога крашей ===
+        OutlinedButton.icon(
+          onPressed: _showStatistics,
+          icon: Icon(Icons.bar_chart, size: 18, color: p.brass),
+          label: Text("Статистика", style: TextStyle(color: p.brass)),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: p.brass.withOpacity(0.5)),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+        const SizedBox(height: 12),
         OutlinedButton.icon(
           onPressed: _showLogDialog,
           icon: Icon(Icons.bug_report, size: 18, color: p.accentHot),
-          label: Text("Лог крашей", style: TextStyle(color: p.accentHot)),
+          label: Text("Лог", style: TextStyle(color: p.accentHot)),
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: p.accentHot.withOpacity(0.5)),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
@@ -198,11 +260,11 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
         ),
         const SizedBox(height: 12),
         OutlinedButton.icon(
-          onPressed: _showStatistics,
-          icon: Icon(Icons.bar_chart, size: 18, color: p.brass),
-          label: Text('Статистика', style: TextStyle(color: p.brass)),
+          onPressed: _showDescription,
+          icon: Icon(Icons.info_outline, size: 18, color: p.textMuted),
+          label: Text("Описание", style: TextStyle(color: p.textMuted)),
           style: OutlinedButton.styleFrom(
-            side: BorderSide(color: p.brass.withOpacity(0.5)),
+            side: BorderSide(color: p.textMuted.withOpacity(0.5)),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
         ),

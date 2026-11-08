@@ -345,6 +345,8 @@ class JustAudioPlaybackService implements PlaybackService {
         await _player.setLoopMode(am);
       } catch (_) {}
       crashLogger.log('Restored: shuffle=$_shuffle, repeat=$_repeat');
+      _allTimePlayMs = _prefs.getInt('pathephon.stats.playtime_ms') ?? 0;
+      _allTimeTracks = _prefs.getInt('pathephon.stats.tracks_played') ?? 0;
 
       final raw = _prefs.getString(_queueKey);
       if (raw == null) return;

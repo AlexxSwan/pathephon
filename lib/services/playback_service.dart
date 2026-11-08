@@ -89,6 +89,8 @@ class JustAudioPlaybackService implements PlaybackService {
   int _sessionTracksPlayed = 0;
   int _sessionPlayTimeMs = 0;
   DateTime? _playStartTime;
+  int _allTimePlayMs = 0;
+  int _allTimeTracks = 0;
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
@@ -610,10 +612,8 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       var totalPlayMs = _sessionPlayTimeMs;
       if (_playStartTime != null) { totalPlayMs += DateTime.now().difference(_playStartTime!).inMilliseconds; }
-      final allTimeMs = _prefs.getInt('pathephon.stats.playtime_ms') ?? 0;
-      final allTimeTracks = _prefs.getInt('pathephon.stats.tracks_played') ?? 0;
-      _prefs.setInt('pathephon.stats.playtime_ms', allTimeMs + totalPlayMs);
-      _prefs.setInt('pathephon.stats.tracks_played', allTimeTracks + _sessionTracksPlayed);
+      _prefs.setInt('pathephon.stats.playtime_ms', _allTimePlayMs + totalPlayMs);
+      _prefs.setInt('pathephon.stats.tracks_played', _allTimeTracks + _sessionTracksPlayed);
     } catch (_) {}
   }
 

@@ -67,7 +67,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
           Text('За текущую сессию:', style: TextStyle(color: p.brass, fontSize: 13, fontWeight: FontWeight.bold)),
           Text('Прослушано треков: ${stats['session_tracks']}', style: TextStyle(color: p.textPrimary, fontSize: 12)),
           Text('Время прослушивания:', style: TextStyle(color: p.textPrimary, fontSize: 12)),
-          Text(fmt(stats['alltime_play_ms'] as int), style: TextStyle(color: p.textPrimary, fontSize: 12)),
+          Text(fmt(stats['session_play_ms'] as int), style: TextStyle(color: p.textPrimary, fontSize: 12)),
         ]),
         actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Закрыть', style: TextStyle(color: p.brass)))],
       ),

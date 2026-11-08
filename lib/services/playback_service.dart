@@ -605,8 +605,8 @@ class JustAudioPlaybackService implements PlaybackService {
   Map<String, dynamic> getStatistics() {
     var totalPlayMs = _sessionPlayTimeMs;
     if (_playStartTime != null) { totalPlayMs += DateTime.now().difference(_playStartTime!).inMilliseconds; }
-    final allTimeMs = _prefs.getInt('pathephon.stats.playtime_ms') ?? 0;
-    final allTimeTracks = _prefs.getInt('pathephon.stats.tracks_played') ?? 0;
+    final allTimeMs = _allTimePlayMs;
+    final allTimeTracks = _allTimeTracks;
     return { 'session_play_ms': totalPlayMs, 'session_tracks': _sessionTracksPlayed, 'alltime_play_ms': allTimeMs + totalPlayMs, 'alltime_tracks': allTimeTracks + _sessionTracksPlayed };
   }
 

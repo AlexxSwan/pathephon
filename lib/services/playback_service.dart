@@ -39,6 +39,8 @@ abstract class PlaybackService {
   Future<void> setReplayGain(ReplayGainMode mode);
   Future<void> setEqualizerBands(List<double> gainsDb, {required bool enabled});
   Future<void> restoreSavedQueue();
+  Map<String, dynamic> getStatistics();
+  void saveStatistics();
 }
 
 class PlaybackSnapshot {

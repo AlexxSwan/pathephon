@@ -43,7 +43,7 @@ class KeepAliveService : Service() {
                         Process.killProcess(Process.myPid())
                     } catch (e: Exception) {
                         Log.e(TAG, ">>> killProcess failed: ${e.message}")
-                        android.os.System.exit(0)
+                        System.exit(0)
                     }
                 }
                 svc.idleHandler?.postDelayed(svc.idleRunnable!!, delayMs)

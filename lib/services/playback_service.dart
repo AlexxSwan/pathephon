@@ -245,41 +245,13 @@ class JustAudioPlaybackService implements PlaybackService {
   /// When playback resumes (playing=true), the timer is cancelled.
   void _resetIdleExitTimer(bool playing) {
     if (playing) {
-      if (_idleExitTimer != null) {
-        _idleExitTimer!.cancel();
-        _idleExitTimer = null;
-        crashLogger.log('Idle exit timer cancelled (playback resumed)');
-      }
+      try { _batteryChannel.invokeMethod('cancelIdleExit'); } catch (_) {}
+      crashLogger.log('Idle exit cancelled (playback resumed)');
     } else {
-      _idleExitTimer?.cancel();
-      _idleExitTimer = Timer(_idleExitThreshold, _idleExit);
-      crashLogger.log('Idle exit timer armed ( min)');
-    }
-  }
-
-  /// Called when the idle-exit timer fires. Saves statistics, stops the
-  /// native KeepAliveService via the battery channel so the foreground
-  /// notification disappears, deactivates the audio session, and exits
-  /// the process without prompting the user.
-  Future<void> _idleExit() async {
-    try {
-      crashLogger.log('Idle exit:  minutes without playback — closing app');
-      saveStatistics();
       try {
-        await _batteryChannel.invokeMethod('stopKeepAlive');
-      } catch (e) {
-        crashLogger.log('stopKeepAlive failed (continuing): ');
-      }
-      try {
-        final s = await AudioSession.instance;
-        await s.setActive(false);
+        _batteryChannel.invokeMethod('setIdleExit', {'delayMs': _idleExitThreshold.inMilliseconds});
       } catch (_) {}
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-      crashLogger.log('Idle exit: calling exit(0)');
-      exit(0);
-    } catch (e, st) {
-      crashLogger.error('_idleExit failed — forcing exit', e, st);
-      exit(0);
+      crashLogger.log('Idle exit armed via native (20 min)');
     }
   }
 

@@ -191,6 +191,27 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                "setIdleExit" -> {
+                    try {
+                        val delayMs = (call.argument<Number>("delayMs") ?: 1200000).toLong()
+                        KeepAliveService.scheduleIdleExit(delayMs)
+                        Log.i(TAG, ">>> setIdleExit:  min")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.w(TAG, ">>> setIdleExit failed: ${e.message}")
+                        result.success(false)
+                    }
+                }
+                "cancelIdleExit" -> {
+                    try {
+                        KeepAliveService.cancelIdleExit()
+                        Log.i(TAG, ">>> cancelIdleExit")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.w(TAG, ">>> cancelIdleExit failed: ${e.message}")
+                        result.success(false)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

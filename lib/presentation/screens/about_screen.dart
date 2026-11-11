@@ -139,7 +139,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text("Патефон — ретро-трубный аудиоплеер для Android.", style: TextStyle(color: p.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
+              Text("Патефон — аудиоплеер для Android с ретро-дизайном.", style: TextStyle(color: p.textPrimary, fontSize: 13, fontWeight: FontWeight.bold)),
               SizedBox(height: 12),
               Text("Возможности:", style: TextStyle(color: p.brass, fontSize: 12, fontWeight: FontWeight.bold)),
               SizedBox(height: 4),

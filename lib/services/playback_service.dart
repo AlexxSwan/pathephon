@@ -1,6 +1,6 @@
 // ============================================================================
-//  playback_service.dart — v0.11.39+233
-//  Фиксы: auto-advance on track complete + position clamp + shuffle/repeat persist
+//  playback_service.dart — v1.0.11+254
+//  v0.11.39+233 base + idle exit (20 min без воспроизведения -> exit(0))
 // ============================================================================
 import 'dart:async';
 import 'dart:convert';
@@ -8,7 +8,7 @@ import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:flutter/services.dart' show MethodChannel;
+import 'package:flutter/services.dart' show MethodChannel, SystemNavigator;
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -84,6 +84,8 @@ class JustAudioPlaybackService implements PlaybackService {
   ReplayGainMode _rg = ReplayGainMode.off;
 
   bool _isReadingTags = false;
+  Timer? _idleExitTimer;
+  static const _idleExitThreshold = Duration(minutes: 20);
   int? _lastDurationMs;
   DateTime _sessionStart = DateTime.now();
   int _sessionTracksPlayed = 0;
@@ -222,6 +224,7 @@ class JustAudioPlaybackService implements PlaybackService {
   void _notifyNativePlaybackState(bool playing) {
     if (playing && _playStartTime == null) { _playStartTime = DateTime.now(); }
     else if (!playing && _playStartTime != null) { _sessionPlayTimeMs += DateTime.now().difference(_playStartTime!).inMilliseconds; _playStartTime = null; }
+    _resetIdleExitTimer(playing);
     try {
       var posMs = _player.position.inMilliseconds;
       final durMs = _player.duration?.inMilliseconds ?? 0;
@@ -235,6 +238,49 @@ class JustAudioPlaybackService implements PlaybackService {
         'hasPrev': _player.hasPrevious,
       });
     } catch (_) {}
+  }
+
+  /// Idle-exit timer: when playback is not playing, arm a timer that fires
+  /// after _idleExitThreshold (20 minutes) and silently closes the app.
+  /// When playback resumes (playing=true), the timer is cancelled.
+  void _resetIdleExitTimer(bool playing) {
+    if (playing) {
+      if (_idleExitTimer != null) {
+        _idleExitTimer!.cancel();
+        _idleExitTimer = null;
+        crashLogger.log('Idle exit timer cancelled (playback resumed)');
+      }
+    } else {
+      _idleExitTimer?.cancel();
+      _idleExitTimer = Timer(_idleExitThreshold, _idleExit);
+      crashLogger.log('Idle exit timer armed ( min)');
+    }
+  }
+
+  /// Called when the idle-exit timer fires. Saves statistics, stops the
+  /// native KeepAliveService via the battery channel so the foreground
+  /// notification disappears, deactivates the audio session, and exits
+  /// the process without prompting the user.
+  Future<void> _idleExit() async {
+    try {
+      crashLogger.log('Idle exit:  minutes without playback — closing app');
+      saveStatistics();
+      try {
+        await _batteryChannel.invokeMethod('stopKeepAlive');
+      } catch (e) {
+        crashLogger.log('stopKeepAlive failed (continuing): ');
+      }
+      try {
+        final s = await AudioSession.instance;
+        await s.setActive(false);
+      } catch (_) {}
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+      crashLogger.log('Idle exit: calling exit(0)');
+      exit(0);
+    } catch (e, st) {
+      crashLogger.error('_idleExit failed — forcing exit', e, st);
+      exit(0);
+    }
   }
 
   void _updateMediaItem() {

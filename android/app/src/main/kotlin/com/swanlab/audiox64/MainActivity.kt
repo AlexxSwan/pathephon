@@ -181,6 +181,16 @@ class MainActivity : FlutterActivity() {
                         result.success(false)
                     }
                 }
+                "stopKeepAlive" -> {
+                    try {
+                        KeepAliveService.stop(this)
+                        Log.i(TAG, ">>> stopKeepAlive: service stopped")
+                        result.success(true)
+                    } catch (e: Exception) {
+                        Log.w(TAG, ">>> stopKeepAlive failed: ${e.message}")
+                        result.success(false)
+                    }
+                }
                 else -> result.notImplemented()
             }
         }

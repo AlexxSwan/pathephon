@@ -85,7 +85,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
   bool _isReadingTags = false;
   Timer? _idleExitTimer;
-  static const _idleExitThreshold = Duration(minutes: 20);
+  static const _idleExitThreshold = Duration(minutes: 10);
   int? _lastDurationMs;
   DateTime _sessionStart = DateTime.now();
   int _sessionTracksPlayed = 0;
@@ -251,7 +251,7 @@ class JustAudioPlaybackService implements PlaybackService {
       try {
         _batteryChannel.invokeMethod('setIdleExit', {'delayMs': _idleExitThreshold.inMilliseconds});
       } catch (_) {}
-      crashLogger.log('Idle exit armed via native (20 min)');
+      crashLogger.log('Idle exit armed via native (10 min)');
     }
   }
 

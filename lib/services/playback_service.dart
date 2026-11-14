@@ -147,7 +147,7 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
-        if (seqState.currentIndex != _index) { _sessionTracksPlayed++; }
+        if (seqState.currentIndex != _index) { _sessionTracksPlayed++; _saveQueue(); }
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
         _updateMediaItem();
@@ -174,7 +174,7 @@ class JustAudioPlaybackService implements PlaybackService {
     _allTimeTracks = _prefs.getInt('pathephon.stats.tracks_played') ?? 0;
 
     Timer.periodic(const Duration(seconds: 5), (_) {
-      if (_queue.isNotEmpty) { _savePosition(); _emitState(_player.playerState); saveStatistics(); }
+      if (_queue.isNotEmpty) { _savePosition(); _saveQueue(); _emitState(_player.playerState); saveStatistics(); }
     });
 
     _nativeChannel.setMethodCallHandler((call) async {

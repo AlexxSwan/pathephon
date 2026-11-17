@@ -279,7 +279,11 @@ class _ShellState extends ConsumerState<_Shell> {
   Widget build(BuildContext context) {
     final skin = ref.watch(skinProvider);
     if (skin == 'winamp' && _index == 0) {
-      return NowPlayingWinamp(onExit: () => setState(() => _index = 4));
+      return NowPlayingWinamp(
+        onExit: () => setState(() => _index = 4),
+        onEQ: () => setState(() => _index = 2),
+        onAdd: () => setState(() => _index = 1),
+      );
     }
     final l = AppLocalizations.of(context);
     final p = Preset.of(context);

@@ -6,10 +6,9 @@
 // ============================================================================
 import 'dart:async';
 import 'dart:io';
-import 'package:flutter/material.dart';
+import 'package:flutter/material.dart' hide RepeatMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/theme/winamp_theme.dart';
@@ -24,10 +23,12 @@ class NowPlayingWinamp extends ConsumerStatefulWidget {
     super.key,
     this.onExit,
     this.onEQ,
+    this.onAdd,
   });
 
   final VoidCallback? onExit;
   final VoidCallback? onEQ;
+  final VoidCallback? onAdd;
 
   @override
   ConsumerState<NowPlayingWinamp> createState() => _NowPlayingWinampState();
@@ -111,31 +112,8 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
-  /// ADD button — open file picker, add selected audio files to queue
-  Future<void> _addTracks() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(
-        type: FileType.audio,
-        allowMultiple: true,
-      );
-      if (result == null || result.files.isEmpty) return;
-      final tracks = <Track>[];
-      for (final f in result.files) {
-        if (f.path == null) continue;
-        final name = f.name.replaceAll(RegExp(r'\.(mp3|flac|ogg|m4a|wav|opus|aac)$'), '');
-        tracks.add(Track(
-          id: f.path!,
-          uri: f.path!,
-          filePath: f.path!,
-          title: name,
-          durationMs: 0,
-        ));
-      }
-      if (tracks.isNotEmpty) {
-        ref.read(playbackServiceProvider).addToQueue(tracks);
-      }
-    } catch (_) {}
-  }
+  /// ADD button — switch to Library tab where user can browse and add tracks
+  void _addTracks() => widget.onAdd?.call();
 
   /// SHR button — share current track file
   Future<void> _shareCurrentTrack() async {

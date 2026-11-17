@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 //  now_playing_screen.dart
 //  v0.11.16+210:
 //   - DJ mode ПОЛНОСТЬЮ УБРАН
@@ -22,6 +22,8 @@ import '../providers/providers.dart';
 import '../../services/crash_logger.dart';
 import '../../services/playback_service.dart';
 import '../widgets/playback_controls.dart';
+import '../providers/skin_provider.dart';
+import 'now_playing_winamp.dart';
 
 class NowPlayingScreen extends ConsumerStatefulWidget {
   const NowPlayingScreen({super.key});
@@ -189,6 +191,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final skin = ref.watch(skinProvider);
+    if (skin == 'winamp') return const NowPlayingWinamp();
     final l = AppLocalizations.of(context);
     final p = Preset.of(context);
     final snap = ref.watch(playbackSnapshotProvider).valueOrNull;

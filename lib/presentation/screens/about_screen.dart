@@ -7,6 +7,7 @@ import "../../core/theme/retro_theme.dart";
 import "../../services/crash_logger.dart";
 import "../../services/playback_service.dart";
 import "../providers/providers.dart";
+import "../providers/skin_provider.dart";
 
 class AboutScreen extends ConsumerStatefulWidget {
   const AboutScreen({super.key});
@@ -270,7 +271,23 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
         ),
-      ]))),
+      
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () {
+            final newSkin = ref.read(skinProvider) == "retro" ? "winamp" : "retro";
+            ref.read(skinProvider.notifier).state = newSkin;
+            ref.read(sharedPreferencesProvider).setString("pathephon.skin", newSkin);
+          },
+          icon: Icon(Icons.palette, size: 18, color: p.brass),
+          label: Text(ref.watch(skinProvider) == "winamp" ? "Skin: Winamp" : "Skin: Retro",
+              style: TextStyle(color: p.brass)),
+          style: OutlinedButton.styleFrom(
+            side: BorderSide(color: p.brass.withOpacity(0.5)),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+          ),
+        ),
+]))),
     );
   }
 }

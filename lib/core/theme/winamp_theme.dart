@@ -218,14 +218,15 @@ class WinampTitleBar extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Text(title, style: lcdStyle(size: 14, color: Colors.white)),
-            Row(children: [
-              Icon(Icons.minimize, size: 12, color: Colors.white70),
-              const SizedBox(width: 6),
-              GestureDetector(
-                onTap: onClose,
-                child: Icon(Icons.close, size: 12, color: Colors.white70),
-              ),
-            ]),
+            if (onClose != null)
+              Row(children: [
+                Icon(Icons.minimize, size: 12, color: Colors.white70),
+                const SizedBox(width: 6),
+                GestureDetector(
+                  onTap: onClose,
+                  child: Icon(Icons.close, size: 12, color: Colors.white70),
+                ),
+              ]),
           ],
         ),
       ),

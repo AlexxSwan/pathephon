@@ -1,4 +1,4 @@
-﻿import "package:flutter/material.dart";
+import "package:flutter/material.dart";
 import "package:flutter_riverpod/flutter_riverpod.dart";
 import "dart:ui" show PlatformDispatcher;
 import "package:shared_preferences/shared_preferences.dart";
@@ -13,6 +13,8 @@ import "presentation/screens/equalizer_screen.dart";
 import "presentation/screens/library_screen.dart";
 import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
+import "presentation/screens/now_playing_winamp.dart";
+import "presentation/providers/skin_provider.dart";
 import "presentation/screens/search_screen.dart";
 import "presentation/widgets/permission_gate.dart";
 import "presentation/providers/providers.dart";
@@ -275,6 +277,10 @@ class _ShellState extends ConsumerState<_Shell> {
 
   @override
   Widget build(BuildContext context) {
+    final skin = ref.watch(skinProvider);
+    if (skin == 'winamp' && _index == 0) {
+      return NowPlayingWinamp(onExit: () => setState(() => _index = 4));
+    }
     final l = AppLocalizations.of(context);
     final p = Preset.of(context);
     final themeModeIdx = ref.watch(themeModeProvider);

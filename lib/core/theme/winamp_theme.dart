@@ -195,15 +195,16 @@ class WinampSeekBar extends StatelessWidget {
   }
 }
 
-/// Winamp-style title bar (blue gradient).
+/// Winamp-style title bar (blue gradient) with optional close button.
 class WinampTitleBar extends StatelessWidget {
-  const WinampTitleBar({super.key, required this.title});
+  const WinampTitleBar({super.key, required this.title, this.onClose});
   final String title;
+  final VoidCallback? onClose;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 26,
+      height: 24,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
@@ -212,15 +213,18 @@ class WinampTitleBar extends StatelessWidget {
         ),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(title, style: lcdStyle(size: 16, color: Colors.white)),
-            const Row(children: [
-              Icon(Icons.minimize, size: 14, color: Colors.white),
-              SizedBox(width: 8),
-              Icon(Icons.close, size: 14, color: Colors.white),
+            Text(title, style: lcdStyle(size: 14, color: Colors.white)),
+            Row(children: [
+              Icon(Icons.minimize, size: 12, color: Colors.white70),
+              const SizedBox(width: 6),
+              GestureDetector(
+                onTap: onClose,
+                child: Icon(Icons.close, size: 12, color: Colors.white70),
+              ),
             ]),
           ],
         ),

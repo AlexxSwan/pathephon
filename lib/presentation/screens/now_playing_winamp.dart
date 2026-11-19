@@ -52,10 +52,17 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
   final List<double> _spectrumBars = List.filled(16, 0.0);
   Timer? _spectrumTimer;
 
+  // CPU monitoring (same logic as retro NowPlayingScreen)
+  double _cpuPct = 0.0;
+  Timer? _cpuTimer;
+  int _prevUtime = 0;
+  int _prevStime = 0;
+
   @override
   void initState() {
     super.initState();
     _startSpectrum();
+    _startCpuMonitor();
     _initEq();
   }
 
@@ -63,9 +70,38 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
   void dispose() {
     _scrollTimer?.cancel();
     _spectrumTimer?.cancel();
+    _cpuTimer?.cancel();
     _eqSessionSub?.cancel();
     _playlistScrollController.dispose();
     super.dispose();
+  }
+
+  void _startCpuMonitor() {
+    _readCpuStat();
+    _cpuTimer = Timer.periodic(const Duration(seconds: 3), (_) => _readCpuStat());
+  }
+
+  void _readCpuStat() {
+    try {
+      final stat = File('/proc/self/stat').readAsStringSync();
+      final lastParen = stat.lastIndexOf(') ');
+      if (lastParen < 0) return;
+      final fields = stat.substring(lastParen + 2).split(RegExp(r'\s+'));
+      if (fields.length < 13) return;
+      final utime = int.parse(fields[11]);
+      final stime = int.parse(fields[12]);
+      final processJiffies = utime + stime;
+      if (_prevUtime > 0 || _prevStime > 0) {
+        final processDelta =
+            (processJiffies - (_prevUtime + _prevStime)).toDouble();
+        final cores =
+            Platform.numberOfProcessors.toDouble().clamp(1.0, 16.0);
+        final pct = (processDelta / cores).clamp(0.0, 100.0);
+        if (mounted) setState(() => _cpuPct = pct);
+      }
+      _prevUtime = utime;
+      _prevStime = stime;
+    } catch (_) {}
   }
 
   /// Initialize EQ: read saved state + hook to audio session
@@ -241,9 +277,8 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                         style: lcdStyle(size: 10),
                         maxLines: 1, overflow: TextOverflow.clip,
                       )),
-                      if (track != null && track.durationMs > 0)
-                        Text('${(track.durationMs / 1000).round()}',
-                          style: lcdStyle(size: 9, color: WinampColors.textSecondary)),
+                      Text('CPU ${_cpuPct.toStringAsFixed(1)}%',
+                        style: lcdStyle(size: 9, color: WinampColors.textSecondary)),
                     ],
                   ),
                   const SizedBox(height: 2),

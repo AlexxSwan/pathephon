@@ -194,11 +194,13 @@ class WinampSeekBar extends StatelessWidget {
   }
 }
 
-/// Winamp-style title bar — dark gray, centered text, double border.
+/// Winamp-style title bar — dark gray, centered text with === decoration.
 class WinampTitleBar extends StatelessWidget {
   const WinampTitleBar({super.key, required this.title, this.onClose});
   final String title;
   final VoidCallback? onClose;
+
+  static const _equalColor = Color(0xFFC8B888); // pale yellow
 
   @override
   Widget build(BuildContext context) {
@@ -211,24 +213,39 @@ class WinampTitleBar extends StatelessWidget {
           bottom: BorderSide(color: WinampColors.metalMid, width: 1),
         ),
       ),
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Center(
-            child: Text(title,
-              style: lcdStyle(size: 10, color: WinampColors.metalLight)),
-          ),
-          if (onClose != null)
-            Positioned(
-              right: 4,
-              top: 0,
-              bottom: 0,
-              child: GestureDetector(
-                onTap: onClose,
-                child: Icon(Icons.close, size: 12, color: WinampColors.textMuted),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final charW = 6.2;
+          final titleW = title.length * charW + 8;
+          final side = ((constraints.maxWidth - titleW) / 2 / charW)
+              .floor()
+              .clamp(0, 60);
+          final eq = '=' * side;
+          return Stack(
+            alignment: Alignment.center,
+            children: [
+              Center(
+                child: RichText(
+                  text: TextSpan(children: [
+                    TextSpan(text: eq,
+                      style: lcdStyle(size: 10, color: _equalColor)),
+                    TextSpan(text: ' $title ',
+                      style: lcdStyle(size: 10, color: WinampColors.metalLight)),
+                    TextSpan(text: eq,
+                      style: lcdStyle(size: 10, color: _equalColor)),
+                  ]),
+                ),
               ),
-            ),
-        ],
+              if (onClose != null)
+                Positioned(right: 4, top: 0, bottom: 0,
+                  child: GestureDetector(
+                    onTap: onClose,
+                    child: Icon(Icons.close, size: 12, color: WinampColors.textMuted),
+                  ),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

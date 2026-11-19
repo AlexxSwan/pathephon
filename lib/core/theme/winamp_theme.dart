@@ -203,7 +203,7 @@ class WinampTitleBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 16,
+      height: 18,
       decoration: BoxDecoration(
         color: WinampColors.metalDarker,
         border: Border(
@@ -216,7 +216,7 @@ class WinampTitleBar extends StatelessWidget {
         children: [
           Center(
             child: Text(title,
-              style: lcdStyle(size: 12, color: WinampColors.lcdText)),
+              style: lcdStyle(size: 10, color: WinampColors.metalLight)),
           ),
           if (onClose != null)
             Positioned(

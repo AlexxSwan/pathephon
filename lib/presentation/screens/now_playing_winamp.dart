@@ -296,7 +296,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                         onTap: () => playback.skipToPrevious()),
                       const SizedBox(width: 2),
                       WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                        size: 22, active: isPlaying,
+                        size: 18, active: isPlaying,
                         onTap: () => isPlaying ? playback.pause() : playback.play()),
                       const SizedBox(width: 2),
                       WinampButton(icon: Icons.stop, size: 18,
@@ -357,7 +357,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                     alignment: Alignment.center,
                     children: [
                       Center(child: Text('\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
-                        style: lcdStyle(size: 9, color: WinampColors.lcdText))),
+                        style: lcdStyle(size: 9, color: WinampColors.metalLight))),
                       Positioned(right: 3, top: 0, bottom: 0,
                         child: _WinampToggleButton(label: 'ON', active: _eqEnabled,
                           onTap: _onEqToggle)),
@@ -409,7 +409,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       alignment: Alignment.center,
                       children: [
                         Center(child: Text('\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0421\u041F\u0418\u0421\u041E\u041A',
-                          style: lcdStyle(size: 9, color: WinampColors.lcdText))),
+                          style: lcdStyle(size: 9, color: WinampColors.metalLight))),
                         Positioned(right: 6, top: 0, bottom: 0,
                           child: Center(child: Text('${queue.length} ${_formatTotal(queue)}',
                             style: lcdStyle(size: 10, color: WinampColors.textMuted)))),
@@ -597,9 +597,8 @@ class _WinampToggleButton extends StatelessWidget {
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Center(child: Text(label,
-          style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold,
-            color: active ? WinampColors.lcdText : WinampColors.metalDarker,
-            fontFamily: 'monospace'))),
+          style: lcdStyle(size: 7,
+            color: active ? WinampColors.lcdText : WinampColors.metalDarker))),
       ),
     );
   }
@@ -620,8 +619,7 @@ class _WinampActionButton extends StatelessWidget {
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Text(label,
-          style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold,
-            color: WinampColors.metalDarker, fontFamily: 'monospace')),
+          style: lcdStyle(size: 7, color: WinampColors.metalDarker)),
       ),
     );
   }

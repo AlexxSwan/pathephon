@@ -256,6 +256,7 @@ class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
   }
 
   Future<void> _loadPlaylists() async {
+    if (!mounted) return;
     final prefs = ref.read(sharedPreferencesProvider);
     final raw = prefs.getString('pathephon.playlists');
     if (raw == null) {
@@ -477,14 +478,20 @@ class _PlaylistsTabState extends ConsumerState<_PlaylistsTab> {
   }
 
   Future<void> _loadPlaylist(int index) async {
+    if (!mounted) return;
     final pl = _playlists[index];
     final tracksJson = pl['tracks'] as List<dynamic>;
     final tracks = tracksJson
         .map((j) => Track.fromJson(j as Map<String, dynamic>))
         .toList(growable: false);
-    ref.read(libraryStateProvider.notifier).setPickedTracks(tracks);
-    await ref.read(playbackServiceProvider).playQueue(tracks: tracks, startIndex: 0);
+    // Save refs BEFORE async gap to avoid 'ref after dispose' crash
+    final libraryNotifier = ref.read(libraryStateProvider.notifier);
+    final playback = ref.read(playbackServiceProvider);
+    libraryNotifier.setPickedTracks(tracks);
+    await playback.playQueue(tracks: tracks, startIndex: 0);
+    if (!mounted) return;
     ref.read(isPlayingProvider.notifier).state = true;
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Загружен плейлист "${pl['name']}" (${tracks.length} треков)')),
     );

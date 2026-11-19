@@ -327,17 +327,17 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   children: [
                     // LEFT: playback buttons (compact)
                     Row(children: [
-                      WinampButton(icon: Icons.skip_previous, size: 18,
+                      WinampButton(icon: Icons.skip_previous, size: 22,
                         onTap: () => playback.skipToPrevious()),
                       const SizedBox(width: 2),
                       WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                        size: 18, active: isPlaying,
+                        size: 22, active: isPlaying,
                         onTap: () => isPlaying ? playback.pause() : playback.play()),
                       const SizedBox(width: 2),
-                      WinampButton(icon: Icons.stop, size: 18,
+                      WinampButton(icon: Icons.stop, size: 22,
                         onTap: () => playback.stop()),
                       const SizedBox(width: 2),
-                      WinampButton(icon: Icons.skip_next, size: 18,
+                      WinampButton(icon: Icons.skip_next, size: 22,
                         onTap: () => playback.skipToNext()),
                     ]),
                     // RIGHT: EQ PL SHF REP

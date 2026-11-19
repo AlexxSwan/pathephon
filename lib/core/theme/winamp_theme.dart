@@ -207,9 +207,9 @@ class WinampTitleBar extends StatelessWidget {
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Container(height: 0.5, color: _lineColor),
-        const SizedBox(height: 1),
-        Container(height: 0.5, color: _lineColor),
+        Container(height: 1, color: _lineColor),
+        const SizedBox(height: 2),
+        Container(height: 1, color: _lineColor),
       ],
     );
   }

@@ -218,7 +218,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
             margin: const EdgeInsets.all(1),
             decoration: BoxDecoration(
               color: WinampColors.bgPanel,
-              border: Border.all(color: WinampColors.metalDark, width: 1),
+              border: Border.all(color: WinampColors.metalMid, width: 2),
             ),
             child: Column(children: [
               WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D'),
@@ -228,7 +228,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
                   color: WinampColors.lcdBg,
-                  border: Border.all(color: WinampColors.metalDark, width: 1),
+                  border: Border.all(color: WinampColors.metalMid, width: 2),
                 ),
                 child: Column(children: [
                   Row(
@@ -273,13 +273,13 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 child: Row(children: [
-                  Text('VOL', style: lcdStyle(size: 8, color: WinampColors.textMuted)),
+                  Text('VOL', style: lcdStyle(size: 8, color: WinampColors.textSecondary)),
                   const SizedBox(width: 2),
                   Expanded(flex: 3, child: _WinampHSlider(
                     value: _volume,
                     onChanged: (v) { setState(() => _volume = v); playback.setVolume(v); })),
                   const SizedBox(width: 4),
-                  Text('BAL', style: lcdStyle(size: 8, color: WinampColors.textMuted)),
+                  Text('BAL', style: lcdStyle(size: 8, color: WinampColors.textSecondary)),
                   const SizedBox(width: 2),
                   Expanded(flex: 2, child: _WinampHSlider(value: 0.5, onChanged: (_) {})),
                 ]),
@@ -340,7 +340,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
               margin: const EdgeInsets.symmetric(horizontal: 1),
               decoration: BoxDecoration(
                 color: WinampColors.bgPanel,
-                border: Border.all(color: WinampColors.metalDark, width: 1),
+                border: Border.all(color: WinampColors.metalMid, width: 2),
               ),
               child: Column(children: [
                 // EQ title bar — dark gray, centered
@@ -394,7 +394,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 margin: const EdgeInsets.fromLTRB(2, 0, 2, 2),
                 decoration: BoxDecoration(
                   color: WinampColors.bgPanel,
-                  border: Border.all(color: WinampColors.metalDark, width: 1)),
+                  border: Border.all(color: WinampColors.metalMid, width: 2)),
                 child: Column(children: [
                   Container(
                     height: 16,
@@ -412,7 +412,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                           style: lcdStyle(size: 9, color: WinampColors.metalLight))),
                         Positioned(right: 6, top: 0, bottom: 0,
                           child: Center(child: Text('${queue.length} ${_formatTotal(queue)}',
-                            style: lcdStyle(size: 10, color: WinampColors.textMuted)))),
+                            style: lcdStyle(size: 10, color: WinampColors.textSecondary)))),
                       ],
                     ),
                   ),
@@ -496,7 +496,7 @@ class _WinampHSlider extends StatelessWidget {
           height: 8,
           decoration: BoxDecoration(
             color: WinampColors.lcdBg,
-            border: Border.all(color: WinampColors.metalDark, width: 1),
+            border: Border.all(color: WinampColors.metalMid, width: 2),
           ),
           child: Row(
             children: List.generate(seg, (i) {
@@ -558,7 +558,7 @@ class _WinampVSlider extends StatelessWidget {
             width: 12, height: 56,
             decoration: BoxDecoration(
               color: WinampColors.lcdBg,
-              border: Border.all(color: WinampColors.metalDark, width: 1)),
+              border: Border.all(color: WinampColors.metalMid, width: 2)),
             child: Column(
               children: List.generate(seg, (i) {
                 // i=0 is top (+12dB), i=seg-1 is bottom (-12dB)

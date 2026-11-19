@@ -130,8 +130,8 @@ class _WinampButtonState extends State<WinampButton> {
         ),
         child: Icon(
           widget.icon,
-          size: widget.size * 0.5,
-          color: widget.active ? WinampColors.lcdText : WinampColors.metalDarker,
+          size: widget.size * 0.65,
+          color: widget.active ? WinampColors.lcdText : WinampColors.metalLight,
         ),
       ),
     );
@@ -172,7 +172,7 @@ class WinampSeekBar extends StatelessWidget {
             height: 10,
             decoration: BoxDecoration(
               color: WinampColors.lcdBg,
-              border: Border.all(color: WinampColors.metalDark, width: 1),
+              border: Border.all(color: WinampColors.metalMid, width: 2),
             ),
             child: Row(
               children: List.generate(segments, (i) {

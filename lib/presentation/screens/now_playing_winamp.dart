@@ -47,6 +47,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
   // EQ state — synced with equalizerServiceProvider (REAL native EQ)
   List<double> _eqBands = List.filled(kEqBandCount, 0.0);
   bool _eqEnabled = false;
+  String? _selectedPreset;
   StreamSubscription<int>? _eqSessionSub;
 
   final List<double> _spectrumBars = List.filled(16, 0.0);
@@ -184,6 +185,18 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
   void _onEqToggle() {
     setState(() => _eqEnabled = !_eqEnabled);
     ref.read(equalizerServiceProvider).setEnabled(_eqEnabled);
+  }
+
+  /// Apply a preset to the REAL native EQ
+  void _applyPreset(EqPreset preset) {
+    setState(() {
+      _selectedPreset = preset.name;
+      _eqBands = List.from(preset.gains);
+    });
+    final eq = ref.read(equalizerServiceProvider);
+    for (var i = 0; i < preset.gains.length; i++) {
+      eq.setBandGain(i, preset.gains[i]);
+    }
   }
 
   void _addTracks() => widget.onAdd?.call();
@@ -382,24 +395,61 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 WinampTitleBar(title: '\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
                   trailing: _WinampToggleButton(label: 'ON', active: _eqEnabled,
                     onTap: _onEqToggle)),
-                // EQ sliders: 5 bands with REAL frequencies
+                // EQ body: sliders LEFT | preset buttons RIGHT
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                   color: WinampColors.lcdBg,
                   child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: List.generate(kEqBandCount, (i) {
-                      final freq = kEqBandFreqs[i];
-                      final label = freq >= 1000
-                        ? '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k'
-                        : freq.toStringAsFixed(0);
-                      return _WinampVSlider(
-                        label: label,
-                        value: _eqBands[i],
-                        range: 15.0,
-                        onChanged: (v) => _onEqBandChanged(i, v),
-                      );
-                    }),
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // LEFT: 5 vertical band sliders
+                      Expanded(
+                        flex: 3,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: List.generate(kEqBandCount, (i) {
+                            final freq = kEqBandFreqs[i];
+                            final label = freq >= 1000
+                              ? '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k'
+                              : freq.toStringAsFixed(0);
+                            return _WinampVSlider(
+                              label: label,
+                              value: _eqBands[i],
+                              range: 15.0,
+                              onChanged: (v) => _onEqBandChanged(i, v),
+                            );
+                          }),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      // RIGHT: 6 preset buttons
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _WinampPresetButton(label: 'FLAT',
+                              active: _selectedPreset == 'Flat',
+                              onTap: () => _applyPreset(EqPreset.flat)),
+                            _WinampPresetButton(label: 'BASS',
+                              active: _selectedPreset == 'Bass',
+                              onTap: () => _applyPreset(EqPreset.bass)),
+                            _WinampPresetButton(label: 'TREB',
+                              active: _selectedPreset == 'Treble',
+                              onTap: () => _applyPreset(EqPreset.treble)),
+                            _WinampPresetButton(label: 'VOCAL',
+                              active: _selectedPreset == 'Vocal',
+                              onTap: () => _applyPreset(EqPreset.vocal)),
+                            _WinampPresetButton(label: 'ROCK',
+                              active: _selectedPreset == 'Rock',
+                              onTap: () => _applyPreset(EqPreset.rock)),
+                            _WinampPresetButton(label: 'POP',
+                              active: _selectedPreset == 'Pop',
+                              onTap: () => _applyPreset(EqPreset.pop)),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ]),
@@ -638,6 +688,35 @@ class _WinampActionButton extends StatelessWidget {
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Text(label,
           style: lcdStyle(size: 7, color: WinampColors.metalDarker)),
+      ),
+    );
+  }
+}
+
+/// EQ preset button — small toggle for FLAT/BASS/TREB/VOCAL/ROCK/POP.
+class _WinampPresetButton extends StatelessWidget {
+  const _WinampPresetButton({required this.label, required this.active, required this.onTap});
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        height: 14,
+        margin: const EdgeInsets.symmetric(vertical: 1),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: active ? Alignment.bottomCenter : Alignment.topCenter,
+            end: active ? Alignment.topCenter : Alignment.bottomCenter,
+            colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
+          border: Border.all(color: WinampColors.metalDarker, width: 1)),
+        child: Center(child: Text(label,
+          style: lcdStyle(size: 7,
+            color: active ? WinampColors.lcdText : WinampColors.metalDarker))),
       ),
     );
   }

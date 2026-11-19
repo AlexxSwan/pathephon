@@ -454,23 +454,39 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
 
 class _WinampHSlider extends StatelessWidget {
   const _WinampHSlider({required this.value, required this.onChanged});
-  final double value; final ValueChanged<double> onChanged;
+  final double value;
+  final ValueChanged<double> onChanged;
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(builder: (context, c) {
       final seg = 20;
       final filled = (value * seg).round();
       return GestureDetector(
-        onTapDown: (d) => onChanged((d.localPosition.dx / c.maxWidth).clamp(0, 1)),
-        onHorizontalDragUpdate: (d) => onChanged((d.localPosition.dx / c.maxWidth).clamp(0, 1)),
+        onTapDown: (d) => onChanged(
+            (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0)),
+        onHorizontalDragUpdate: (d) => onChanged(
+            (d.localPosition.dx / c.maxWidth).clamp(0.0, 1.0)),
         child: Container(
           height: 8,
-          decoration: BoxDecoration(color: WinampColors.lcdBg,
-            border: Border.all(color: WinampColors.metalDark, width: 1)),
-          child: Row(children: List.generate(seg, (i) => Expanded(
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 1),
-              color: i < filled ? WinampColors.lcdText : WinampColors.lcdDim)))));
+          decoration: BoxDecoration(
+            color: WinampColors.lcdBg,
+            border: Border.all(color: WinampColors.metalDark, width: 1),
+          ),
+          child: Row(
+            children: List.generate(seg, (i) {
+              return Expanded(
+                child: Container(
+                  margin: const EdgeInsets.symmetric(
+                      horizontal: 0.5, vertical: 1),
+                  color: i < filled
+                      ? WinampColors.lcdText
+                      : WinampColors.lcdDim,
+                ),
+              );
+            }),
+          ),
+        ),
+      );
     });
   }
 }
@@ -492,14 +508,14 @@ class _WinampVSlider extends StatelessWidget {
       onTapDown: (d) {
         final box = context.findRenderObject() as RenderBox;
         final local = box.globalToLocal(d.globalPosition);
-        final norm = 1 - (local.dy / box.size.height).clamp(0, 1);
-        onChanged((norm * 24 - 12).clamp(-12, 12));
+        final norm = 1.0 - (local.dy / box.size.height).clamp(0.0, 1.0);
+        onChanged((norm * 24.0 - 12.0).clamp(-12.0, 12.0));
       },
       onVerticalDragUpdate: (d) {
         final box = context.findRenderObject() as RenderBox;
         final local = box.globalToLocal(d.globalPosition);
-        final norm = 1 - (local.dy / box.size.height).clamp(0, 1);
-        onChanged((norm * 24 - 12).clamp(-12, 12));
+        final norm = 1.0 - (local.dy / box.size.height).clamp(0.0, 1.0);
+        onChanged((norm * 24.0 - 12.0).clamp(-12.0, 12.0));
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

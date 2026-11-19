@@ -36,13 +36,13 @@ class WinampColors {
   static const textMuted = Color(0xFF006600);
 }
 
-/// LCD font helper — VT323 from google_fonts (terminal/LCD look).
+/// LCD font helper — ShareTechMono (condensed, more Winamp-like).
 TextStyle lcdStyle({
   double size = 14,
   Color color = WinampColors.lcdText,
-  double letterSpacing = 1.0,
+  double letterSpacing = 0.5,
 }) {
-  return GoogleFonts.vt323(
+  return GoogleFonts.shareTechMono(
     fontSize: size,
     color: color,
     letterSpacing: letterSpacing,
@@ -195,7 +195,7 @@ class WinampSeekBar extends StatelessWidget {
   }
 }
 
-/// Winamp-style title bar (blue gradient) with optional close button.
+/// Winamp-style title bar — dark gray, centered text, double border.
 class WinampTitleBar extends StatelessWidget {
   const WinampTitleBar({super.key, required this.title, this.onClose});
   final String title;
@@ -204,31 +204,32 @@ class WinampTitleBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 24,
+      height: 20,
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [WinampColors.titleBarStart, WinampColors.titleBarEnd],
+        color: WinampColors.metalDarker,
+        border: Border(
+          top: BorderSide(color: WinampColors.metalMid, width: 1),
+          bottom: BorderSide(color: WinampColors.metalMid, width: 1),
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 6),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(title, style: lcdStyle(size: 14, color: Colors.white)),
-            if (onClose != null)
-              Row(children: [
-                Icon(Icons.minimize, size: 12, color: Colors.white70),
-                const SizedBox(width: 6),
-                GestureDetector(
-                  onTap: onClose,
-                  child: Icon(Icons.close, size: 12, color: Colors.white70),
-                ),
-              ]),
-          ],
-        ),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Center(
+            child: Text(title,
+              style: lcdStyle(size: 12, color: WinampColors.lcdText)),
+          ),
+          if (onClose != null)
+            Positioned(
+              right: 4,
+              top: 0,
+              bottom: 0,
+              child: GestureDetector(
+                onTap: onClose,
+                child: Icon(Icons.close, size: 12, color: WinampColors.textMuted),
+              ),
+            ),
+        ],
       ),
     );
   }

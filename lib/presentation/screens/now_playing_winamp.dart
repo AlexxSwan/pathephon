@@ -284,34 +284,35 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   Expanded(flex: 2, child: _WinampHSlider(value: 0.5, onChanged: (_) {})),
                 ]),
               ),
-              // Controls
+              // Controls: playback LEFT | toggles RIGHT
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // LEFT: playback buttons (compact, Winamp-style)
+                    Row(children: [
+                      WinampButton(icon: Icons.skip_previous, size: 24,
+                        onTap: () => playback.skipToPrevious()),
+                      const SizedBox(width: 3),
+                      WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
+                        size: 28, active: isPlaying,
+                        onTap: () => isPlaying ? playback.pause() : playback.play()),
+                      const SizedBox(width: 3),
+                      WinampButton(icon: Icons.stop, size: 24,
+                        onTap: () => playback.stop()),
+                      const SizedBox(width: 3),
+                      WinampButton(icon: Icons.skip_next, size: 24,
+                        onTap: () => playback.skipToNext()),
+                    ]),
+                    // RIGHT: EQ PL SHF REP
                     Row(children: [
                       _WinampToggleButton(label: 'EQ', active: _eqPanel,
                         onTap: () => setState(() => _eqPanel = !_eqPanel)),
                       const SizedBox(width: 3),
                       _WinampToggleButton(label: 'PL', active: _plPanel,
                         onTap: () => setState(() => _plPanel = !_plPanel)),
-                    ]),
-                    Row(children: [
-                      WinampButton(icon: Icons.skip_previous, size: 28,
-                        onTap: () => playback.skipToPrevious()),
-                      const SizedBox(width: 4),
-                      WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                        size: 32, active: isPlaying,
-                        onTap: () => isPlaying ? playback.pause() : playback.play()),
-                      const SizedBox(width: 4),
-                      WinampButton(icon: Icons.stop, size: 28,
-                        onTap: () => playback.stop()),
-                      const SizedBox(width: 4),
-                      WinampButton(icon: Icons.skip_next, size: 28,
-                        onTap: () => playback.skipToNext()),
-                    ]),
-                    Row(children: [
+                      const SizedBox(width: 6),
                       _WinampToggleButton(label: 'SHF', active: shuffle,
                         onTap: () => playback.setShuffle(!shuffle)),
                       const SizedBox(width: 3),
@@ -342,23 +343,24 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 border: Border.all(color: WinampColors.metalDark, width: 1),
               ),
               child: Column(children: [
-                // EQ title bar
+                // EQ title bar — dark gray, centered
                 Container(
                   height: 20,
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                      colors: [WinampColors.titleBarStart, WinampColors.titleBarEnd])),
-                  padding: const EdgeInsets.symmetric(horizontal: 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    color: WinampColors.metalDarker,
+                    border: Border(
+                      top: BorderSide(color: WinampColors.metalMid, width: 1),
+                      bottom: BorderSide(color: WinampColors.metalMid, width: 1),
+                    ),
+                  ),
+                  child: Stack(
+                    alignment: Alignment.center,
                     children: [
-                      Text('\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
-                        style: lcdStyle(size: 12, color: Colors.white)),
-                      _WinampToggleButton(
-                        label: 'ON',
-                        active: _eqEnabled,
-                        onTap: _onEqToggle),
+                      Center(child: Text('\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
+                        style: lcdStyle(size: 12, color: WinampColors.lcdText))),
+                      Positioned(right: 4, top: 0, bottom: 0,
+                        child: _WinampToggleButton(label: 'ON', active: _eqEnabled,
+                          onTap: _onEqToggle)),
                     ],
                   ),
                 ),
@@ -397,17 +399,20 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   Container(
                     height: 20,
                     decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter, end: Alignment.bottomCenter,
-                        colors: [WinampColors.titleBarStart, WinampColors.titleBarEnd])),
-                    padding: const EdgeInsets.symmetric(horizontal: 6),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      color: WinampColors.metalDarker,
+                      border: Border(
+                        top: BorderSide(color: WinampColors.metalMid, width: 1),
+                        bottom: BorderSide(color: WinampColors.metalMid, width: 1),
+                      ),
+                    ),
+                    child: Stack(
+                      alignment: Alignment.center,
                       children: [
-                        Text('\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0421\u041F\u0418\u0421\u041E\u041A',
-                          style: lcdStyle(size: 12, color: Colors.white)),
-                        Text('${queue.length} tracks  ${_formatTotal(queue)}',
-                          style: lcdStyle(size: 10, color: Colors.white70)),
+                        Center(child: Text('\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0421\u041F\u0418\u0421\u041E\u041A',
+                          style: lcdStyle(size: 12, color: WinampColors.lcdText))),
+                        Positioned(right: 6, top: 0, bottom: 0,
+                          child: Center(child: Text('${queue.length} ${_formatTotal(queue)}',
+                            style: lcdStyle(size: 10, color: WinampColors.textMuted)))),
                       ],
                     ),
                   ),

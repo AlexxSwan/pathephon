@@ -16,6 +16,7 @@ import '../../core/utils/duration_format.dart';
 import '../../domain/enums/repeat_mode.dart';
 import '../../domain/models/track.dart';
 import '../providers/providers.dart';
+import '../../services/equalizer_service.dart';
 import '../../services/playback_service.dart';
 
 class NowPlayingWinamp extends ConsumerStatefulWidget {
@@ -43,9 +44,10 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
   double _volume = 0.7;
   bool _plPanel = true;
   bool _eqPanel = false;
+  // EQ state — synced with equalizerServiceProvider (REAL native EQ)
+  List<double> _eqBands = List.filled(kEqBandCount, 0.0);
   bool _eqEnabled = false;
-  final List<double> _eqBands = [0, 0, 0, 0, 0]; // 60, 170, 310, 600, 1K Hz
-  double _eqPreamp = 0; // -12 to +12 dB
+  StreamSubscription<int>? _eqSessionSub;
 
   final List<double> _spectrumBars = List.filled(16, 0.0);
   Timer? _spectrumTimer;
@@ -54,14 +56,34 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
   void initState() {
     super.initState();
     _startSpectrum();
+    _initEq();
   }
 
   @override
   void dispose() {
     _scrollTimer?.cancel();
     _spectrumTimer?.cancel();
+    _eqSessionSub?.cancel();
     _playlistScrollController.dispose();
     super.dispose();
+  }
+
+  /// Initialize EQ: read saved state + hook to audio session
+  void _initEq() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final eq = ref.read(equalizerServiceProvider);
+      // Read current state from the service (loaded from prefs)
+      _eqBands = List.from(eq.currentBands);
+      _eqEnabled = eq.isEnabled;
+      if (mounted) setState(() {});
+
+      // CRITICAL: hook EQ to the player's audio session id.
+      // Without this, EQ has no effect on audio output.
+      final playback = ref.read(playbackServiceProvider);
+      _eqSessionSub = playback.audioSessionIdStream.listen((sessionId) {
+        eq.attachToSession(sessionId);
+      });
+    });
   }
 
   void _startSpectrum() {
@@ -116,9 +138,16 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
-  void _applyEq() {
-    final playback = ref.read(playbackServiceProvider);
-    playback.setEqualizerBands(_eqBands, enabled: _eqEnabled);
+  /// Set individual band gain via REAL native EQ service
+  void _onEqBandChanged(int bandIndex, double gainDb) {
+    setState(() => _eqBands[bandIndex] = gainDb.clamp(-15.0, 15.0));
+    ref.read(equalizerServiceProvider).setBandGain(bandIndex, gainDb);
+  }
+
+  /// Toggle EQ on/off via REAL native EQ service
+  void _onEqToggle() {
+    setState(() => _eqEnabled = !_eqEnabled);
+    ref.read(equalizerServiceProvider).setEnabled(_eqEnabled);
   }
 
   void _addTracks() => widget.onAdd?.call();
@@ -326,39 +355,31 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                     children: [
                       Text('\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
                         style: lcdStyle(size: 12, color: Colors.white)),
-                      Row(children: [
-                        _WinampToggleButton(
-                          label: 'ON',
-                          active: _eqEnabled,
-                          onTap: () {
-                            setState(() => _eqEnabled = !_eqEnabled);
-                            _applyEq();
-                          }),
-                      ]),
+                      _WinampToggleButton(
+                        label: 'ON',
+                        active: _eqEnabled,
+                        onTap: _onEqToggle),
                     ],
                   ),
                 ),
-                // EQ sliders: preamp + 5 bands
+                // EQ sliders: 5 bands with REAL frequencies
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   color: WinampColors.lcdBg,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      _WinampVSlider(
-                        label: 'PRE',
-                        value: _eqPreamp,
-                        onChanged: (v) { setState(() => _eqPreamp = v); _applyEq(); },
-                      ),
-                      ...List.generate(5, (i) {
-                        final freqs = ['60', '170', '310', '600', '1K'];
-                        return _WinampVSlider(
-                          label: freqs[i],
-                          value: _eqBands[i],
-                          onChanged: (v) { setState(() => _eqBands[i] = v); _applyEq(); },
-                        );
-                      }),
-                    ],
+                    children: List.generate(kEqBandCount, (i) {
+                      final freq = kEqBandFreqs[i];
+                      final label = freq >= 1000
+                        ? '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k'
+                        : freq.toStringAsFixed(0);
+                      return _WinampVSlider(
+                        label: label,
+                        value: _eqBands[i],
+                        range: 15.0,
+                        onChanged: (v) => _onEqBandChanged(i, v),
+                      );
+                    }),
                   ),
                 ),
               ]),
@@ -492,15 +513,20 @@ class _WinampHSlider extends StatelessWidget {
 }
 
 class _WinampVSlider extends StatelessWidget {
-  const _WinampVSlider({required this.label, required this.value, required this.onChanged});
+  const _WinampVSlider({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+    this.range = 15.0,
+  });
   final String label;
-  final double value; // -12 to +12 dB
+  final double value; // -range to +range dB
   final ValueChanged<double> onChanged;
+  final double range;
 
   @override
   Widget build(BuildContext context) {
-    // Map -12..+12 to 0..1 (0.5 = center = 0 dB)
-    final normalized = (value + 12) / 24;
+    final normalized = (value + range) / (range * 2);
     final seg = 14;
     final filled = (normalized * seg).round();
     final centerSeg = seg ~/ 2;
@@ -508,14 +534,16 @@ class _WinampVSlider extends StatelessWidget {
       onTapDown: (d) {
         final box = context.findRenderObject() as RenderBox;
         final local = box.globalToLocal(d.globalPosition);
-        final norm = 1.0 - (local.dy / box.size.height).clamp(0.0, 1.0);
-        onChanged((norm * 24.0 - 12.0).clamp(-12.0, 12.0));
+        final h = box.size.height.clamp(1.0, double.infinity);
+        final norm = 1.0 - (local.dy / h).clamp(0.0, 1.0);
+        onChanged((norm * range * 2 - range).clamp(-range, range));
       },
       onVerticalDragUpdate: (d) {
         final box = context.findRenderObject() as RenderBox;
         final local = box.globalToLocal(d.globalPosition);
-        final norm = 1.0 - (local.dy / box.size.height).clamp(0.0, 1.0);
-        onChanged((norm * 24.0 - 12.0).clamp(-12.0, 12.0));
+        final h = box.size.height.clamp(1.0, double.infinity);
+        final norm = 1.0 - (local.dy / h).clamp(0.0, 1.0);
+        onChanged((norm * range * 2 - range).clamp(-range, range));
       },
       child: Column(
         mainAxisSize: MainAxisSize.min,

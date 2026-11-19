@@ -378,27 +378,10 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 border: Border.all(color: WinampColors.metalMid, width: 2),
               ),
               child: Column(children: [
-                // EQ title bar — dark gray, centered
-                Container(
-                  height: 16,
-                  decoration: BoxDecoration(
-                    color: WinampColors.metalDarker,
-                    border: Border(
-                      top: BorderSide(color: WinampColors.metalMid, width: 1),
-                      bottom: BorderSide(color: WinampColors.metalMid, width: 1),
-                    ),
-                  ),
-                  child: Stack(
-                    alignment: Alignment.center,
-                    children: [
-                      Center(child: Text('\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
-                        style: lcdStyle(size: 9, color: WinampColors.metalLight))),
-                      Positioned(right: 3, top: 0, bottom: 0,
-                        child: _WinampToggleButton(label: 'ON', active: _eqEnabled,
-                          onTap: _onEqToggle)),
-                    ],
-                  ),
-                ),
+                // EQ title bar — double solid lines
+                WinampTitleBar(title: '\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
+                  trailing: _WinampToggleButton(label: 'ON', active: _eqEnabled,
+                    onTap: _onEqToggle)),
                 // EQ sliders: 5 bands with REAL frequencies
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -431,26 +414,8 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   color: WinampColors.bgPanel,
                   border: Border.all(color: WinampColors.metalMid, width: 2)),
                 child: Column(children: [
-                  Container(
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: WinampColors.metalDarker,
-                      border: Border(
-                        top: BorderSide(color: WinampColors.metalMid, width: 1),
-                        bottom: BorderSide(color: WinampColors.metalMid, width: 1),
-                      ),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        Center(child: Text('\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0421\u041F\u0418\u0421\u041E\u041A',
-                          style: lcdStyle(size: 9, color: WinampColors.metalLight))),
-                        Positioned(right: 6, top: 0, bottom: 0,
-                          child: Center(child: Text('${queue.length} ${_formatTotal(queue)}',
-                            style: lcdStyle(size: 10, color: WinampColors.textSecondary)))),
-                      ],
-                    ),
-                  ),
+                  // Playlist title bar — double solid lines, no track count
+                  WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0421\u041F\u0418\u0421\u041E\u041A'),
                   Expanded(
                     child: Container(
                       color: WinampColors.lcdBg,
@@ -484,6 +449,24 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                           );
                         },
                       ),
+                    ),
+                  ),
+                  // Info box — track count + total duration (attached to playlist)
+                  Container(
+                    height: 14,
+                    padding: const EdgeInsets.symmetric(horizontal: 4),
+                    decoration: BoxDecoration(
+                      color: WinampColors.lcdBg,
+                      border: Border(top: BorderSide(color: WinampColors.metalDark, width: 0.5)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('${queue.length} tracks',
+                          style: lcdStyle(size: 8, color: WinampColors.textSecondary)),
+                        Text(_formatTotal(queue),
+                          style: lcdStyle(size: 8, color: WinampColors.textSecondary)),
+                      ],
                     ),
                   ),
                   // Action bar

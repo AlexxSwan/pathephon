@@ -1,6 +1,6 @@
 // ============================================================================
 //  now_playing_winamp.dart — Winamp with EQ panel + working ADD
-//  EQ: inline panel between player and playlist (5 bands + preamp)
+//  Compact Winamp layout — minimal padding, small fonts, tight spacing
 //  ADD: onAdd callback -> Library tab
 //  Title: ПАТЕФОН / ПАТЕФОН СПИСОК
 // ============================================================================
@@ -215,17 +215,17 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
         child: Column(children: [
           // ==================== MAIN WINDOW ====================
           Container(
-            margin: const EdgeInsets.all(2),
+            margin: const EdgeInsets.all(1),
             decoration: BoxDecoration(
               color: WinampColors.bgPanel,
               border: Border.all(color: WinampColors.metalDark, width: 1),
             ),
             child: Column(children: [
               WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D'),
-              // LCD display
+              // LCD display — compact
               Container(
-                margin: const EdgeInsets.all(2),
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                margin: const EdgeInsets.all(1),
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
                   color: WinampColors.lcdBg,
                   border: Border.all(color: WinampColors.metalDark, width: 1),
@@ -238,84 +238,84 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                         artistStr.isNotEmpty
                           ? '$artistStr - ${_scrollTitle(titleStr)}'
                           : _scrollTitle(titleStr),
-                        style: lcdStyle(size: 14),
+                        style: lcdStyle(size: 10),
                         maxLines: 1, overflow: TextOverflow.clip,
                       )),
                       if (track != null && track.durationMs > 0)
                         Text('${(track.durationMs / 1000).round()}',
-                          style: lcdStyle(size: 12, color: WinampColors.textSecondary)),
+                          style: lcdStyle(size: 9, color: WinampColors.textSecondary)),
                     ],
                   ),
                   const SizedBox(height: 2),
                   Row(children: [
-                    Text(formatDuration(pos), style: lcdStyle(size: 20)),
-                    const SizedBox(width: 8),
+                    Text(formatDuration(pos), style: lcdStyle(size: 12)),
+                    const SizedBox(width: 6),
                     Text('-${formatDuration(remaining)}',
-                      style: lcdStyle(size: 14, color: WinampColors.textSecondary)),
+                      style: lcdStyle(size: 10, color: WinampColors.textSecondary)),
                     const Spacer(),
                     Text('STEREO',
-                      style: lcdStyle(size: 10,
+                      style: lcdStyle(size: 8,
                         color: isPlaying ? WinampColors.lcdText : WinampColors.lcdDim)),
-                    const SizedBox(width: 6),
-                    SizedBox(width: 48, height: 14,
+                    const SizedBox(width: 4),
+                    SizedBox(width: 36, height: 10,
                       child: CustomPaint(painter: _WinampSpectrumPainter(_spectrumBars))),
                   ]),
                 ]),
               ),
               // Seek bar
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 1),
                 child: WinampSeekBar(
                   position: pos, duration: duration,
-                  onSeek: (d) => playback.seekTo(d), segments: 28),
+                  onSeek: (d) => playback.seekTo(d), segments: 24),
               ),
               // Volume + Balance
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                 child: Row(children: [
-                  Text('VOL', style: lcdStyle(size: 10, color: WinampColors.textMuted)),
-                  const SizedBox(width: 4),
+                  Text('VOL', style: lcdStyle(size: 8, color: WinampColors.textMuted)),
+                  const SizedBox(width: 2),
                   Expanded(flex: 3, child: _WinampHSlider(
                     value: _volume,
                     onChanged: (v) { setState(() => _volume = v); playback.setVolume(v); })),
-                  const SizedBox(width: 8),
-                  Text('BAL', style: lcdStyle(size: 10, color: WinampColors.textMuted)),
                   const SizedBox(width: 4),
+                  Text('BAL', style: lcdStyle(size: 8, color: WinampColors.textMuted)),
+                  const SizedBox(width: 2),
                   Expanded(flex: 2, child: _WinampHSlider(value: 0.5, onChanged: (_) {})),
                 ]),
               ),
               // Controls: playback LEFT | toggles RIGHT
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // LEFT: playback buttons (compact, Winamp-style)
+                    // LEFT: playback buttons (compact)
                     Row(children: [
-                      WinampButton(icon: Icons.skip_previous, size: 24,
+                      WinampButton(icon: Icons.skip_previous, size: 18,
                         onTap: () => playback.skipToPrevious()),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: 2),
                       WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                        size: 28, active: isPlaying,
+                        size: 22, active: isPlaying,
                         onTap: () => isPlaying ? playback.pause() : playback.play()),
-                      const SizedBox(width: 3),
-                      WinampButton(icon: Icons.stop, size: 24,
+                      const SizedBox(width: 2),
+                      WinampButton(icon: Icons.stop, size: 18,
                         onTap: () => playback.stop()),
-                      const SizedBox(width: 3),
-                      WinampButton(icon: Icons.skip_next, size: 24,
+                      const SizedBox(width: 2),
+                      WinampButton(icon: Icons.skip_next, size: 18,
                         onTap: () => playback.skipToNext()),
                     ]),
                     // RIGHT: EQ PL SHF REP
                     Row(children: [
                       _WinampToggleButton(label: 'EQ', active: _eqPanel,
                         onTap: () => setState(() => _eqPanel = !_eqPanel)),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: 2),
                       _WinampToggleButton(label: 'PL', active: _plPanel,
                         onTap: () => setState(() => _plPanel = !_plPanel)),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 4),
                       _WinampToggleButton(label: 'SHF', active: shuffle,
                         onTap: () => playback.setShuffle(!shuffle)),
-                      const SizedBox(width: 3),
+                      const SizedBox(width: 2),
                       _WinampToggleButton(
                         label: repeatMode == RepeatMode.one ? 'R1' : 'REP',
                         active: repeatMode != RepeatMode.off,
@@ -337,7 +337,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
           // ==================== EQ PANEL (toggles) ====================
           if (_eqPanel)
             Container(
-              margin: const EdgeInsets.symmetric(horizontal: 2),
+              margin: const EdgeInsets.symmetric(horizontal: 1),
               decoration: BoxDecoration(
                 color: WinampColors.bgPanel,
                 border: Border.all(color: WinampColors.metalDark, width: 1),
@@ -345,7 +345,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
               child: Column(children: [
                 // EQ title bar — dark gray, centered
                 Container(
-                  height: 20,
+                  height: 16,
                   decoration: BoxDecoration(
                     color: WinampColors.metalDarker,
                     border: Border(
@@ -357,8 +357,8 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                     alignment: Alignment.center,
                     children: [
                       Center(child: Text('\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
-                        style: lcdStyle(size: 12, color: WinampColors.lcdText))),
-                      Positioned(right: 4, top: 0, bottom: 0,
+                        style: lcdStyle(size: 9, color: WinampColors.lcdText))),
+                      Positioned(right: 3, top: 0, bottom: 0,
                         child: _WinampToggleButton(label: 'ON', active: _eqEnabled,
                           onTap: _onEqToggle)),
                     ],
@@ -366,7 +366,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 ),
                 // EQ sliders: 5 bands with REAL frequencies
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   color: WinampColors.lcdBg,
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -397,7 +397,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   border: Border.all(color: WinampColors.metalDark, width: 1)),
                 child: Column(children: [
                   Container(
-                    height: 20,
+                    height: 16,
                     decoration: BoxDecoration(
                       color: WinampColors.metalDarker,
                       border: Border(
@@ -409,7 +409,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       alignment: Alignment.center,
                       children: [
                         Center(child: Text('\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0421\u041F\u0418\u0421\u041E\u041A',
-                          style: lcdStyle(size: 12, color: WinampColors.lcdText))),
+                          style: lcdStyle(size: 9, color: WinampColors.lcdText))),
                         Positioned(right: 6, top: 0, bottom: 0,
                           child: Center(child: Text('${queue.length} ${_formatTotal(queue)}',
                             style: lcdStyle(size: 10, color: WinampColors.textMuted)))),
@@ -422,7 +422,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       child: ListView.builder(
                         controller: _playlistScrollController,
                         padding: const EdgeInsets.symmetric(vertical: 1),
-                        itemCount: queue.length, itemExtent: 18,
+                        itemCount: queue.length, itemExtent: 16,
                         itemBuilder: (_, i) {
                           final t = queue[i];
                           final isCurrent = i == currentIndex;
@@ -435,15 +435,15 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                               padding: const EdgeInsets.symmetric(horizontal: 4),
                               child: Row(children: [
                                 SizedBox(width: 20, child: Text('${(i + 1).toString().padLeft(2, '0')}',
-                                  style: lcdStyle(size: 11,
+                                  style: lcdStyle(size: 9,
                                     color: isCurrent ? WinampColors.lcdText : WinampColors.textMuted))),
                                 Expanded(child: Text(
                                   t.artist.isNotEmpty ? '${t.artist} - ${t.title}' : t.title,
-                                  style: lcdStyle(size: 11,
+                                  style: lcdStyle(size: 9,
                                     color: isCurrent ? WinampColors.lcdText : WinampColors.textSecondary),
                                   maxLines: 1, overflow: TextOverflow.ellipsis)),
                                 if (dur.isNotEmpty)
-                                  Text(dur, style: lcdStyle(size: 11, color: WinampColors.textMuted)),
+                                  Text(dur, style: lcdStyle(size: 9, color: WinampColors.textMuted)),
                               ]),
                             ),
                           );
@@ -453,7 +453,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   ),
                   // Action bar
                   Container(
-                    height: 20,
+                    height: 16,
                     decoration: BoxDecoration(
                       color: WinampColors.bgPanel,
                       border: Border(top: BorderSide(color: WinampColors.metalDark, width: 1))),
@@ -589,7 +589,7 @@ class _WinampToggleButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 28, height: 16,
+        width: 22, height: 14,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: active ? Alignment.bottomCenter : Alignment.topCenter,
@@ -597,7 +597,7 @@ class _WinampToggleButton extends StatelessWidget {
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Center(child: Text(label,
-          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold,
+          style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold,
             color: active ? WinampColors.lcdText : WinampColors.metalDarker,
             fontFamily: 'monospace'))),
       ),
@@ -620,7 +620,7 @@ class _WinampActionButton extends StatelessWidget {
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Text(label,
-          style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold,
+          style: TextStyle(fontSize: 7, fontWeight: FontWeight.bold,
             color: WinampColors.metalDarker, fontFamily: 'monospace')),
       ),
     );

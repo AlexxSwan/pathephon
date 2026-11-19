@@ -138,14 +138,14 @@ class _WinampButtonState extends State<WinampButton> {
   }
 }
 
-/// Winamp-style LED segment seek bar.
+/// Winamp-style LED segment seek bar — compact.
 class WinampSeekBar extends StatelessWidget {
   const WinampSeekBar({
     super.key,
     required this.position,
     required this.duration,
     required this.onSeek,
-    this.segments = 40,
+    this.segments = 24,
   });
 
   final Duration position;
@@ -169,7 +169,7 @@ class WinampSeekBar extends StatelessWidget {
             onSeek(Duration(milliseconds: (seekProgress * totalMs).toInt()));
           },
           child: Container(
-            height: 16,
+            height: 10,
             decoration: BoxDecoration(
               color: WinampColors.lcdBg,
               border: Border.all(color: WinampColors.metalDark, width: 1),
@@ -179,10 +179,9 @@ class WinampSeekBar extends StatelessWidget {
                 final filled = i < filledSegments;
                 return Expanded(
                   child: Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 2),
+                    margin: const EdgeInsets.symmetric(horizontal: 0.5, vertical: 1),
                     decoration: BoxDecoration(
                       color: filled ? WinampColors.lcdText : WinampColors.lcdDim,
-                      borderRadius: BorderRadius.circular(1),
                     ),
                   ),
                 );
@@ -204,7 +203,7 @@ class WinampTitleBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      height: 20,
+      height: 16,
       decoration: BoxDecoration(
         color: WinampColors.metalDarker,
         border: Border(

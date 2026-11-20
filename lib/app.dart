@@ -14,6 +14,9 @@ import "presentation/screens/library_screen.dart";
 import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
 import "presentation/screens/now_playing_winamp.dart";
+import "presentation/screens/about_winamp.dart";
+import "presentation/providers/skin_provider.dart";
+import "presentation/screens/now_playing_winamp.dart";
 import "presentation/providers/skin_provider.dart";
 import "presentation/screens/search_screen.dart";
 import "presentation/widgets/permission_gate.dart";
@@ -277,6 +280,7 @@ class _ShellState extends ConsumerState<_Shell> {
 
   @override
   Widget build(BuildContext context) {
+    // --8<-- winamp-block-start (do not edit, managed by patcher) --8<--
     final skin = ref.watch(skinProvider);
     if (skin == 'winamp' && _index == 0) {
       return NowPlayingWinamp(
@@ -285,7 +289,11 @@ class _ShellState extends ConsumerState<_Shell> {
         onAdd: () => setState(() => _index = 1),
       );
     }
-    final l = AppLocalizations.of(context);
+    if (skin == 'winamp' && _index == 4) {
+      return AboutWinamp(onBack: () => setState(() => _index = 0));
+    }
+    // --8<-- winamp-block-end --8<--
+        final l = AppLocalizations.of(context);
     final p = Preset.of(context);
     final themeModeIdx = ref.watch(themeModeProvider);
     return PopScope(

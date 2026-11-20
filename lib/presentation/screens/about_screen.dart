@@ -283,7 +283,7 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
             ref.read(sharedPreferencesProvider).setString("pathephon.skin", newSkin);
           },
           icon: Icon(Icons.palette, size: 18, color: p.brass),
-          label: Text(ref.watch(skinProvider) == "winamp" ? "Skin: Winamp" : "Skin: Retro",
+          label: Icon(Icons.palette, size: 20),
               style: TextStyle(color: p.brass)),
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: p.brass.withOpacity(0.5)),

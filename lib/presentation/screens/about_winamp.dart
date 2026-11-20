@@ -4,6 +4,11 @@
 //  - 5 big buttons (40px tall, 14pt text) in 3 rows
 //  - ПЛЕЙЕР not highlighted (same style as others)
 //  - Skin toggle: icon-only, 40px tall, 24pt icon
+//  - Dialogs (ЛОГ/СТАТИСТИКА/ОПИСАНИЕ) use _LegendaDialog:
+//      * WinampTitleBar header
+//      * Metal border (metalMid) like main window
+//      * LCD background content area
+//      * Winamp-styled action buttons
 // ============================================================================
 import 'dart:io';
 import 'package:flutter/material.dart' hide RepeatMode;
@@ -21,7 +26,7 @@ import '../providers/skin_provider.dart';
 class AboutWinamp extends ConsumerStatefulWidget {
   const AboutWinamp({super.key, this.onBack});
 
-  /// Tap ПЛЕЕР button -> back to Now Playing
+  /// Tap ПЛЕЙЕР button -> back to Now Playing
   final VoidCallback? onBack;
 
   @override
@@ -78,16 +83,15 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
     if (!mounted) return;
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: WinampColors.lcdBg,
-        title: Text('СТАТИСТИКА',
-            style: lcdStyle(size: 16, color: WinampColors.lcdText)),
-        content: Column(
+      builder: (ctx) => _LegendaDialog(
+        title: 'СТАТИСТИКА',
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('ЗА ВСЁ ВРЕМЯ:',
                 style: lcdStyle(size: 12, color: WinampColors.textSecondary)),
+            const SizedBox(height: 4),
             Text('Треков: ${stats['alltime_tracks']}',
                 style: lcdStyle(size: 12)),
             Text('Время: ${_fmtDuration(stats['alltime_play_ms'] as int)}',
@@ -95,6 +99,7 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
             const SizedBox(height: 14),
             Text('ЗА СЕССИЮ:',
                 style: lcdStyle(size: 12, color: WinampColors.textSecondary)),
+            const SizedBox(height: 4),
             Text('Треков: ${stats['session_tracks']}',
                 style: lcdStyle(size: 12)),
             Text('Время: ${_fmtDuration(stats['session_play_ms'] as int)}',
@@ -102,10 +107,9 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
           ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('ЗАКРЫТЬ', style: lcdStyle(size: 12, color: WinampColors.metalLight)),
-          ),
+          _LegendaActionButton(
+              label: 'ЗАКРЫТЬ',
+              onTap: () => Navigator.of(ctx).pop()),
         ],
       ),
     );
@@ -121,14 +125,19 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
     });
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: WinampColors.lcdBg,
-        title: Text('ЛОГ', style: lcdStyle(size: 16, color: WinampColors.lcdText)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _logLoading
-              ? const Center(child: CircularProgressIndicator(color: WinampColors.lcdText))
-              : SingleChildScrollView(
+      builder: (ctx) => _LegendaDialog(
+        title: 'ЛОГ',
+        child: _logLoading
+            ? const SizedBox(
+                height: 120,
+                child: Center(
+                    child: CircularProgressIndicator(
+                        color: WinampColors.lcdText, strokeWidth: 2)),
+              )
+            : SizedBox(
+                width: double.maxFinite,
+                height: 280,
+                child: SingleChildScrollView(
                   child: SelectableText(
                     _logPreview,
                     style: TextStyle(
@@ -138,27 +147,25 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
                         height: 1.3),
                   ),
                 ),
-        ),
+              ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('ЗАКРЫТЬ', style: lcdStyle(size: 12, color: WinampColors.metalLight)),
-          ),
-          TextButton(
-            onPressed: () async {
-              await _shareLog();
-              if (ctx.mounted) Navigator.of(ctx).pop();
-            },
-            child: Text('ПОДЕЛИТЬСЯ', style: lcdStyle(size: 12, color: WinampColors.lcdText)),
-          ),
-          TextButton(
-            onPressed: () async {
-              await crashLogger.clear();
-              if (ctx.mounted) Navigator.of(ctx).pop();
-              if (mounted) setState(() => _logPreview = '');
-            },
-            child: Text('ОЧИСТИТЬ', style: lcdStyle(size: 12, color: WinampColors.textMuted)),
-          ),
+          _LegendaActionButton(
+              label: 'ОЧИСТИТЬ',
+              onTap: () async {
+                await crashLogger.clear();
+                if (ctx.mounted) Navigator.of(ctx).pop();
+                if (mounted) setState(() => _logPreview = '');
+              }),
+          _LegendaActionButton(
+              label: 'ПОДЕЛИТЬСЯ',
+              highlight: true,
+              onTap: () async {
+                await _shareLog();
+                if (ctx.mounted) Navigator.of(ctx).pop();
+              }),
+          _LegendaActionButton(
+              label: 'ЗАКРЫТЬ',
+              onTap: () => Navigator.of(ctx).pop()),
         ],
       ),
     );
@@ -167,42 +174,39 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
   void _showDescription() {
     showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: WinampColors.lcdBg,
-        title: Text('ОПИСАНИЕ', style: lcdStyle(size: 16, color: WinampColors.lcdText)),
-        content: SizedBox(
+      builder: (ctx) => _LegendaDialog(
+        title: 'ОПИСАНИЕ',
+        child: SizedBox(
           width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('Патефон — аудиоплеер для Android с ретро-дизайном.',
-                    style: lcdStyle(size: 12)),
-                const SizedBox(height: 10),
-                Text('ВОЗМОЖНОСТИ:',
-                    style: lcdStyle(size: 11, color: WinampColors.textSecondary)),
-                Text(
-                    '\u2022 MP3, FLAC, OGG, M4A, WAV, AAC, Opus\n'
-                    '\u2022 Управление очередью\n'
-                    '\u2022 Shuffle и Repeat\n'
-                    '\u2022 Эквалайзер (5 полос)\n'
-                    '\u2022 Поиск по библиотеке\n'
-                    '\u2022 Импорт/экспорт .m3u\n'
-                    '\u2022 Bluetooth-управление\n'
-                    '\u2022 Датчик CPU\n'
-                    '\u2022 Статистика прослушивания\n'
-                    '\u2022 Сохранение состояния',
-                    style: lcdStyle(size: 11, color: WinampColors.textSecondary)),
-              ],
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Патефон — аудиоплеер для Android с ретро-дизайном.',
+                  style: lcdStyle(size: 12)),
+              const SizedBox(height: 10),
+              Text('ВОЗМОЖНОСТИ:',
+                  style: lcdStyle(size: 11, color: WinampColors.textSecondary)),
+              const SizedBox(height: 4),
+              Text(
+                  '\u2022 MP3, FLAC, OGG, M4A, WAV, AAC, Opus\n'
+                  '\u2022 Управление очередью\n'
+                  '\u2022 Shuffle и Repeat\n'
+                  '\u2022 Эквалайзер (5 полос)\n'
+                  '\u2022 Поиск по библиотеке\n'
+                  '\u2022 Импорт/экспорт .m3u\n'
+                  '\u2022 Bluetooth-управление\n'
+                  '\u2022 Датчик CPU\n'
+                  '\u2022 Статистика прослушивания\n'
+                  '\u2022 Сохранение состояния',
+                  style: lcdStyle(size: 11, color: WinampColors.textSecondary)),
+            ],
           ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('ЗАКРЫТЬ', style: lcdStyle(size: 12, color: WinampColors.metalLight)),
-          ),
+          _LegendaActionButton(
+              label: 'ЗАКРЫТЬ',
+              onTap: () => Navigator.of(ctx).pop()),
         ],
       ),
     );
@@ -298,7 +302,7 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
   }
 }
 
-/// Легенда-styled button for About screen — 40px tall, 14pt text.
+/// Легенда-styled About screen button — 40px tall, 14pt text.
 /// NO active state on ПЛЕЙЕР (all buttons look identical unless pressed).
 class _LegendaAboutButton extends StatefulWidget {
   const _LegendaAboutButton({required this.label, required this.onTap});
@@ -386,6 +390,116 @@ class _LegendaSkinButtonState extends State<_LegendaSkinButton> {
             size: 24,
             color: WinampColors.metalDarker,
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Легенда-styled dialog wrapper.
+/// Uses WinampTitleBar header + metal border + LCD background.
+/// Matches the main About window look.
+class _LegendaDialog extends StatelessWidget {
+  const _LegendaDialog({
+    required this.title,
+    required this.child,
+    this.actions = const [],
+  });
+  final String title;
+  final Widget child;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 380),
+        decoration: BoxDecoration(
+          color: WinampColors.bgPanel,
+          border: Border.all(color: WinampColors.metalMid, width: 2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Title bar — same WinampTitleBar used on main screen
+            WinampTitleBar(title: title),
+            // LCD content area
+            Container(
+              color: WinampColors.lcdBg,
+              padding: const EdgeInsets.all(14),
+              child: child,
+            ),
+            // Action buttons strip — metallic, like main window buttons
+            if (actions.isNotEmpty)
+              Container(
+                color: WinampColors.bgPanel,
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: actions
+                      .expand((a) => [a, const SizedBox(width: 4)])
+                      .toList()
+                      ..removeLast(),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Легенда-styled action button for dialogs — 28px tall, 11pt text.
+/// highlight=true -> green LCD text (for primary action like ПОДЕЛИТЬСЯ).
+class _LegendaActionButton extends StatefulWidget {
+  const _LegendaActionButton({
+    required this.label,
+    required this.onTap,
+    this.highlight = false,
+  });
+  final String label;
+  final VoidCallback onTap;
+  final bool highlight;
+
+  @override
+  State<_LegendaActionButton> createState() => _LegendaActionButtonState();
+}
+
+class _LegendaActionButtonState extends State<_LegendaActionButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: Container(
+        height: 28,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: _pressed ? Alignment.bottomCenter : Alignment.topCenter,
+            end: _pressed ? Alignment.topCenter : Alignment.bottomCenter,
+            colors: [
+              WinampColors.metalLight,
+              WinampColors.metalMid,
+              WinampColors.metalDark
+            ],
+          ),
+          border: Border.all(color: WinampColors.metalDarker, width: 1),
+        ),
+        child: Center(
+          child: Text(widget.label,
+              style: lcdStyle(
+                  size: 11,
+                  color: widget.highlight
+                      ? WinampColors.lcdText
+                      : WinampColors.metalDarker)
+                  .copyWith(fontWeight: FontWeight.bold)),
         ),
       ),
     );

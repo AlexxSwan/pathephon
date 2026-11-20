@@ -44,6 +44,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
   double _volume = 0.7;
   bool _plPanel = true;
   bool _eqPanel = false;
+  bool _showRemaining = false; // tap time to toggle elapsed/remaining
   // EQ state — synced with equalizerServiceProvider (REAL native EQ)
   List<double> _eqBands = List.filled(kEqBandCount, 0.0);
   bool _eqEnabled = false;
@@ -271,44 +272,65 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
             ),
             child: Column(children: [
               WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D'),
-              // LCD display — compact
+              // LCD display — with album art on left
               Container(
                 margin: const EdgeInsets.all(1),
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
                 decoration: BoxDecoration(
                   color: WinampColors.lcdBg,
                   border: Border.all(color: WinampColors.metalMid, width: 2),
                 ),
-                child: Column(children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(child: Text(
-                        artistStr.isNotEmpty
-                          ? '$artistStr - ${_scrollTitle(titleStr)}'
-                          : _scrollTitle(titleStr),
-                        style: lcdStyle(size: 10),
-                        maxLines: 1, overflow: TextOverflow.clip,
-                      )),
-                      Text('CPU ${_cpuPct.toStringAsFixed(1)}%',
-                        style: lcdStyle(size: 9, color: WinampColors.textSecondary)),
-                    ],
-                  ),
-                  const SizedBox(height: 2),
-                  Row(children: [
-                    Text(formatDuration(pos), style: lcdStyle(size: 12)),
-                    const SizedBox(width: 6),
-                    Text('-${formatDuration(remaining)}',
-                      style: lcdStyle(size: 10, color: WinampColors.textSecondary)),
-                    const Spacer(),
-                    Text('STEREO',
-                      style: lcdStyle(size: 8,
-                        color: isPlaying ? WinampColors.lcdText : WinampColors.lcdDim)),
-                    const SizedBox(width: 4),
-                    SizedBox(width: 36, height: 10,
-                      child: CustomPaint(painter: _WinampSpectrumPainter(_spectrumBars))),
-                  ]),
-                ]),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Album art (left, full height of LCD)
+                    SizedBox(
+                      width: 48, height: 48,
+                      child: _WinampArtwork(track: track),
+                    ),
+                    // LCD content (right of art)
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        child: Column(children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(child: Text(
+                                artistStr.isNotEmpty
+                                  ? '$artistStr - ${_scrollTitle(titleStr)}'
+                                  : _scrollTitle(titleStr),
+                                style: lcdStyle(size: 10),
+                                maxLines: 1, overflow: TextOverflow.clip,
+                              )),
+                              Text('CPU ${_cpuPct.toStringAsFixed(1)}%',
+                                style: lcdStyle(size: 10, color: WinampColors.textSecondary)),
+                            ],
+                          ),
+                          const SizedBox(height: 2),
+                          Row(children: [
+                            // Time display — tap to toggle elapsed/remaining
+                            GestureDetector(
+                              onTap: () => setState(() => _showRemaining = !_showRemaining),
+                              child: Text(
+                                _showRemaining
+                                  ? '-${formatDuration(remaining)}'
+                                  : formatDuration(pos),
+                                style: lcdStyle(size: 14),
+                              ),
+                            ),
+                            const Spacer(),
+                            Text('STEREO',
+                              style: lcdStyle(size: 8,
+                                color: isPlaying ? WinampColors.lcdText : WinampColors.lcdDim)),
+                            const SizedBox(width: 4),
+                            SizedBox(width: 36, height: 10,
+                              child: CustomPaint(painter: _WinampSpectrumPainter(_spectrumBars))),
+                          ]),
+                        ]),
+                      ),
+                    ),
+                  ],
+                ),
               ),
               // Seek bar
               Padding(
@@ -323,13 +345,13 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 child: Row(children: [
                   Text('VOL', style: lcdStyle(size: 8, color: WinampColors.textSecondary)),
                   const SizedBox(width: 2),
-                  Expanded(flex: 3, child: _WinampHSlider(
+                  Expanded(flex: 4, child: _WinampHSlider(
                     value: _volume,
                     onChanged: (v) { setState(() => _volume = v); playback.setVolume(v); })),
                   const SizedBox(width: 4),
                   Text('BAL', style: lcdStyle(size: 8, color: WinampColors.textSecondary)),
                   const SizedBox(width: 2),
-                  Expanded(flex: 2, child: _WinampHSlider(value: 0.5, onChanged: (_) {})),
+                  Expanded(flex: 1, child: _WinampHSlider(value: 0.5, onChanged: (_) {})),
                 ]),
               ),
               // Controls: playback LEFT | toggles RIGHT
@@ -404,7 +426,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                     children: [
                       // LEFT: 5 vertical band sliders
                       Expanded(
-                        flex: 3,
+                        flex: 4,
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: List.generate(kEqBandCount, (i) {
@@ -424,7 +446,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       const SizedBox(width: 4),
                       // RIGHT: 6 preset buttons
                       Expanded(
-                        flex: 2,
+                        flex: 1,
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: [
@@ -485,15 +507,15 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                               padding: const EdgeInsets.symmetric(horizontal: 4),
                               child: Row(children: [
                                 SizedBox(width: 20, child: Text('${(i + 1).toString().padLeft(2, '0')}',
-                                  style: lcdStyle(size: 9,
+                                  style: lcdStyle(size: 10,
                                     color: isCurrent ? WinampColors.lcdText : WinampColors.textMuted))),
                                 Expanded(child: Text(
                                   t.artist.isNotEmpty ? '${t.artist} - ${t.title}' : t.title,
-                                  style: lcdStyle(size: 9,
+                                  style: lcdStyle(size: 10,
                                     color: isCurrent ? WinampColors.lcdText : WinampColors.textSecondary),
                                   maxLines: 1, overflow: TextOverflow.ellipsis)),
                                 if (dur.isNotEmpty)
-                                  Text(dur, style: lcdStyle(size: 9, color: WinampColors.textMuted)),
+                                  Text(dur, style: lcdStyle(size: 10, color: WinampColors.textMuted)),
                               ]),
                             ),
                           );
@@ -718,6 +740,81 @@ class _WinampPresetButton extends StatelessWidget {
           style: lcdStyle(size: 7,
             color: active ? WinampColors.lcdText : WinampColors.metalDarker))),
       ),
+    );
+  }
+}
+
+/// Album artwork for Winamp LCD — tries cover.jpg/folder.jpg or track.artUri.
+class _WinampArtwork extends StatefulWidget {
+  const _WinampArtwork({required this.track});
+  final Track? track;
+
+  @override
+  State<_WinampArtwork> createState() => _WinampArtworkState();
+}
+
+class _WinampArtworkState extends State<_WinampArtwork> {
+  static final Map<String, String?> _coverCache = {};
+
+  @override
+  Widget build(BuildContext context) {
+    final t = widget.track;
+    if (t == null) return _fallback();
+
+    // Try artUri first
+    if (t.artUri.isNotEmpty) {
+      if (t.artUri.startsWith('file://')) {
+        return Image.file(File(Uri.parse(t.artUri).toFilePath()),
+            fit: BoxFit.cover, width: 48, height: 48,
+            errorBuilder: (_, __, ___) => _fallback());
+      }
+      return Image.network(t.artUri, fit: BoxFit.cover, width: 48, height: 48,
+          errorBuilder: (_, __, ___) => _fallback());
+    }
+
+    // Try cover.jpg / folder.jpg in same directory
+    final fp = t.filePath.isNotEmpty ? t.filePath : null;
+    if (fp != null && _coverCache.containsKey(fp)) {
+      final cached = _coverCache[fp];
+      if (cached != null) {
+        return Image.file(File(Uri.parse(cached).toFilePath()),
+            fit: BoxFit.cover, width: 48, height: 48,
+            errorBuilder: (_, __, ___) => _fallback());
+      }
+      return _fallback();
+    }
+    if (fp != null) _findCover(fp);
+    return _fallback();
+  }
+
+  void _findCover(String filePath) async {
+    try {
+      final dir = File(filePath).parent;
+      if (dir.existsSync()) {
+        final entities = await dir.list().toList();
+        for (final e in entities) {
+          final name = e.uri.pathSegments.last.toLowerCase();
+          if (name == 'cover.jpg' || name == 'folder.jpg' ||
+              name == 'album.jpg' || name == 'front.jpg' ||
+              name == 'cover.png' || name == 'folder.png') {
+            _coverCache[filePath] = 'file://${e.path}';
+            if (mounted) setState(() {});
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+    _coverCache[filePath] = null;
+  }
+
+  Widget _fallback() {
+    return Container(
+      color: WinampColors.bgPanel,
+      width: 48, height: 48,
+      child: Image.asset('assets/pathephon.gif',
+          fit: BoxFit.cover, width: 48, height: 48,
+          errorBuilder: (_, __, ___) => Icon(Icons.graphic_eq,
+              size: 24, color: WinampColors.lcdDim)),
     );
   }
 }

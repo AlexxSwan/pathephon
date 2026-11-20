@@ -106,7 +106,7 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
                 style: lcdStyle(size: 12)),
           ],
         ),
-        actions: [
+        primaryActions: [
           _LegendaActionButton(
               label: 'ЗАКРЫТЬ',
               onTap: () => Navigator.of(ctx).pop()),
@@ -148,14 +148,7 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
                   ),
                 ),
               ),
-        actions: [
-          _LegendaActionButton(
-              label: 'ОЧИСТИТЬ',
-              onTap: () async {
-                await crashLogger.clear();
-                if (ctx.mounted) Navigator.of(ctx).pop();
-                if (mounted) setState(() => _logPreview = '');
-              }),
+        primaryActions: [
           _LegendaActionButton(
               label: 'ПОДЕЛИТЬСЯ',
               onTap: () async {
@@ -166,6 +159,13 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
               label: 'ЗАКРЫТЬ',
               onTap: () => Navigator.of(ctx).pop()),
         ],
+        secondaryAction: _LegendaActionButton(
+            label: 'ОЧИСТИТЬ',
+            onTap: () async {
+              await crashLogger.clear();
+              if (ctx.mounted) Navigator.of(ctx).pop();
+              if (mounted) setState(() => _logPreview = '');
+            }),
       ),
     );
   }
@@ -202,7 +202,7 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
             ],
           ),
         ),
-        actions: [
+        primaryActions: [
           _LegendaActionButton(
               label: 'ЗАКРЫТЬ',
               onTap: () => Navigator.of(ctx).pop()),
@@ -398,18 +398,30 @@ class _LegendaSkinButtonState extends State<_LegendaSkinButton> {
 /// Легенда-styled dialog wrapper.
 /// Uses WinampTitleBar header + metal border + LCD background.
 /// Matches the main About window look.
+///
+/// Layout of action buttons:
+///   - primaryActions: rendered in row 1, each button takes equal share
+///     (1/N of row width, where N = primaryActions.length).
+///   - secondaryAction: rendered in row 2, centered, with the SAME width
+///     as a single row-1 button when N=2 (i.e. ~50% of row width).
+///     Use case: ЛОГ dialog has [ПОДЕЛИТЬСЯ, ЗАКРЫТЬ] in row 1 and a
+///     centered ОЧИСТИТЬ in row 2, all the same size so ПОДЕЛИТЬСЯ fits.
 class _LegendaDialog extends StatelessWidget {
   const _LegendaDialog({
     required this.title,
     required this.child,
-    this.actions = const [],
+    this.primaryActions = const [],
+    this.secondaryAction,
   });
   final String title;
   final Widget child;
-  final List<Widget> actions;
+  final List<Widget> primaryActions;
+  final Widget? secondaryAction;
 
   @override
   Widget build(BuildContext context) {
+    final hasRow1 = primaryActions.isNotEmpty;
+    final hasRow2 = secondaryAction != null;
     return Dialog(
       backgroundColor: Colors.transparent,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
@@ -430,17 +442,35 @@ class _LegendaDialog extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: child,
             ),
-            // Action buttons strip — metallic, equal-width via Expanded
-            if (actions.isNotEmpty)
+            // Action buttons area
+            if (hasRow1 || hasRow2)
               Container(
                 color: WinampColors.bgPanel,
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
-                child: Row(
+                padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    for (int i = 0; i < actions.length; i++) ...[
-                      if (i > 0) const SizedBox(width: 4),
-                      Expanded(child: actions[i]),
-                    ],
+                    // Row 1: primary actions, equal width via Expanded
+                    if (hasRow1)
+                      Row(
+                        children: [
+                          for (int i = 0; i < primaryActions.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 4),
+                            Expanded(child: primaryActions[i]),
+                          ],
+                        ],
+                      ),
+                    // Row 2: secondary action, centered, ~50% width
+                    // (matches row-1 button width when row 1 has 2 buttons)
+                    if (hasRow1 && hasRow2) const SizedBox(height: 6),
+                    if (hasRow2)
+                      Row(
+                        children: [
+                          const Expanded(flex: 1, child: SizedBox()),
+                          Expanded(flex: 2, child: secondaryAction!),
+                          const Expanded(flex: 1, child: SizedBox()),
+                        ],
+                      ),
                   ],
                 ),
               ),
@@ -451,8 +481,8 @@ class _LegendaDialog extends StatelessWidget {
   }
 }
 
-/// Легенда-styled action button for dialogs — 28px tall, 11pt text.
-/// highlight=true -> green LCD text (for primary action like ПОДЕЛИТЬСЯ).
+/// Легенда-styled action button for dialogs — 32px tall, 11pt text.
+/// highlight=true -> green LCD text (kept for future use; not currently set).
 class _LegendaActionButton extends StatefulWidget {
   const _LegendaActionButton({
     required this.label,
@@ -478,8 +508,8 @@ class _LegendaActionButtonState extends State<_LegendaActionButton> {
       onTapCancel: () => setState(() => _pressed = false),
       onTap: widget.onTap,
       child: Container(
-        height: 28,
-        padding: const EdgeInsets.symmetric(horizontal: 14),
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: _pressed ? Alignment.bottomCenter : Alignment.topCenter,
@@ -494,6 +524,8 @@ class _LegendaActionButtonState extends State<_LegendaActionButton> {
         ),
         child: Center(
           child: Text(widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: lcdStyle(
                   size: 11,
                   color: widget.highlight

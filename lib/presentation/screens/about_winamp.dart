@@ -43,7 +43,7 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
         });
       }
     } catch (_) {
-      if (mounted) setState(() => _version = '?', _buildNumber = '?');
+      if (mounted) setState(() { _version = '?'; _buildNumber = '?'; });
     }
   }
 

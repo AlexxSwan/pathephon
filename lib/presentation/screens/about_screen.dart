@@ -8,6 +8,7 @@ import "../../services/crash_logger.dart";
 import "../../services/playback_service.dart";
 import "../providers/providers.dart";
 import "../providers/skin_provider.dart";
+import "about_winamp.dart";
 
 class AboutScreen extends ConsumerStatefulWidget {
   const AboutScreen({super.key});
@@ -203,6 +204,8 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final skin = ref.watch(skinProvider);
+    if (skin == "winamp") return const AboutWinamp();
     final themeModeIdx = ref.watch(themeModeProvider);
     final p = Preset.of(context);
     const modeNames = ["Тёмная", "Светлая", "Системная"];

@@ -254,3 +254,140 @@ class WinampTitleBar extends StatelessWidget {
     );
   }
 }
+
+// ============================================================================
+//  LegendaDialog — public reusable Легенда-styled dialog wrapper
+//  Used by about_winamp.dart and library_screen.dart (when skin == 'winamp').
+//
+//  Layout of action buttons:
+//    - primaryActions: rendered in row 1, each button takes equal share
+//      (1/N of row width, where N = primaryActions.length).
+//    - secondaryAction: rendered in row 2, centered, with the SAME width
+//      as a single row-1 button when N=2 (~50% of row width).
+// ============================================================================
+class LegendaDialog extends StatelessWidget {
+  const LegendaDialog({
+    super.key,
+    required this.title,
+    required this.child,
+    this.primaryActions = const [],
+    this.secondaryAction,
+  });
+  final String title;
+  final Widget child;
+  final List<Widget> primaryActions;
+  final Widget? secondaryAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasRow1 = primaryActions.isNotEmpty;
+    final hasRow2 = secondaryAction != null;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 420),
+        decoration: BoxDecoration(
+          color: WinampColors.bgPanel,
+          border: Border.all(color: WinampColors.metalMid, width: 2),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            WinampTitleBar(title: title),
+            Container(
+              color: WinampColors.lcdBg,
+              padding: const EdgeInsets.all(14),
+              child: child,
+            ),
+            if (hasRow1 || hasRow2)
+              Container(
+                color: WinampColors.bgPanel,
+                padding: const EdgeInsets.fromLTRB(6, 8, 6, 8),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (hasRow1)
+                      Row(
+                        children: [
+                          for (int i = 0; i < primaryActions.length; i++) ...[
+                            if (i > 0) const SizedBox(width: 4),
+                            Expanded(child: primaryActions[i]),
+                          ],
+                        ],
+                      ),
+                    if (hasRow1 && hasRow2) const SizedBox(height: 6),
+                    if (hasRow2)
+                      Row(
+                        children: [
+                          const Expanded(flex: 1, child: SizedBox()),
+                          Expanded(flex: 2, child: secondaryAction!),
+                          const Expanded(flex: 1, child: SizedBox()),
+                        ],
+                      ),
+                  ],
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Легенда-styled action button for dialogs — 32px tall, 11pt text.
+class LegendaActionButton extends StatefulWidget {
+  const LegendaActionButton({
+    super.key,
+    required this.label,
+    required this.onTap,
+    this.highlight = false,
+  });
+  final String label;
+  final VoidCallback onTap;
+  final bool highlight;
+
+  @override
+  State<LegendaActionButton> createState() => _LegendaActionButtonState();
+}
+
+class _LegendaActionButtonState extends State<LegendaActionButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: Container(
+        height: 32,
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: _pressed ? Alignment.bottomCenter : Alignment.topCenter,
+            end: _pressed ? Alignment.topCenter : Alignment.bottomCenter,
+            colors: [
+              WinampColors.metalLight,
+              WinampColors.metalMid,
+              WinampColors.metalDark
+            ],
+          ),
+          border: Border.all(color: WinampColors.metalDarker, width: 1),
+        ),
+        child: Center(
+          child: Text(widget.label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: lcdStyle(
+                  size: 11,
+                  color: widget.highlight
+                      ? WinampColors.lcdText
+                      : WinampColors.metalDarker)
+                  .copyWith(fontWeight: FontWeight.bold)),
+        ),
+      ),
+    );
+  }
+}

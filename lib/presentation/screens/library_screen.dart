@@ -8,6 +8,8 @@ import "dart:convert";
 
 import "../../core/l10n/generated/app_localizations.dart";
 import "../../core/theme/tube_colors.dart";
+import "../../core/theme/winamp_theme.dart";
+import "../providers/skin_provider.dart";
 import "../../domain/models/album.dart";
 import "../../domain/models/track.dart";
 import "../providers/providers.dart";
@@ -47,15 +49,30 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       if (result.tracks.isEmpty) {
         if (result.diagnostic.contains('null')) return;
         if (mounted) {
+          final skin = ref.read(skinProvider);
           await showDialog<void>(
             context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1410),
-              title: const Text("Папка пуста", style: TextStyle(color: Color(0xFFF4E9D2))),
-              content: Text(result.diagnostic, style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace')),
-              actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text("OK", style: TextStyle(color: Color(0xFFFF6B1A))))],
-            ),
+            builder: (ctx) => skin == "winamp"
+              ? LegendaDialog(
+                  title: "\u041F\u0410\u041F\u041A\u0410 \u041F\u0423\u0421\u0422\u0410",
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: SingleChildScrollView(
+                      child: SelectableText(result.diagnostic,
+                        style: TextStyle(color: WinampColors.textSecondary, fontSize: 11, fontFamily: "monospace", height: 1.3)),
+                    ),
+                  ),
+                  primaryActions: [
+                    LegendaActionButton(label: "OK", onTap: () => Navigator.of(ctx).pop()),
+                  ],
+                )
+              : AlertDialog(
+                  backgroundColor: const Color(0xFF1A1410),
+                  title: const Text("\u041F\u0430\u043F\u043A\u0430 \u043F\u0443\u0441\u0442\u0430", style: TextStyle(color: Color(0xFFF4E9D2))),
+                  content: Text(result.diagnostic, style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace')),
+                  actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text("OK", style: TextStyle(color: Color(0xFFFF6B1A))))],
+                ),
           );
         }
         return;
@@ -76,17 +93,32 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen>
       if (result.tracks.isEmpty) {
         if (result.diagnostic.contains('null')) return;
         if (mounted) {
+          final skin = ref.read(skinProvider);
           await showDialog<void>(
             context: context,
-            builder: (ctx) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1410),
-              title: const Text("\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430", style: TextStyle(color: Color(0xFFF4E9D2))),
-              content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(
-                child: Text(result.diagnostic, style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace')),
-              )),
-              actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text("OK", style: TextStyle(color: Color(0xFFFF6B1A))))],
-            ),
+            builder: (ctx) => skin == "winamp"
+              ? LegendaDialog(
+                  title: "ДИАГНОСТИКА",
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: SingleChildScrollView(
+                      child: SelectableText(result.diagnostic,
+                        style: TextStyle(color: WinampColors.textSecondary, fontSize: 11, fontFamily: "monospace", height: 1.3)),
+                    ),
+                  ),
+                  primaryActions: [
+                    LegendaActionButton(label: "OK", onTap: () => Navigator.of(ctx).pop()),
+                  ],
+                )
+              : AlertDialog(
+                  backgroundColor: const Color(0xFF1A1410),
+                  title: const Text("\u0414\u0438\u0430\u0433\u043D\u043E\u0441\u0442\u0438\u043A\u0430", style: TextStyle(color: Color(0xFFF4E9D2))),
+                  content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(
+                    child: Text(result.diagnostic, style: const TextStyle(color: Color(0xFFF4E9D2), fontSize: 12, fontFamily: 'monospace')),
+                  )),
+                  actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
+                      child: const Text("OK", style: TextStyle(color: Color(0xFFFF6B1A))))],
+                ),
           );
         }
         return;

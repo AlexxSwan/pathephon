@@ -243,15 +243,14 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
       _lastScrolledIndex = currentIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_playlistScrollController.hasClients) {
-          final target = currentIndex * 18.0;
+          final rowH = 16.0; // must match itemExtent
+          final target = currentIndex * rowH;
           final viewport = _playlistScrollController.position.viewportDimension;
-          final offset = _playlistScrollController.offset;
-          if (target < offset || target > offset + viewport - 18) {
-            _playlistScrollController.animateTo(
-              (target - viewport / 2 + 9)
-                  .clamp(0.0, _playlistScrollController.position.maxScrollExtent),
-              duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
-          }
+          // ALWAYS center current track, not just when out of view
+          _playlistScrollController.animateTo(
+            (target - viewport / 2 + rowH / 2)
+                .clamp(0.0, _playlistScrollController.position.maxScrollExtent),
+            duration: const Duration(milliseconds: 200), curve: Curves.easeOut);
         }
       });
     }

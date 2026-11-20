@@ -15,7 +15,10 @@ import '../providers/providers.dart';
 import '../providers/skin_provider.dart';
 
 class AboutWinamp extends ConsumerStatefulWidget {
-  const AboutWinamp({super.key});
+  const AboutWinamp({super.key, this.onBack});
+
+  /// Tap ПЛЕЙЕР button -> back to Now Playing
+  final VoidCallback? onBack;
 
   @override
   ConsumerState<AboutWinamp> createState() => _AboutWinampState();
@@ -251,26 +254,47 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
                     Text('github.com/AlexxSwan/pathephon',
                         style: lcdStyle(size: 9, color: WinampColors.textMuted)),
                     const SizedBox(height: 12),
-                    // Buttons — Winamp style
-                    _WinampAboutButton(
-                        label: 'СТАТИСТИКА', onTap: _showStatistics),
+                    // Row 1: СТАТИСТИКА | ЛОГ
+                    Row(children: [
+                      Expanded(child: _WinampAboutButton(
+                          label: 'СТАТИСТИКА', onTap: _showStatistics)),
+                      const SizedBox(width: 4),
+                      Expanded(child: _WinampAboutButton(
+                          label: 'ЛОГ', onTap: _showLogDialog)),
+                    ]),
                     const SizedBox(height: 4),
-                    _WinampAboutButton(label: 'ЛОГ', onTap: _showLogDialog),
-                    const SizedBox(height: 4),
-                    _WinampAboutButton(
-                        label: 'ОПИСАНИЕ', onTap: _showDescription),
-                    const SizedBox(height: 4),
-                    _WinampAboutButton(
-                      label: skin == 'winamp' ? 'СКИН: WINAMP' : 'СКИН: RETRO',
-                      active: true,
+                    // Row 2: ОПИСАНИЕ | ПЛЕЙЕР
+                    Row(children: [
+                      Expanded(child: _WinampAboutButton(
+                          label: 'ОПИСАНИЕ', onTap: _showDescription)),
+                      const SizedBox(width: 4),
+                      Expanded(child: _WinampAboutButton(
+                          label: 'ПЛЕЙЕР',
+                          active: true, onTap: () => widget.onBack?.call())),
+                    ]),
+                    const SizedBox(height: 8),
+                    // Row 3: skin toggle (icon only, centered)
+                    GestureDetector(
                       onTap: () {
-                        final newSkin =
-                            skin == 'retro' ? 'winamp' : 'retro';
+                        final newSkin = skin == 'retro' ? 'winamp' : 'retro';
                         ref.read(skinProvider.notifier).state = newSkin;
-                        ref
-                            .read(sharedPreferencesProvider)
+                        ref.read(sharedPreferencesProvider)
                             .setString('pathephon.skin', newSkin);
                       },
+                      child: Container(
+                        width: 36, height: 20,
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [WinampColors.metalLight,
+                              WinampColors.metalMid, WinampColors.metalDark]),
+                          border: Border.all(
+                              color: WinampColors.metalDarker, width: 1),
+                        ),
+                        child: Icon(Icons.palette, size: 14,
+                            color: WinampColors.metalDarker),
+                      ),
                     ),
                   ],
                 ),

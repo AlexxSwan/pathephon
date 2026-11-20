@@ -158,7 +158,6 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
               }),
           _LegendaActionButton(
               label: 'ПОДЕЛИТЬСЯ',
-              highlight: true,
               onTap: () async {
                 await _shareLog();
                 if (ctx.mounted) Navigator.of(ctx).pop();
@@ -413,9 +412,9 @@ class _LegendaDialog extends StatelessWidget {
   Widget build(BuildContext context) {
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 40),
       child: Container(
-        constraints: const BoxConstraints(maxWidth: 380),
+        constraints: const BoxConstraints(maxWidth: 420),
         decoration: BoxDecoration(
           color: WinampColors.bgPanel,
           border: Border.all(color: WinampColors.metalMid, width: 2),
@@ -431,17 +430,18 @@ class _LegendaDialog extends StatelessWidget {
               padding: const EdgeInsets.all(14),
               child: child,
             ),
-            // Action buttons strip — metallic, like main window buttons
+            // Action buttons strip — metallic, equal-width via Expanded
             if (actions.isNotEmpty)
               Container(
                 color: WinampColors.bgPanel,
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: actions
-                      .expand((a) => [a, const SizedBox(width: 4)])
-                      .toList()
-                      ..removeLast(),
+                  children: [
+                    for (int i = 0; i < actions.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 4),
+                      Expanded(child: actions[i]),
+                    ],
+                  ],
                 ),
               ),
           ],

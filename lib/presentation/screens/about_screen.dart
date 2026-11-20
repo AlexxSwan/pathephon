@@ -276,18 +276,17 @@ class _AboutScreenState extends ConsumerState<AboutScreen> {
         ),
       
         const SizedBox(height: 12),
-        OutlinedButton.icon(
+        OutlinedButton(
           onPressed: () {
             final newSkin = ref.read(skinProvider) == "retro" ? "winamp" : "retro";
             ref.read(skinProvider.notifier).state = newSkin;
             ref.read(sharedPreferencesProvider).setString("pathephon.skin", newSkin);
           },
-          icon: Icon(Icons.palette, size: 18, color: p.brass),
-          label: Icon(Icons.palette, size: 20, color: p.brass),
           style: OutlinedButton.styleFrom(
             side: BorderSide(color: p.brass.withOpacity(0.5)),
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
           ),
+          child: Icon(Icons.palette, size: 20, color: p.brass),
         ),
 ]))),
     );

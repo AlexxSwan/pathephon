@@ -843,7 +843,12 @@ class _WinampPresetButton extends StatelessWidget {
   }
 }
 
-/// Album artwork for Winamp LCD — tries cover.jpg/folder.jpg or track.artUri.
+/// Album artwork for Winamp LCD.
+/// Tries in order:
+///   1. track.artUri (cover.jpg path from folder scan or MediaStore)
+///   2. Embedded artwork in the audio file (via native tag reader readArtwork)
+///   3. cover.jpg / folder.jpg / album.jpg in same directory
+///   4. Fallback (pathephon.gif or graphic_eq icon)
 class _WinampArtwork extends StatefulWidget {
   const _WinampArtwork({required this.track});
   final Track? track;
@@ -854,36 +859,65 @@ class _WinampArtwork extends StatefulWidget {
 
 class _WinampArtworkState extends State<_WinampArtwork> {
   static final Map<String, String?> _coverCache = {};
+  static final Map<String, Uint8List?> _embeddedArtCache = {};
+  static const _tagChannel = MethodChannel('pathephon/tag_reader');
 
   @override
   Widget build(BuildContext context) {
     final t = widget.track;
     if (t == null) return _fallback();
 
-    // Try artUri first
+    // 1. Try artUri (cover.jpg path from folder scan or MediaStore)
     if (t.artUri.isNotEmpty) {
       if (t.artUri.startsWith('file://')) {
         return Image.file(File(Uri.parse(t.artUri).toFilePath()),
-            fit: BoxFit.cover, width: 48, height: 48,
+            fit: BoxFit.cover, width: 64, height: 64,
             errorBuilder: (_, __, ___) => _fallback());
       }
-      return Image.network(t.artUri, fit: BoxFit.cover, width: 48, height: 48,
+      return Image.network(t.artUri, fit: BoxFit.cover, width: 64, height: 64,
           errorBuilder: (_, __, ___) => _fallback());
     }
 
-    // Try cover.jpg / folder.jpg in same directory
     final fp = t.filePath.isNotEmpty ? t.filePath : null;
+
+    // 2. Try embedded artwork (from audio file tags — ID3 APIC, FLAC picture, etc.)
+    if (fp != null && _embeddedArtCache.containsKey(fp)) {
+      final cached = _embeddedArtCache[fp];
+      if (cached != null) {
+        return Image.memory(cached,
+            fit: BoxFit.cover, width: 64, height: 64,
+            errorBuilder: (_, __, ___) => _fallback());
+      }
+      // cached null = no embedded art, try cover.jpg next
+    } else if (fp != null) {
+      _loadEmbeddedArt(fp);
+    }
+
+    // 3. Try cover.jpg / folder.jpg in same directory
     if (fp != null && _coverCache.containsKey(fp)) {
       final cached = _coverCache[fp];
       if (cached != null) {
         return Image.file(File(Uri.parse(cached).toFilePath()),
-            fit: BoxFit.cover, width: 48, height: 48,
+            fit: BoxFit.cover, width: 64, height: 64,
             errorBuilder: (_, __, ___) => _fallback());
       }
       return _fallback();
     }
-    if (fp != null) _findCover(fp);
+    if (fp != null && !_coverCache.containsKey(fp)) _findCover(fp);
+
     return _fallback();
+  }
+
+  /// Load embedded artwork from audio file via native tag reader.
+  void _loadEmbeddedArt(String filePath) {
+    _embeddedArtCache[filePath] = null; // mark as loading
+    _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': filePath}).then((bytes) {
+      _embeddedArtCache[filePath] = bytes;
+      if (mounted) setState(() {});
+    }).catchError((_) {
+      _embeddedArtCache[filePath] = null;
+      if (mounted) setState(() {});
+    });
   }
 
   void _findCover(String filePath) async {
@@ -909,9 +943,9 @@ class _WinampArtworkState extends State<_WinampArtwork> {
   Widget _fallback() {
     return Container(
       color: WinampColors.bgPanel,
-      width: 48, height: 48,
+      width: 64, height: 64,
       child: Image.asset('assets/pathephon.gif',
-          fit: BoxFit.cover, width: 48, height: 48,
+          fit: BoxFit.cover, width: 64, height: 64,
           errorBuilder: (_, __, ___) => Icon(Icons.graphic_eq,
               size: 24, color: WinampColors.lcdDim)),
     );

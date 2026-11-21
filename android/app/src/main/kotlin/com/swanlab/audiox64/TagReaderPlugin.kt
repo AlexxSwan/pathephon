@@ -45,10 +45,31 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
                 }
                 try {
                     val tags = readTags(path, uri)
-                    Log.i(TAG, "readTags: path=$path title=${tags["title"]} artist=${tags["artist"]} mime=${tags["mimeType"]}")
+                    Log.i(TAG, "readTags: path=$path title=${tags["title"]} artist=${tags["artist"]} mime=${tags["mimeType"]} hasArt=${tags.containsKey("artBytes")}")
                     result.success(tags)
                 } catch (e: Exception) {
                     Log.e(TAG, "readTags FAILED: path=$path error=${e.message}", e)
+                    result.error("ERROR", e.message, null)
+                }
+            }
+            "readArtwork" -> {
+                val path = call.argument<String>("path") ?: ""
+                val uri = call.argument<String>("uri") ?: ""
+                if (path.isEmpty() && uri.isEmpty()) {
+                    result.error("ERROR", "path or uri required", null)
+                    return
+                }
+                try {
+                    val art = readEmbeddedPicture(path, uri)
+                    if (art != null) {
+                        Log.i(TAG, "readArtwork: path=$path size=${art.size}")
+                        result.success(art)
+                    } else {
+                        Log.i(TAG, "readArtwork: path=$path no embedded picture")
+                        result.success(null)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "readArtwork FAILED: path=$path error=${e.message}", e)
                     result.error("ERROR", e.message, null)
                 }
             }
@@ -56,10 +77,37 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
         }
     }
 
+    /// Reads embedded picture from audio file via MediaMetadataRetriever.
+    /// Returns ByteArray (JPEG/PNG) or null if no embedded artwork.
+    private fun readEmbeddedPicture(path: String, uri: String): ByteArray? {
+        val mmr = MediaMetadataRetriever()
+        try {
+            try {
+                if (uri.isNotEmpty() && uri.startsWith("content://")) {
+                    val ctx = context ?: return null
+                    mmr.setDataSource(ctx, android.net.Uri.parse(uri))
+                } else if (path.isNotEmpty()) {
+                    mmr.setDataSource(path)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "setDataSource failed for path=$path: ${e.message}")
+                if (uri.isNotEmpty()) {
+                    val ctx = context ?: return null
+                    mmr.setDataSource(ctx, android.net.Uri.parse(uri))
+                } else {
+                    return null
+                }
+            }
+            return mmr.embeddedPicture
+        } finally {
+            try { mmr.release() } catch (_: Exception) {}
+        }
+    }
+
     private fun readTags(path: String, uri: String): Map<String, Any> {
         val result = mutableMapOf<String, Any>()
 
-        // Сначала пробуем MediaMetadataRetriever
+        // MediaMetadataRetriever
         val mmr = MediaMetadataRetriever()
         try {
             try {
@@ -100,12 +148,17 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
             result["durationMs"] = durationMs
             result["mimeType"] = mimeType
             result["bitrate"] = bitrate
+
+            // Read embedded picture (artwork) — NEW
+            val picture = mmr.embeddedPicture
+            if (picture != null) {
+                result["artBytes"] = picture
+            }
         } finally {
             try { mmr.release() } catch (_: Exception) {}
         }
 
-        // Если title/artist пустые — парсим ID3v2 вручную
-        // (для ADTS AAC, raw MP3 без контейнера, и т.д.)
+        // ID3v2 fallback
         if ((result["title"] as String? ?: "").isEmpty() && path.isNotEmpty()) {
             val id3tags = parseID3v2(path)
             if (id3tags.isNotEmpty()) {
@@ -123,9 +176,6 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
         return result
     }
 
-    /// Парсит ID3v2 теги из начала файла.
-    /// ID3v2 формат: "ID3" + version(2) + flags(1) + size(4 synchsafe) + frames
-    /// Поддерживает ID3v2.3 и ID3v2.4.
     private fun parseID3v2(path: String): Map<String, String> {
         val result = mutableMapOf<String, String>()
         try {
@@ -134,15 +184,13 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
                 val header = ByteArray(10)
                 raf.readFully(header)
 
-                // Проверяем "ID3"
                 if (header[0] != 'I'.code.toByte() || header[1] != 'D'.code.toByte() || header[2] != '3'.code.toByte()) {
                     return result
                 }
 
-                val version = (header[3].toInt() and 0xFF)  // 3 = v2.3, 4 = v2.4
+                val version = (header[3].toInt() and 0xFF)
                 val flags = header[5].toInt() and 0xFF
 
-                // Synchsafe integer size (4 bytes, each 7-bit)
                 val size = ((header[6].toInt() and 0x7F) shl 21) or
                            ((header[7].toInt() and 0x7F) shl 14) or
                            ((header[8].toInt() and 0x7F) shl 7) or
@@ -150,26 +198,21 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
 
                 if (size <= 0 || size > 10 * 1024 * 1024) return result
 
-                // Читаем все теги
                 val tagData = ByteArray(size)
                 raf.readFully(tagData)
 
                 var pos = 0
                 while (pos < tagData.size - 10) {
-                    // Frame ID (4 bytes for v2.3/v2.4)
                     val frameId = String(tagData, pos, 4, Charsets.ISO_8859_1)
-                    if (frameId[0] == '\u0000') break  // padding
+                    if (frameId[0] == '\u0000') break
 
-                    // Frame size (4 bytes)
                     val frameSize: Int
                     if (version == 4) {
-                        // v2.4: synchsafe
                         frameSize = ((tagData[pos + 4].toInt() and 0x7F) shl 21) or
                                     ((tagData[pos + 5].toInt() and 0x7F) shl 14) or
                                     ((tagData[pos + 6].toInt() and 0x7F) shl 7) or
                                     (tagData[pos + 7].toInt() and 0x7F)
                     } else {
-                        // v2.3: regular
                         frameSize = ((tagData[pos + 4].toInt() and 0xFF) shl 24) or
                                     ((tagData[pos + 5].toInt() and 0xFF) shl 16) or
                                     ((tagData[pos + 6].toInt() and 0xFF) shl 8) or
@@ -178,7 +221,6 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
 
                     if (frameSize <= 0 || frameSize > tagData.size - pos - 10) break
 
-                    // Frame flags (2 bytes) — пропускаем
                     val dataOffset = pos + 10
                     if (dataOffset + frameSize > tagData.size) break
 
@@ -206,7 +248,6 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
         return result
     }
 
-    /// Декодирует текстовый фрейм ID3v2.
     private fun decodeFrame(data: ByteArray, frameId: String): String {
         if (data.isEmpty()) return ""
         try {
@@ -215,22 +256,18 @@ class TagReaderPlugin : FlutterPlugin, MethodCallHandler {
 
             return when (encoding) {
                 0 -> {
-                    // ISO-8859-1
                     val str = String(textData, Charsets.ISO_8859_1)
                     str.trimEnd('\u0000').trim()
                 }
                 1 -> {
-                    // UTF-16 with BOM
                     val str = String(textData, Charsets.UTF_16)
                     str.trimEnd('\u0000').trim()
                 }
                 2 -> {
-                    // UTF-16BE without BOM
                     val str = String(textData, Charsets.UTF_16BE)
                     str.trimEnd('\u0000').trim()
                 }
                 3 -> {
-                    // UTF-8
                     val str = String(textData, Charsets.UTF_8)
                     str.trimEnd('\u0000').trim()
                 }

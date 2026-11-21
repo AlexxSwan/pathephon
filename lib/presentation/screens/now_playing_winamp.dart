@@ -392,21 +392,53 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
               border: Border.all(color: WinampColors.metalMid, width: 2),
             ),
             child: Column(children: [
-              // Row 1: PLAYBACK buttons (2x size, spaceBetween for full-width distribution)
+              // Row 1: PLAYBACK buttons (5 separate buttons with correct behavior)
+              // PREV | PLAY | PAUSE | STOP | NEXT
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    WinampButton(icon: Icons.skip_previous, size: 44,
-                      onTap: () => playback.skipToPrevious()),
-                    WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                      size: 44, active: isPlaying,
-                      onTap: () => isPlaying ? playback.pause() : playback.play()),
-                    WinampButton(icon: Icons.stop, size: 44,
-                      onTap: () => playback.stop()),
-                    WinampButton(icon: Icons.skip_next, size: 44,
-                      onTap: () => playback.skipToNext()),
+                    // PREV — skip to previous track
+                    WinampBevelButton(
+                      size: 44,
+                      child: SunkenIcon(icon: Icons.skip_previous, size: 28),
+                      onTap: () => playback.skipToPrevious(),
+                    ),
+                    // PLAY — always shows play triangle, calls play() (works from stop/pause)
+                    WinampBevelButton(
+                      size: 44,
+                      child: SunkenIcon(icon: Icons.play_arrow, size: 28),
+                      onTap: () => playback.play(),
+                    ),
+                    // PAUSE — always shows two bars, calls pause() (works when playing)
+                    WinampBevelButton(
+                      size: 44,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SunkenShape(width: 7, height: 20),
+                          const SizedBox(width: 4),
+                          SunkenShape(width: 7, height: 20),
+                        ],
+                      ),
+                      onTap: () => playback.pause(),
+                    ),
+                    // STOP — always shows square, calls stop() + seekTo(0) (reset position)
+                    WinampBevelButton(
+                      size: 44,
+                      child: SunkenShape(width: 20, height: 20),
+                      onTap: () {
+                        playback.seekTo(Duration.zero);
+                        playback.stop();
+                      },
+                    ),
+                    // NEXT — skip to next track
+                    WinampBevelButton(
+                      size: 44,
+                      child: SunkenIcon(icon: Icons.skip_next, size: 28),
+                      onTap: () => playback.skipToNext(),
+                    ),
                   ],
                 ),
               ),

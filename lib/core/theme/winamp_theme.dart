@@ -391,3 +391,136 @@ class _LegendaActionButtonState extends State<LegendaActionButton> {
     );
   }
 }
+
+// ============================================================================
+//  Classic Winamp bevel button (approved v15 design)
+//  Outer: 2px raised bevel (white TL + black BR + light TL + dark BR)
+//  Inner: child widget (SunkenShape for STOP/PAUSE, SunkenIcon for PLAY/PREV/NEXT)
+// ============================================================================
+
+class WinampBevelButton extends StatefulWidget {
+  const WinampBevelButton({
+    super.key,
+    required this.onTap,
+    this.size = 44,
+    this.pressed = false,
+    this.child,
+  });
+  final VoidCallback onTap;
+  final double size;
+  final bool pressed;
+  final Widget? child;
+
+  @override
+  State<WinampBevelButton> createState() => _WinampBevelButtonState();
+}
+
+class _WinampBevelButtonState extends State<WinampBevelButton> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final isDown = _pressed || widget.pressed;
+    const white = Color(0xFFFFFFFF);
+    const black = Color(0xFF000000);
+    const light = Color(0xFFDFDFDF);
+    const dark = Color(0xFF808080);
+
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) => setState(() => _pressed = false),
+      onTapCancel: () => setState(() => _pressed = false),
+      onTap: widget.onTap,
+      child: Container(
+        width: widget.size,
+        height: widget.size,
+        decoration: BoxDecoration(
+          color: const Color(0xFFC0C0C0),
+          border: Border(
+            top:    BorderSide(color: isDown ? black : white, width: 1),
+            left:   BorderSide(color: isDown ? black : white, width: 1),
+            right:  BorderSide(color: isDown ? white : black, width: 1),
+            bottom: BorderSide(color: isDown ? white : black, width: 1),
+          ),
+        ),
+        child: Container(
+          margin: const EdgeInsets.all(1),
+          decoration: BoxDecoration(
+            border: Border(
+              top:    BorderSide(color: isDown ? dark : light, width: 1),
+              left:   BorderSide(color: isDown ? dark : light, width: 1),
+              right:  BorderSide(color: isDown ? light : dark, width: 1),
+              bottom: BorderSide(color: isDown ? light : dark, width: 1),
+            ),
+          ),
+          child: Center(child: widget.child),
+        ),
+      ),
+    );
+  }
+}
+
+/// Sunken shape — dark gray (#606060) with inverted bevel (dark TL + light BR).
+/// Used for STOP (square) and PAUSE (bars).
+class SunkenShape extends StatelessWidget {
+  const SunkenShape({
+    super.key,
+    required this.width,
+    required this.height,
+  });
+  final double width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: const BoxDecoration(
+        color: Color(0xFF606060),
+        border: Border(
+          top:    BorderSide(color: Color(0xFF000000), width: 1),
+          left:   BorderSide(color: Color(0xFF000000), width: 1),
+          right:  BorderSide(color: Color(0xFFFFFFFF), width: 1),
+          bottom: BorderSide(color: Color(0xFFFFFFFF), width: 1),
+        ),
+      ),
+    );
+  }
+}
+
+/// Stacked icon with crisp sunken bevel.
+/// 3 layers: white at +1,+1 (back), black at -1,-1 (middle), #606060 body (front).
+/// Used for PLAY (triangle), PREV (bar+triangle), NEXT (triangle+bar).
+class SunkenIcon extends StatelessWidget {
+  const SunkenIcon({
+    super.key,
+    required this.icon,
+    this.size = 28,
+  });
+  final IconData icon;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size + 4,
+      height: size + 4,
+      child: Stack(
+        clipBehavior: Clip.none,
+        alignment: Alignment.center,
+        children: [
+          Transform.translate(
+            offset: const Offset(1, 1),
+            child: Icon(icon, size: size, color: const Color(0xFFFFFFFF)),
+          ),
+          Transform.translate(
+            offset: const Offset(-1, -1),
+            child: Icon(icon, size: size, color: const Color(0xFF000000)),
+          ),
+          Icon(icon, size: size, color: const Color(0xFF606060)),
+        ],
+      ),
+    );
+  }
+}

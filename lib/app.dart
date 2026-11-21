@@ -15,6 +15,7 @@ import "presentation/screens/now_playing_screen.dart";
 import "presentation/screens/about_screen.dart";
 import "presentation/screens/now_playing_winamp.dart";
 import "presentation/screens/about_winamp.dart";
+import "presentation/screens/library_winamp.dart";
 import "presentation/providers/skin_provider.dart";
 import "presentation/screens/now_playing_winamp.dart";
 import "presentation/providers/skin_provider.dart";
@@ -288,6 +289,9 @@ class _ShellState extends ConsumerState<_Shell> {
         onEQ: () => setState(() => _index = 2),
         onAdd: () => setState(() => _index = 1),
       );
+    }
+    if (skin == 'winamp' && _index == 1) {
+      return LibraryWinamp(onBack: () => setState(() => _index = 0));
     }
     if (skin == 'winamp' && _index == 4) {
       return AboutWinamp(onBack: () => setState(() => _index = 0));

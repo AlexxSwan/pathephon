@@ -277,7 +277,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
             ),
             child: Column(children: [
               WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D'),
-              // LCD display — with album art on left
+              // LCD display — with album art on left (height +30%: 48 -> 64)
               Container(
                 margin: const EdgeInsets.all(1),
                 decoration: BoxDecoration(
@@ -285,53 +285,55 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   border: Border.all(color: WinampColors.metalMid, width: 2),
                 ),
                 child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Album art (left, full height of LCD)
+                    // Album art (left, full height of LCD — was 48, now 64, +33%)
                     SizedBox(
-                      width: 48, height: 48,
+                      width: 64, height: 64,
                       child: _WinampArtwork(track: track),
                     ),
-                    // LCD content (right of art)
+                    // LCD content (right of art) — fills full 64px height via stretch
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        child: Column(children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(child: Text(
-                                artistStr.isNotEmpty
-                                  ? '$artistStr - ${_scrollTitle(titleStr)}'
-                                  : _scrollTitle(titleStr),
-                                style: lcdStyle(size: 10),
-                                maxLines: 1, overflow: TextOverflow.clip,
-                              )),
-                              Text('CPU ${_cpuPct.toStringAsFixed(1)}%',
-                                style: lcdStyle(size: 10, color: WinampColors.textSecondary)),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Row(children: [
-                            // Time display — tap to toggle elapsed/remaining
-                            GestureDetector(
-                              onTap: () => setState(() => _showRemaining = !_showRemaining),
-                              child: Text(
-                                _showRemaining
-                                  ? '-${formatDuration(remaining)}'
-                                  : formatDuration(pos),
-                                style: lcdStyle(size: 14),
-                              ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Expanded(child: Text(
+                                  artistStr.isNotEmpty
+                                    ? '$artistStr - ${_scrollTitle(titleStr)}'
+                                    : _scrollTitle(titleStr),
+                                  style: lcdStyle(size: 11),
+                                  maxLines: 1, overflow: TextOverflow.clip,
+                                )),
+                                Text('CPU ${_cpuPct.toStringAsFixed(1)}%',
+                                  style: lcdStyle(size: 10, color: WinampColors.textSecondary)),
+                              ],
                             ),
-                            const Spacer(),
-                            Text('STEREO',
-                              style: lcdStyle(size: 8,
-                                color: isPlaying ? WinampColors.lcdText : WinampColors.lcdDim)),
-                            const SizedBox(width: 4),
-                            SizedBox(width: 36, height: 10,
-                              child: CustomPaint(painter: _WinampSpectrumPainter(_spectrumBars))),
-                          ]),
-                        ]),
+                            Row(children: [
+                              // Time display — tap to toggle elapsed/remaining
+                              GestureDetector(
+                                onTap: () => setState(() => _showRemaining = !_showRemaining),
+                                child: Text(
+                                  _showRemaining
+                                    ? '-${formatDuration(remaining)}'
+                                    : formatDuration(pos),
+                                  style: lcdStyle(size: 16),
+                                ),
+                              ),
+                              const Spacer(),
+                              Text('STEREO',
+                                style: lcdStyle(size: 9,
+                                  color: isPlaying ? WinampColors.lcdText : WinampColors.lcdDim)),
+                              const SizedBox(width: 4),
+                              SizedBox(width: 36, height: 12,
+                                child: CustomPaint(painter: _WinampSpectrumPainter(_spectrumBars))),
+                            ]),
+                          ],
+                        ),
                       ),
                     ),
                   ],
@@ -430,19 +432,17 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 WinampTitleBar(title: '\u042D\u041A\u0412\u0410\u041B\u0410\u0419\u0417\u0415\u0420',
                   trailing: _WinampToggleButton(label: 'ON', active: _eqEnabled,
                     onTap: _onEqToggle)),
-                // EQ body: sliders LEFT | preset buttons RIGHT
+                // EQ body: Row 1 (5 sliders full width) + Row 2 (6 presets full width)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                   color: WinampColors.lcdBg,
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // LEFT: 5 vertical band sliders
-                      Expanded(
-                        flex: 4,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: List.generate(kEqBandCount, (i) {
+                  child: Column(children: [
+                    // Row 1: 5 vertical band sliders, each Expanded (full width, even spacing)
+                    Row(
+                      children: [
+                        for (int i = 0; i < kEqBandCount; i++) ...[
+                          if (i > 0) const SizedBox(width: 4),
+                          Expanded(child: () {
                             final freq = kEqBandFreqs[i];
                             final label = freq >= 1000
                               ? '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k'
@@ -451,41 +451,43 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                               label: label,
                               value: _eqBands[i],
                               range: 15.0,
+                              width: 24,
                               onChanged: (v) => _onEqBandChanged(i, v),
                             );
-                          }),
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      // RIGHT: 6 preset buttons
-                      Expanded(
-                        flex: 1,
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: [
-                            _WinampPresetButton(label: 'FLAT',
-                              active: _selectedPreset == 'Flat',
-                              onTap: () => _applyPreset(EqPreset.flat)),
-                            _WinampPresetButton(label: 'BASS',
-                              active: _selectedPreset == 'Bass',
-                              onTap: () => _applyPreset(EqPreset.bass)),
-                            _WinampPresetButton(label: 'TREB',
-                              active: _selectedPreset == 'Treble',
-                              onTap: () => _applyPreset(EqPreset.treble)),
-                            _WinampPresetButton(label: 'VOCAL',
-                              active: _selectedPreset == 'Vocal',
-                              onTap: () => _applyPreset(EqPreset.vocal)),
-                            _WinampPresetButton(label: 'ROCK',
-                              active: _selectedPreset == 'Rock',
-                              onTap: () => _applyPreset(EqPreset.rock)),
-                            _WinampPresetButton(label: 'POP',
-                              active: _selectedPreset == 'Pop',
-                              onTap: () => _applyPreset(EqPreset.pop)),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                          }()),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    // Row 2: 6 preset buttons in toggle-button style, full width
+                    Row(
+                      children: [
+                        Expanded(child: _WinampPresetButton(label: 'FLAT',
+                          active: _selectedPreset == 'Flat',
+                          onTap: () => _applyPreset(EqPreset.flat))),
+                        const SizedBox(width: 3),
+                        Expanded(child: _WinampPresetButton(label: 'BASS',
+                          active: _selectedPreset == 'Bass',
+                          onTap: () => _applyPreset(EqPreset.bass))),
+                        const SizedBox(width: 3),
+                        Expanded(child: _WinampPresetButton(label: 'TREB',
+                          active: _selectedPreset == 'Treble',
+                          onTap: () => _applyPreset(EqPreset.treble))),
+                        const SizedBox(width: 3),
+                        Expanded(child: _WinampPresetButton(label: 'VOCAL',
+                          active: _selectedPreset == 'Vocal',
+                          onTap: () => _applyPreset(EqPreset.vocal))),
+                        const SizedBox(width: 3),
+                        Expanded(child: _WinampPresetButton(label: 'ROCK',
+                          active: _selectedPreset == 'Rock',
+                          onTap: () => _applyPreset(EqPreset.rock))),
+                        const SizedBox(width: 3),
+                        Expanded(child: _WinampPresetButton(label: 'POP',
+                          active: _selectedPreset == 'Pop',
+                          onTap: () => _applyPreset(EqPreset.pop))),
+                      ],
+                    ),
+                  ]),
                 ),
               ]),
             ),
@@ -631,11 +633,13 @@ class _WinampVSlider extends StatelessWidget {
     required this.value,
     required this.onChanged,
     this.range = 15.0,
+    this.width = 24,
   });
   final String label;
   final double value; // -range to +range dB
   final ValueChanged<double> onChanged;
   final double range;
+  final double width; // LED segment column width (was 12, default 24 now)
 
   @override
   Widget build(BuildContext context) {
@@ -661,9 +665,9 @@ class _WinampVSlider extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // LED segments (vertical)
+          // LED segments (vertical) — width now configurable (default 24, was 12)
           Container(
-            width: 12, height: 56,
+            width: width, height: 56,
             decoration: BoxDecoration(
               color: WinampColors.lcdBg,
               border: Border.all(color: WinampColors.metalMid, width: 2)),
@@ -739,7 +743,8 @@ class _WinampActionButton extends StatelessWidget {
   }
 }
 
-/// EQ preset button — small toggle for FLAT/BASS/TREB/VOCAL/ROCK/POP.
+/// EQ preset button — same style as _WinampToggleButton (44x28 metallic, bold).
+/// Width auto-fills via parent Expanded. Font 11pt with ellipsis so "VOCAL" fits.
 class _WinampPresetButton extends StatelessWidget {
   const _WinampPresetButton({required this.label, required this.active, required this.onTap});
   final String label;
@@ -751,9 +756,7 @@ class _WinampPresetButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: double.infinity,
-        height: 14,
-        margin: const EdgeInsets.symmetric(vertical: 1),
+        height: 28,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: active ? Alignment.bottomCenter : Alignment.topCenter,
@@ -761,8 +764,11 @@ class _WinampPresetButton extends StatelessWidget {
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Center(child: Text(label,
-          style: lcdStyle(size: 7,
-            color: active ? WinampColors.lcdText : WinampColors.metalDarker))),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: lcdStyle(size: 11,
+            color: active ? WinampColors.lcdText : WinampColors.metalDarker)
+              .copyWith(fontWeight: FontWeight.bold))),
       ),
     );
   }

@@ -12,6 +12,7 @@
 // ============================================================================
 import 'dart:io';
 import 'package:flutter/material.dart' hide RepeatMode;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:share_plus/share_plus.dart';
@@ -229,15 +230,20 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
         _version.isEmpty ? 'ЗАГРУЗКА...' : 'v$_version+$_buildNumber';
     final skin = ref.watch(skinProvider);
 
-    return Scaffold(
-      backgroundColor: WinampColors.bgMain,
-      body: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: WinampColors.bgPanel,
-            border: Border.all(color: WinampColors.metalMid, width: 2),
-          ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) widget.onBack?.call();
+      },
+      child: Scaffold(
+        backgroundColor: WinampColors.bgMain,
+        body: SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: WinampColors.bgPanel,
+              border: Border.all(color: WinampColors.metalMid, width: 2),
+            ),
           child: Column(children: [
             WinampTitleBar(title: 'О ПРОГРАММЕ'),
             // LCD content
@@ -295,6 +301,7 @@ class _AboutWinampState extends ConsumerState<AboutWinamp> {
               ),
             ),
           ]),
+        ),
         ),
       ),
     );

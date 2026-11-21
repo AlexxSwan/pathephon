@@ -7,6 +7,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart' hide RepeatMode;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path/path.dart' as p;
@@ -258,10 +259,15 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
     final titleStr = track?.title ?? '---';
     final artistStr = track?.artist ?? '';
 
-    return Scaffold(
-      backgroundColor: WinampColors.bgMain,
-      body: SafeArea(
-        child: Column(children: [
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) SystemNavigator.pop();
+      },
+      child: Scaffold(
+        backgroundColor: WinampColors.bgMain,
+        body: SafeArea(
+          child: Column(children: [
           // ==================== MAIN WINDOW ====================
           Container(
             margin: const EdgeInsets.all(1),
@@ -353,54 +359,63 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   Expanded(flex: 1, child: _WinampHSlider(value: 0.5, onChanged: (_) {})),
                 ]),
               ),
-              // Controls: playback LEFT | toggles RIGHT
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    // LEFT: playback buttons (compact)
-                    Row(children: [
-                      WinampButton(icon: Icons.skip_previous, size: 22,
-                        onTap: () => playback.skipToPrevious()),
-                      const SizedBox(width: 2),
-                      WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                        size: 22, active: isPlaying,
-                        onTap: () => isPlaying ? playback.pause() : playback.play()),
-                      const SizedBox(width: 2),
-                      WinampButton(icon: Icons.stop, size: 22,
-                        onTap: () => playback.stop()),
-                      const SizedBox(width: 2),
-                      WinampButton(icon: Icons.skip_next, size: 22,
-                        onTap: () => playback.skipToNext()),
-                    ]),
-                    // RIGHT: EQ PL SHF REP
-                    Row(children: [
-                      _WinampToggleButton(label: 'EQ', active: _eqPanel,
-                        onTap: () => setState(() => _eqPanel = !_eqPanel)),
-                      const SizedBox(width: 2),
-                      _WinampToggleButton(label: 'PL', active: _plPanel,
-                        onTap: () => setState(() => _plPanel = !_plPanel)),
-                      const SizedBox(width: 4),
-                      _WinampToggleButton(label: 'SHF', active: shuffle,
-                        onTap: () => playback.setShuffle(!shuffle)),
-                      const SizedBox(width: 2),
-                      _WinampToggleButton(
-                        label: repeatMode == RepeatMode.one ? 'R1' : 'REP',
-                        active: repeatMode != RepeatMode.off,
-                        onTap: () {
-                          final next = switch (repeatMode) {
-                            RepeatMode.off => RepeatMode.all,
-                            RepeatMode.all => RepeatMode.one,
-                            RepeatMode.one => RepeatMode.off,
-                          };
-                          playback.setRepeatMode(next);
-                        }),
-                    ]),
-                  ],
-                ),
-              ),
             ]),
+          ),
+
+          // ==================== ROW 1: PLAYBACK BUTTONS (2x size) ====================
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            color: WinampColors.bgPanel,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                WinampButton(icon: Icons.skip_previous, size: 44,
+                  onTap: () => playback.skipToPrevious()),
+                const SizedBox(width: 6),
+                WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
+                  size: 44, active: isPlaying,
+                  onTap: () => isPlaying ? playback.pause() : playback.play()),
+                const SizedBox(width: 6),
+                WinampButton(icon: Icons.stop, size: 44,
+                  onTap: () => playback.stop()),
+                const SizedBox(width: 6),
+                WinampButton(icon: Icons.skip_next, size: 44,
+                  onTap: () => playback.skipToNext()),
+              ],
+            ),
+          ),
+
+          // ==================== ROW 2: EQ PL SHF REP (2x size) ====================
+          Container(
+            margin: const EdgeInsets.symmetric(horizontal: 1),
+            padding: const EdgeInsets.symmetric(vertical: 2),
+            color: WinampColors.bgPanel,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _WinampToggleButton(label: 'EQ', active: _eqPanel,
+                  onTap: () => setState(() => _eqPanel = !_eqPanel)),
+                const SizedBox(width: 6),
+                _WinampToggleButton(label: 'PL', active: _plPanel,
+                  onTap: () => setState(() => _plPanel = !_plPanel)),
+                const SizedBox(width: 6),
+                _WinampToggleButton(label: 'SHF', active: shuffle,
+                  onTap: () => playback.setShuffle(!shuffle)),
+                const SizedBox(width: 6),
+                _WinampToggleButton(
+                  label: repeatMode == RepeatMode.one ? 'R1' : 'REP',
+                  active: repeatMode != RepeatMode.off,
+                  onTap: () {
+                    final next = switch (repeatMode) {
+                      RepeatMode.off => RepeatMode.all,
+                      RepeatMode.all => RepeatMode.one,
+                      RepeatMode.one => RepeatMode.off,
+                    };
+                    playback.setRepeatMode(next);
+                  }),
+              ],
+            ),
           ),
 
           // ==================== EQ PANEL (toggles) ====================
@@ -476,16 +491,16 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
               ]),
             ),
 
-          // ==================== PLAYLIST ====================
+          // ==================== PLAYLIST (fills remaining space) ====================
           if (_plPanel)
             Expanded(
               child: Container(
-                margin: const EdgeInsets.fromLTRB(2, 0, 2, 2),
+                margin: const EdgeInsets.fromLTRB(2, 0, 2, 0),
                 decoration: BoxDecoration(
                   color: WinampColors.bgPanel,
                   border: Border.all(color: WinampColors.metalMid, width: 2)),
                 child: Column(children: [
-                  // Playlist title bar — double solid lines, no track count
+                  // Playlist title bar — double solid lines
                   WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0421\u041F\u0418\u0421\u041E\u041A'),
                   Expanded(
                     child: Container(
@@ -522,7 +537,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       ),
                     ),
                   ),
-                  // Info box — track count + total duration (attached to playlist)
+                  // Info box — track count + total duration
                   Container(
                     height: 14,
                     padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -540,26 +555,31 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       ],
                     ),
                   ),
-                  // Action bar
-                  Container(
-                    height: 16,
-                    decoration: BoxDecoration(
-                      color: WinampColors.bgPanel,
-                      border: Border(top: BorderSide(color: WinampColors.metalDark, width: 1))),
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _WinampActionButton(label: 'ADD', onTap: _addTracks),
-                        _WinampActionButton(label: 'SHR', onTap: _shareCurrentTrack),
-                        _WinampActionButton(label: 'MISC', onTap: () => widget.onExit?.call()),
-                      ],
-                    ),
-                  ),
                 ]),
               ),
             ),
+          // When playlist hidden, push action bar to bottom with Spacer
+          if (!_plPanel) const Spacer(),
+
+          // ==================== ACTION BAR (ALWAYS visible, 2x size) ====================
+          Container(
+            height: 32,
+            margin: const EdgeInsets.fromLTRB(2, 0, 2, 2),
+            decoration: BoxDecoration(
+              color: WinampColors.bgPanel,
+              border: Border.all(color: WinampColors.metalMid, width: 2)),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _WinampActionButton(label: 'ADD', onTap: _addTracks),
+                _WinampActionButton(label: 'SHR', onTap: _shareCurrentTrack),
+                _WinampActionButton(label: 'MISC', onTap: () => widget.onExit?.call()),
+              ],
+            ),
+          ),
         ]),
+        ),
       ),
     );
   }
@@ -678,7 +698,7 @@ class _WinampToggleButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 22, height: 14,
+        width: 44, height: 28,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: active ? Alignment.bottomCenter : Alignment.topCenter,
@@ -686,8 +706,9 @@ class _WinampToggleButton extends StatelessWidget {
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Center(child: Text(label,
-          style: lcdStyle(size: 7,
-            color: active ? WinampColors.lcdText : WinampColors.metalDarker))),
+          style: lcdStyle(size: 14,
+            color: active ? WinampColors.lcdText : WinampColors.metalDarker)
+              .copyWith(fontWeight: FontWeight.bold))),
       ),
     );
   }
@@ -701,14 +722,15 @@ class _WinampActionButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter, end: Alignment.bottomCenter,
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
         child: Text(label,
-          style: lcdStyle(size: 7, color: WinampColors.metalDarker)),
+          style: lcdStyle(size: 14, color: WinampColors.metalDarker)
+              .copyWith(fontWeight: FontWeight.bold)),
       ),
     );
   }

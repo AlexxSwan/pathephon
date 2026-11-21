@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart' hide RepeatMode;
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/winamp_theme.dart';
@@ -428,16 +429,21 @@ class _LibraryWinampState extends ConsumerState<LibraryWinamp> {
     final state = ref.watch(libraryStateProvider);
     final playback = ref.watch(playbackServiceProvider);
 
-    return Scaffold(
-      backgroundColor: WinampColors.bgMain,
-      body: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.all(2),
-          decoration: BoxDecoration(
-            color: WinampColors.bgPanel,
-            border: Border.all(color: WinampColors.metalMid, width: 2),
-          ),
-          child: Column(children: [
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) widget.onBack?.call();
+      },
+      child: Scaffold(
+        backgroundColor: WinampColors.bgMain,
+        body: SafeArea(
+          child: Container(
+            margin: const EdgeInsets.all(2),
+            decoration: BoxDecoration(
+              color: WinampColors.bgPanel,
+              border: Border.all(color: WinampColors.metalMid, width: 2),
+            ),
+            child: Column(children: [
             // Title bar (no trailing button — НАЗАД is now in the action grid below)
             WinampTitleBar(
               title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0411\u0418\u0411\u041B\u0418\u041E\u0422\u0415\u041A\u0410',
@@ -659,6 +665,7 @@ class _LibraryWinampState extends ConsumerState<LibraryWinamp> {
               ),
             ),
           ]),
+        ),
         ),
       ),
     );

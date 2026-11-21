@@ -203,6 +203,35 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
 
   void _addTracks() => widget.onAdd?.call();
 
+  /// Show exit confirmation dialog in Легенда style.
+  /// Triggered by the X button in the title bar AND by hardware back button.
+  void _showExitDialog() {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => LegendaDialog(
+        title: '\u0412\u042B\u0425\u041E\u0414',
+        child: Text(
+          '\u0412\u044B\u0439\u0442\u0438 \u0438\u0437 \u043F\u0440\u0438\u043B\u043E\u0436\u0435\u043D\u0438\u044F?',
+          style: lcdStyle(size: 12, color: WinampColors.lcdText),
+          textAlign: TextAlign.center,
+        ),
+        primaryActions: [
+          LegendaActionButton(
+            label: '\u041D\u0415\u0422',
+            onTap: () => Navigator.of(ctx).pop(),
+          ),
+          LegendaActionButton(
+            label: '\u0414\u0410',
+            onTap: () {
+              Navigator.of(ctx).pop();
+              SystemNavigator.pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Build a single EQ band slider for index [i].
   /// Extracted from the EQ body so the build() method stays readable
   /// (and avoids IIFE syntax which some Dart analyzers choke on).
@@ -279,7 +308,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) SystemNavigator.pop();
+        if (!didPop) _showExitDialog();
       },
       child: Scaffold(
         backgroundColor: WinampColors.bgMain,
@@ -293,7 +322,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
               border: Border.all(color: WinampColors.metalMid, width: 2),
             ),
             child: Column(children: [
-              WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D'),
+              WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D', onClose: _showExitDialog),
               // LCD display — with album art on left (height +30%: 48 -> 64)
               // FIXED height to break layout cycle: stretch + Column(spaceBetween)
               // without a height constraint causes infinite layout exception.

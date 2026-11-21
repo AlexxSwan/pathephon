@@ -240,10 +240,25 @@ class WinampTitleBar extends StatelessWidget {
             ],
           ),
           if (onClose != null)
-            Positioned(right: 4, top: 0, bottom: 0,
+            Positioned(right: 2, top: 1, bottom: 1,
               child: GestureDetector(
                 onTap: onClose,
-                child: Icon(Icons.close, size: 12, color: WinampColors.textMuted),
+                child: Container(
+                  width: 14,
+                  height: 14,
+                  decoration: const BoxDecoration(
+                    color: Color(0xFFC0C0C0),
+                    border: Border(
+                      top:    BorderSide(color: Color(0xFFFFFFFF), width: 1),
+                      left:   BorderSide(color: Color(0xFFFFFFFF), width: 1),
+                      right:  BorderSide(color: Color(0xFF000000), width: 1),
+                      bottom: BorderSide(color: Color(0xFF000000), width: 1),
+                    ),
+                  ),
+                  child: const Center(
+                    child: Icon(Icons.close, size: 10, color: Color(0xFF000000)),
+                  ),
+                ),
               ),
             ),
           if (trailing != null)

@@ -362,60 +362,59 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
             ]),
           ),
 
-          // ==================== ROW 1: PLAYBACK BUTTONS (2x size) ====================
+          // ==================== BUTTON BLOCK (Row 1 + Row 2, unified border) ====================
           Container(
             margin: const EdgeInsets.symmetric(horizontal: 1, vertical: 1),
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            color: WinampColors.bgPanel,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                WinampButton(icon: Icons.skip_previous, size: 44,
-                  onTap: () => playback.skipToPrevious()),
-                const SizedBox(width: 6),
-                WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
-                  size: 44, active: isPlaying,
-                  onTap: () => isPlaying ? playback.pause() : playback.play()),
-                const SizedBox(width: 6),
-                WinampButton(icon: Icons.stop, size: 44,
-                  onTap: () => playback.stop()),
-                const SizedBox(width: 6),
-                WinampButton(icon: Icons.skip_next, size: 44,
-                  onTap: () => playback.skipToNext()),
-              ],
+            decoration: BoxDecoration(
+              color: WinampColors.bgPanel,
+              border: Border.all(color: WinampColors.metalMid, width: 2),
             ),
-          ),
-
-          // ==================== ROW 2: EQ PL SHF REP (2x size) ====================
-          Container(
-            margin: const EdgeInsets.symmetric(horizontal: 1),
-            padding: const EdgeInsets.symmetric(vertical: 2),
-            color: WinampColors.bgPanel,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                _WinampToggleButton(label: 'EQ', active: _eqPanel,
-                  onTap: () => setState(() => _eqPanel = !_eqPanel)),
-                const SizedBox(width: 6),
-                _WinampToggleButton(label: 'PL', active: _plPanel,
-                  onTap: () => setState(() => _plPanel = !_plPanel)),
-                const SizedBox(width: 6),
-                _WinampToggleButton(label: 'SHF', active: shuffle,
-                  onTap: () => playback.setShuffle(!shuffle)),
-                const SizedBox(width: 6),
-                _WinampToggleButton(
-                  label: repeatMode == RepeatMode.one ? 'R1' : 'REP',
-                  active: repeatMode != RepeatMode.off,
-                  onTap: () {
-                    final next = switch (repeatMode) {
-                      RepeatMode.off => RepeatMode.all,
-                      RepeatMode.all => RepeatMode.one,
-                      RepeatMode.one => RepeatMode.off,
-                    };
-                    playback.setRepeatMode(next);
-                  }),
-              ],
-            ),
+            child: Column(children: [
+              // Row 1: PLAYBACK buttons (2x size, spaceBetween for full-width distribution)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    WinampButton(icon: Icons.skip_previous, size: 44,
+                      onTap: () => playback.skipToPrevious()),
+                    WinampButton(icon: isPlaying ? Icons.pause : Icons.play_arrow,
+                      size: 44, active: isPlaying,
+                      onTap: () => isPlaying ? playback.pause() : playback.play()),
+                    WinampButton(icon: Icons.stop, size: 44,
+                      onTap: () => playback.stop()),
+                    WinampButton(icon: Icons.skip_next, size: 44,
+                      onTap: () => playback.skipToNext()),
+                  ],
+                ),
+              ),
+              // Row 2: EQ PL SHF REP (2x size, spaceBetween for full-width distribution)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2, horizontal: 4),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _WinampToggleButton(label: 'EQ', active: _eqPanel,
+                      onTap: () => setState(() => _eqPanel = !_eqPanel)),
+                    _WinampToggleButton(label: 'PL', active: _plPanel,
+                      onTap: () => setState(() => _plPanel = !_plPanel)),
+                    _WinampToggleButton(label: 'SHF', active: shuffle,
+                      onTap: () => playback.setShuffle(!shuffle)),
+                    _WinampToggleButton(
+                      label: repeatMode == RepeatMode.one ? 'R1' : 'REP',
+                      active: repeatMode != RepeatMode.off,
+                      onTap: () {
+                        final next = switch (repeatMode) {
+                          RepeatMode.off => RepeatMode.all,
+                          RepeatMode.all => RepeatMode.one,
+                          RepeatMode.one => RepeatMode.off,
+                        };
+                        playback.setRepeatMode(next);
+                      }),
+                  ],
+                ),
+              ),
+            ]),
           ),
 
           // ==================== EQ PANEL (toggles) ====================

@@ -438,28 +438,11 @@ class _LibraryWinampState extends ConsumerState<LibraryWinamp> {
             border: Border.all(color: WinampColors.metalMid, width: 2),
           ),
           child: Column(children: [
-            // Title bar with НАЗАД button
+            // Title bar (no trailing button — НАЗАД is now in the action grid below)
             WinampTitleBar(
               title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D \u0411\u0418\u0411\u041B\u0418\u041E\u0422\u0415\u041A\u0410',
-              trailing: GestureDetector(
-                onTap: () => widget.onBack?.call(),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: WinampColors.metalDarker,
-                    border: Border.all(color: WinampColors.metalMid, width: 1),
-                  ),
-                  child: Row(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.arrow_back,
-                        size: 10, color: WinampColors.metalLight),
-                    const SizedBox(width: 2),
-                    Text('\u041D\u0410\u0417\u0410\u0414',
-                        style: lcdStyle(size: 8, color: WinampColors.metalLight)),
-                  ]),
-                ),
-              ),
             ),
-            // Action bar: tab toggles + action buttons + search
+            // Action bar: tab toggles + 2x4 action button grid + search
             Container(
               color: WinampColors.bgPanel,
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -483,39 +466,42 @@ class _LibraryWinampState extends ConsumerState<LibraryWinamp> {
                   ),
                 ]),
                 const SizedBox(height: 4),
-                // Row 2: action buttons
+                // Action buttons row 1: DIR | ADD | FILE | SAVE
                 Row(children: [
-                  _LegendaActBtn(
+                  Expanded(child: _LegendaActBtn(
                       label: 'DIR',
                       icon: Icons.folder_open,
-                      onTap: _pickAndPlayFolder),
-                  const SizedBox(width: 2),
-                  _LegendaActBtn(
+                      onTap: _pickAndPlayFolder)),
+                  const SizedBox(width: 4),
+                  Expanded(child: _LegendaActBtn(
                       label: 'ADD',
                       icon: Icons.playlist_add,
-                      onTap: _addFolderToQueue),
-                  const SizedBox(width: 2),
-                  _LegendaActBtn(
+                      onTap: _addFolderToQueue)),
+                  const SizedBox(width: 4),
+                  Expanded(child: _LegendaActBtn(
                       label: 'FILE',
                       icon: Icons.audio_file,
-                      onTap: _pickAndPlayFiles),
-                  const SizedBox(width: 2),
-                  _LegendaActBtn(
+                      onTap: _pickAndPlayFiles)),
+                  const SizedBox(width: 4),
+                  Expanded(child: _LegendaActBtn(
                       label: 'SAVE',
                       icon: Icons.save,
-                      onTap: _saveCurrentPlaylist),
-                  const SizedBox(width: 2),
-                  _LegendaActBtn(
+                      onTap: _saveCurrentPlaylist)),
+                ]),
+                const SizedBox(height: 4),
+                // Action buttons row 2: EXP | IMP | FIND | НАЗАД
+                Row(children: [
+                  Expanded(child: _LegendaActBtn(
                       label: 'EXP',
                       icon: Icons.file_download,
-                      onTap: _exportToM3u),
-                  const SizedBox(width: 2),
-                  _LegendaActBtn(
+                      onTap: _exportToM3u)),
+                  const SizedBox(width: 4),
+                  Expanded(child: _LegendaActBtn(
                       label: 'IMP',
                       icon: Icons.file_upload,
-                      onTap: _importFromM3u),
-                  const SizedBox(width: 2),
-                  _LegendaActBtn(
+                      onTap: _importFromM3u)),
+                  const SizedBox(width: 4),
+                  Expanded(child: _LegendaActBtn(
                       label: _isSearching ? 'CLOSE' : 'FIND',
                       icon: _isSearching ? Icons.close : Icons.search,
                       onTap: () {
@@ -526,7 +512,12 @@ class _LibraryWinampState extends ConsumerState<LibraryWinamp> {
                             _searchController.clear();
                           }
                         });
-                      }),
+                      })),
+                  const SizedBox(width: 4),
+                  Expanded(child: _LegendaActBtn(
+                      label: '\u041D\u0410\u0417\u0410\u0414',
+                      icon: Icons.arrow_back,
+                      onTap: () => widget.onBack?.call())),
                 ]),
                 // Search field (when active)
                 if (_isSearching && !_showPlaylists)
@@ -782,7 +773,9 @@ class _LegendaTabButton extends StatelessWidget {
   }
 }
 
-/// Compact Winamp-styled action button (icon + label below).
+/// Winamp-styled action button (icon + label below).
+/// 50% larger than original: height 48 (was 32), icon 18 (was 12), label 11pt (was 7pt).
+/// No fixed width — parent uses Expanded so all buttons in a row share width equally.
 class _LegendaActBtn extends StatelessWidget {
   const _LegendaActBtn(
       {required this.label, required this.icon, required this.onTap});
@@ -795,8 +788,7 @@ class _LegendaActBtn extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        width: 36,
-        height: 32,
+        height: 48,
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter,
@@ -811,11 +803,12 @@ class _LegendaActBtn extends StatelessWidget {
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 12, color: WinampColors.metalDarker),
-            const SizedBox(height: 1),
+            Icon(icon, size: 18, color: WinampColors.metalDarker),
+            const SizedBox(height: 2),
             Text(label,
-                style: lcdStyle(size: 7, color: WinampColors.metalDarker)
+                style: lcdStyle(size: 11, color: WinampColors.metalDarker)
                     .copyWith(fontWeight: FontWeight.bold)),
           ],
         ),

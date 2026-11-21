@@ -203,6 +203,23 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
 
   void _addTracks() => widget.onAdd?.call();
 
+  /// Build a single EQ band slider for index [i].
+  /// Extracted from the EQ body so the build() method stays readable
+  /// (and avoids IIFE syntax which some Dart analyzers choke on).
+  Widget _buildEqSlider(int i) {
+    final freq = kEqBandFreqs[i];
+    final label = freq >= 1000
+      ? '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k'
+      : freq.toStringAsFixed(0);
+    return _WinampVSlider(
+      label: label,
+      value: _eqBands[i],
+      range: 15.0,
+      width: 24,
+      onChanged: (v) => _onEqBandChanged(i, v),
+    );
+  }
+
   Future<void> _shareCurrentTrack() async {
     final snap = ref.read(playbackSnapshotProvider).valueOrNull;
     final track = snap?.current;
@@ -278,8 +295,11 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
             child: Column(children: [
               WinampTitleBar(title: '\u041F\u0410\u0422\u0415\u0424\u041E\u041D'),
               // LCD display — with album art on left (height +30%: 48 -> 64)
+              // FIXED height to break layout cycle: stretch + Column(spaceBetween)
+              // without a height constraint causes infinite layout exception.
               Container(
                 margin: const EdgeInsets.all(1),
+                height: 64,
                 decoration: BoxDecoration(
                   color: WinampColors.lcdBg,
                   border: Border.all(color: WinampColors.metalMid, width: 2),
@@ -442,19 +462,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       children: [
                         for (int i = 0; i < kEqBandCount; i++) ...[
                           if (i > 0) const SizedBox(width: 4),
-                          Expanded(child: () {
-                            final freq = kEqBandFreqs[i];
-                            final label = freq >= 1000
-                              ? '${(freq / 1000).toStringAsFixed(freq % 1000 == 0 ? 0 : 1)}k'
-                              : freq.toStringAsFixed(0);
-                            return _WinampVSlider(
-                              label: label,
-                              value: _eqBands[i],
-                              range: 15.0,
-                              width: 24,
-                              onChanged: (v) => _onEqBandChanged(i, v),
-                            );
-                          }()),
+                          Expanded(child: _buildEqSlider(i)),
                         ],
                       ],
                     ),

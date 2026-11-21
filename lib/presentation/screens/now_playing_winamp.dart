@@ -562,12 +562,12 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
 
           // ==================== ACTION BAR (ALWAYS visible, 2x size) ====================
           Container(
-            height: 32,
+            height: 52,
             margin: const EdgeInsets.fromLTRB(2, 0, 2, 2),
             decoration: BoxDecoration(
               color: WinampColors.bgPanel,
               border: Border.all(color: WinampColors.metalMid, width: 2)),
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -721,15 +721,19 @@ class _WinampActionButton extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topCenter, end: Alignment.bottomCenter,
             colors: [WinampColors.metalLight, WinampColors.metalMid, WinampColors.metalDark]),
           border: Border.all(color: WinampColors.metalDarker, width: 1)),
-        child: Text(label,
-          style: lcdStyle(size: 14, color: WinampColors.metalDarker)
-              .copyWith(fontWeight: FontWeight.bold)),
+        child: Center(
+          child: Text(label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: lcdStyle(size: 14, color: WinampColors.metalDarker)
+                .copyWith(fontWeight: FontWeight.bold)),
+        ),
       ),
     );
   }

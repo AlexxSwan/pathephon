@@ -453,14 +453,14 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       ),
                       onTap: () => playback.pause(),
                     ),
-                    // STOP — always shows square, calls stop() + seekTo(0) (reset position)
+                    // STOP — always shows square, calls stop() (which pauses + seeks to 0)
+                    // Note: stop() already does _player.pause() + _player.seek(Duration.zero) internally
+                    // Do NOT call seekTo before stop — it causes a race condition where
+                    // the seek event (playing=true) cancels the idle exit that stop's pause arms
                     WinampBevelButton(
                       size: 44,
                       child: SunkenShape(width: 20, height: 20),
-                      onTap: () {
-                        playback.seekTo(Duration.zero);
-                        playback.stop();
-                      },
+                      onTap: () => playback.stop(),
                     ),
                     // NEXT — skip to next track
                     WinampBevelButton(

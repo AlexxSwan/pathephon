@@ -32,6 +32,7 @@ class KeepAliveService : Service() {
         private const val ACTION_IDLE_EXIT = "com.swanlab.audiox64.IDLE_EXIT"
         private const val ACTION_IDLE_RETRY = "com.swanlab.audiox64.IDLE_RETRY"
         private const val LOG_FILE = "/storage/emulated/0/Download/Pathephon/pathephon_crash.log"
+        private const val IDLE_EXIT_FLAG_FILE = "/data/data/com.swanlab.audiox64/files/idle_exit_flag"
 
         @Volatile private var instance: KeepAliveService? = null
 
@@ -108,6 +109,34 @@ class KeepAliveService : Service() {
             nativeLog(">>> Idle exit cancelled")
         }
 
+        fun writeIdleExitFlag() {
+            try {
+                val dir = java.io.File("/data/data/com.swanlab.audiox64/files")
+                if (!dir.exists()) dir.mkdirs()
+                java.io.File(IDLE_EXIT_FLAG_FILE).writeText(System.currentTimeMillis().toString())
+                nativeLog(">>> Idle exit flag written")
+            } catch (e: Exception) {
+                nativeLog(">>> Idle exit flag write failed: ${'$'}{e.message}")
+            }
+        }
+
+        fun checkIdleExitFlag(): Boolean {
+            try {
+                val flagFile = java.io.File(IDLE_EXIT_FLAG_FILE)
+                if (!flagFile.exists()) return false
+                val timestamp = flagFile.readText().trim().toLong()
+                val age = System.currentTimeMillis() - timestamp
+                if (age < 60000) {  // within 60 seconds
+                    nativeLog(">>> Idle exit flag is recent (${'$'}{age / 1000} sec ago) — NOT restarting service")
+                    flagFile.delete()
+                    return true
+                }
+                nativeLog(">>> Idle exit flag is stale (${'$'}{age / 1000} sec ago) — proceeding with normal start")
+                flagFile.delete()
+            } catch (_: Exception) {}
+            return false
+        }
+
         fun start(context: Context) {
             try {
                 val intent = Intent(context, KeepAliveService::class.java)
@@ -157,6 +186,12 @@ class KeepAliveService : Service() {
             }
         }
 
+        // Check if this is a restart after idle exit — if so, don't restart
+        if (checkIdleExitFlag()) {
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         nativeLog(">>> onStartCommand (normal start)")
         try {
             val notification = Notification.Builder(this, CHANNEL_ID)
@@ -181,6 +216,7 @@ class KeepAliveService : Service() {
     /// Убивает процесс. Если не получилось — планирует retry через 30 сек.
     private fun performIdleExit(attempt: Int) {
         nativeLog(">>> performIdleExit attempt=$attempt — stopForeground + stopSelf + killProcess + System.exit")
+        writeIdleExitFlag()
 
         try { stopForeground(true) } catch (_: Exception) {}
         try { stopSelf() } catch (_: Exception) {}

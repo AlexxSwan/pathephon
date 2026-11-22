@@ -343,30 +343,6 @@ class JustAudioPlaybackService implements PlaybackService {
     }
   }
 
-  /// Read duration from tags for tracks that have durationMs == 0.
-  Future<void> _ensureDurations(List<Track> tracks) async {
-    for (final t in tracks) {
-      if (t.durationMs > 0 || t.filePath.isEmpty) continue;
-      try {
-        final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': t.filePath});
-        if (tags == null) continue;
-        final dur = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
-        if (dur > 0) {
-          final newList = List<Track>.from(_queue);
-          final idx = newList.indexWhere((e) => e.filePath == t.filePath || e.uri == t.uri);
-          if (idx >= 0) {
-            newList[idx] = newList[idx].copyWith(
-              durationMs: dur,
-              title: (tags['title'] as String?)?.isNotEmpty == true ? tags['title'] as String : newList[idx].title,
-              artist: (tags['artist'] as String?) ?? newList[idx].artist);
-            _queue = List.unmodifiable(newList);
-          }
-        }
-      } catch (_) {}
-    }
-    _emitState(_player.playerState);
-  }
-
   Future<void> _saveQueue() async {
     try {
       await _prefs.setString(_queueKey, jsonEncode(_queue.map((t) => t.toJson()).toList()));
@@ -432,7 +408,6 @@ class JustAudioPlaybackService implements PlaybackService {
         for (final s in sources) { await currentSource.add(s); }
       }
       await _saveQueue();
-      _ensureDurations(tracks);
     } catch (e, st) {
       crashLogger.error('addToQueue failed', e, st);
     }
@@ -469,7 +444,6 @@ class JustAudioPlaybackService implements PlaybackService {
       _notifyNativePlaybackState(true);
       crashLogger.log('playQueue: playing "${tracks[initial].title}"');
       await _saveQueue();
-      _ensureDurations(tracks);
       _requestBatteryExemptionIfNeeded();
     } catch (e, st) {
       crashLogger.error('playQueue(startIndex=$startIndex, count=${tracks.length}) FAILED', e, st);
@@ -537,6 +511,10 @@ class JustAudioPlaybackService implements PlaybackService {
       await _player.seek(Duration.zero);
       await _savePosition();
       _emitState(_player.playerState);
+      // Explicitly arm idle exit — stop() must guarantee the timer is armed
+      // regardless of async playerStateStream event ordering.
+      // Without this, a race condition can leave idle exit unarmed after stop.
+      _notifyNativePlaybackState(false);
     } catch (e, st) { crashLogger.error('stop() failed', e, st); }
   }
 

@@ -10,6 +10,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:path/path.dart' as p;
@@ -868,11 +869,18 @@ class _CpuAreaChartPainter extends CustomPainter {
       (old.history.isNotEmpty && history.isNotEmpty && old.history.last != history.last);
 }
 
-class _ArtworkImage extends ConsumerWidget {
+class _ArtworkImage extends ConsumerStatefulWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
 
+  @override
+  ConsumerState<_ArtworkImage> createState() => _ArtworkImageState();
+}
+
+class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
   static final Map<String, String?> _coverCache = {};
+  static final Map<String, Uint8List?> _embeddedArtCache = {};
+  static const _tagChannel = MethodChannel('pathephon/tag_reader');
 
   Future<String?> _findCoverInDir(String? filePath) async {
     if (filePath == null || filePath.isEmpty) return null;
@@ -899,34 +907,64 @@ class _ArtworkImage extends ConsumerWidget {
     return result;
   }
 
+  /// Load embedded artwork from audio file via native tag reader.
+  void _loadEmbeddedArt(String filePath) {
+    if (_embeddedArtCache.containsKey(filePath)) return;
+    _embeddedArtCache[filePath] = null; // mark as loading
+    _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': filePath}).then((bytes) {
+      _embeddedArtCache[filePath] = bytes;
+      if (mounted) setState(() {});
+    }).catchError((_) {
+      _embeddedArtCache[filePath] = null;
+      if (mounted) setState(() {});
+    });
+  }
+
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final p = Preset.of(context);
-    final t = track;
+    final t = widget.track;
     if (t == null) return _appIconFallback(p);
     String? artUri = t.artUri;
-    if (artUri.isEmpty) {
-      final fp = t.filePath.isNotEmpty ? t.filePath : null;
-      if (fp != null && _coverCache.containsKey(fp)) {
-        final cached = _coverCache[fp];
-        if (cached != null && cached.isNotEmpty) {
-          return Image.file(File(Uri.parse(cached).toFilePath()),
-              fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-        }
-        return _appIconFallback(p);
+
+    // 1. Try artUri (cover.jpg from folder scan or MediaStore)
+    if (artUri.isNotEmpty) {
+      final ms = ref.read(mediaStoreSourceProvider);
+      final cachedBytes = ms.getCoverBytes(artUri);
+      if (cachedBytes != null) {
+        return Image.memory(cachedBytes, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
       }
-      _findCoverInDir(fp);
+      if (artUri.startsWith('file://')) {
+        return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+      }
+      return Image.network(artUri, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+    }
+
+    // artUri is empty — try embedded art and cover.jpg
+    final fp = t.filePath.isNotEmpty ? t.filePath : null;
+
+    // 2. Try embedded artwork from audio file tags (via readArtwork) — NEW
+    if (fp != null && _embeddedArtCache.containsKey(fp)) {
+      final embeddedArt = _embeddedArtCache[fp];
+      if (embeddedArt != null) {
+        return Image.memory(embeddedArt, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+      }
+      // cached null = no embedded art (or still loading), try cover.jpg next
+    } else if (fp != null) {
+      _loadEmbeddedArt(fp);
+    }
+
+    // 3. Try cover.jpg / folder.jpg in same directory
+    if (fp != null && _coverCache.containsKey(fp)) {
+      final cached = _coverCache[fp];
+      if (cached != null && cached.isNotEmpty) {
+        return Image.file(File(Uri.parse(cached).toFilePath()),
+            fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+      }
       return _appIconFallback(p);
     }
-    final ms = ref.read(mediaStoreSourceProvider);
-    final cachedBytes = ms.getCoverBytes(artUri);
-    if (cachedBytes != null) {
-      return Image.memory(cachedBytes, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-    }
-    if (artUri.startsWith('file://')) {
-      return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-    }
-    return Image.network(artUri, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+    if (fp != null) _findCoverInDir(fp);
+    return _appIconFallback(p);
   }
 
   Widget _appIconFallback(ThemePreset p) {

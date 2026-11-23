@@ -222,7 +222,8 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
 
     final year = tags?['year'] as String? ?? '';
     final genre = tags?['genre'] as String? ?? '';
-    final bitrate = tags?['bitrate'] as String? ?? '';
+    final bitrateRaw = int.tryParse(tags?['bitrate'] as String? ?? '0') ?? 0;
+    final bitrateKbps = bitrateRaw > 0 ? '${bitrateRaw ~/ 1000} kbps' : '';
 
     showDialog<void>(
       context: context,
@@ -254,8 +255,8 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                 _infoLine('\u0413\u043E\u0434', year),
               if (genre.isNotEmpty)
                 _infoLine('\u0416\u0430\u043D\u0440', genre),
-              if (bitrate.isNotEmpty && bitrate != '0')
-                _infoLine('\u0411\u0438\u0442\u0440\u0435\u0439\u0442', '$bitrate kbps'),
+              if (bitrateKbps.isNotEmpty)
+                _infoLine('\u0411\u0438\u0442\u0440\u0435\u0439\u0442', bitrateKbps),
               if (track.durationMs > 0)
                 _infoLine('\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C',
                   formatDuration(Duration(milliseconds: track.durationMs))),

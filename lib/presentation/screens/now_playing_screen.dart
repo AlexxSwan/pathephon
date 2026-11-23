@@ -328,7 +328,8 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     final p = Preset.of(context);
     final year = tags?['year'] as String? ?? '';
     final genre = tags?['genre'] as String? ?? '';
-    final bitrate = tags?['bitrate'] as String? ?? '';
+    final bitrateRaw = int.tryParse(tags?['bitrate'] as String? ?? '0') ?? 0;
+    final bitrateKbps = bitrateRaw > 0 ? '${bitrateRaw ~/ 1000} kbps' : '';
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -360,7 +361,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 if (track.album.isNotEmpty) _retroInfoLine(p, 'Album', track.album),
                 if (year.isNotEmpty) _retroInfoLine(p, 'Year', year),
                 if (genre.isNotEmpty) _retroInfoLine(p, 'Genre', genre),
-                if (bitrate.isNotEmpty && bitrate != '0') _retroInfoLine(p, 'Bitrate', '${bitrate} kbps'),
+                if (bitrateKbps.isNotEmpty) _retroInfoLine(p, 'Bitrate', bitrateKbps),
                 if (track.durationMs > 0) _retroInfoLine(p, 'Duration', formatDuration(Duration(milliseconds: track.durationMs))),
                 const SizedBox(height: 8),
                 Text('File:', style: TextStyle(color: p.textMuted, fontSize: 11)),

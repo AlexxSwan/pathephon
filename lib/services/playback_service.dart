@@ -307,13 +307,22 @@ class JustAudioPlaybackService implements PlaybackService {
           _emitState(_player.playerState);
         }
       }
-      _nativeChannel.invokeMethod('setMediaItem', {
+      final artUri = _queue[idx].artUri;
+      final mediaItem = <String, dynamic>{
         'title': title.isNotEmpty ? title : '',
         'artist': artist.isNotEmpty ? artist : 'Pathephon',
         'album': album,
         'durationMs': durationMs,
-        'artUri': _queue[idx].artUri,
-      });
+        'artUri': artUri,
+      };
+      // If no cover.jpg (artUri empty), try embedded artwork from tags
+      if (artUri.isEmpty) {
+        final artBytes = tags['artBytes'];
+        if (artBytes != null) {
+          mediaItem['artBytes'] = artBytes;
+        }
+      }
+      _nativeChannel.invokeMethod('setMediaItem', mediaItem);
     } catch (e, st) {
       crashLogger.error('_readTagsAndUpdate failed', e, st);
     } finally {
@@ -511,10 +520,6 @@ class JustAudioPlaybackService implements PlaybackService {
       await _player.seek(Duration.zero);
       await _savePosition();
       _emitState(_player.playerState);
-      // Explicitly arm idle exit — stop() must guarantee the timer is armed
-      // regardless of async playerStateStream event ordering.
-      // Without this, a race condition can leave idle exit unarmed after stop.
-      _notifyNativePlaybackState(false);
     } catch (e, st) { crashLogger.error('stop() failed', e, st); }
   }
 

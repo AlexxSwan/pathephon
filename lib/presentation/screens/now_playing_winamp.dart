@@ -203,6 +203,107 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
 
   void _addTracks() => widget.onAdd?.call();
 
+  static const _tagChannel = MethodChannel('pathephon/tag_reader');
+
+  /// Show track info dialog (long-press on playlist item).
+  /// Calls readTags to get year, genre, and embedded artwork.
+  void _showTrackInfo(Track track) async {
+    if (!mounted) return;
+    Map<String, dynamic>? tags;
+    Uint8List? artBytes;
+    try {
+      final result = await _tagChannel.invokeMethod<Map>('readTags', {'path': track.filePath});
+      if (result != null) {
+        tags = Map<String, dynamic>.from(result);
+        artBytes = tags['artBytes'] as Uint8List?;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+
+    final year = tags?['year'] as String? ?? '';
+    final genre = tags?['genre'] as String? ?? '';
+    final bitrate = tags?['bitrate'] as String? ?? '';
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => LegendaDialog(
+        title: '\u0418\u041D\u0424\u041E',
+        child: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Artwork
+              Center(
+                child: Container(
+                  width: 100, height: 100,
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: WinampColors.metalMid, width: 1),
+                  ),
+                  child: artBytes != null
+                    ? Image.memory(artBytes, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(Icons.music_note,
+                            size: 48, color: WinampColors.lcdDim))
+                    : (track.artUri.isNotEmpty
+                      ? Image.file(File(Uri.parse(track.artUri).toFilePath()),
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Icon(Icons.music_note,
+                              size: 48, color: WinampColors.lcdDim)))
+                      : Icon(Icons.music_note, size: 48, color: WinampColors.lcdDim),
+                ),
+              ),
+              _infoLine('\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435', track.title),
+              if (track.artist.isNotEmpty)
+                _infoLine('\u0410\u0440\u0442\u0438\u0441\u0442', track.artist),
+              if (track.album.isNotEmpty)
+                _infoLine('\u0410\u043B\u044C\u0431\u043E\u043C', track.album),
+              if (year.isNotEmpty)
+                _infoLine('\u0413\u043E\u0434', year),
+              if (genre.isNotEmpty)
+                _infoLine('\u0416\u0430\u043D\u0440', genre),
+              if (bitrate.isNotEmpty && bitrate != '0')
+                _infoLine('\u0411\u0438\u0442\u0440\u0435\u0439\u0442', '$bitrate kbps'),
+              if (track.durationMs > 0)
+                _infoLine('\u0414\u043B\u0438\u0442\u0435\u043B\u044C\u043D\u043E\u0441\u0442\u044C',
+                  formatDuration(Duration(milliseconds: track.durationMs))),
+              const SizedBox(height: 4),
+              // File path
+              Text('\u0424\u0430\u0439\u043B:',
+                style: lcdStyle(size: 9, color: WinampColors.textMuted)),
+              Text(track.filePath.isNotEmpty ? track.filePath : track.uri,
+                style: lcdStyle(size: 9, color: WinampColors.textMuted),
+                maxLines: 2, overflow: TextOverflow.ellipsis),
+            ],
+          ),
+        ),
+        primaryActions: [
+          LegendaActionButton(
+            label: '\u0417\u0410\u041A\u0420\u042B\u0422\u042C',
+            onTap: () => Navigator.of(ctx).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _infoLine(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(text: '$label: ',
+              style: lcdStyle(size: 10, color: WinampColors.textSecondary)),
+            TextSpan(text: value,
+              style: lcdStyle(size: 10, color: WinampColors.lcdText)),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Show exit confirmation dialog in Легенда style.
   /// Triggered by the X button in the title bar AND by hardware back button.
   void _showExitDialog() {
@@ -578,7 +679,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                       child: ListView.builder(
                         controller: _playlistScrollController,
                         padding: const EdgeInsets.symmetric(vertical: 1),
-                        itemCount: queue.length, itemExtent: 16,
+                        itemCount: queue.length, itemExtent: 19,
                         itemBuilder: (_, i) {
                           final t = queue[i];
                           final isCurrent = i == currentIndex;
@@ -586,20 +687,21 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                             ? formatDuration(Duration(milliseconds: t.durationMs)) : '';
                           return GestureDetector(
                             onTap: () => playback.playQueue(tracks: queue, startIndex: i),
+                            onLongPress: () => _showTrackInfo(t),
                             child: Container(
                               color: isCurrent ? WinampColors.lcdText.withOpacity(0.08) : Colors.transparent,
                               padding: const EdgeInsets.symmetric(horizontal: 4),
                               child: Row(children: [
-                                SizedBox(width: 20, child: Text('${(i + 1).toString().padLeft(2, '0')}',
-                                  style: lcdStyle(size: 10,
+                                SizedBox(width: 22, child: Text('${(i + 1).toString().padLeft(2, '0')}',
+                                  style: lcdStyle(size: 12,
                                     color: isCurrent ? WinampColors.lcdText : WinampColors.textMuted))),
                                 Expanded(child: Text(
                                   t.artist.isNotEmpty ? '${t.artist} - ${t.title}' : t.title,
-                                  style: lcdStyle(size: 10,
+                                  style: lcdStyle(size: 12,
                                     color: isCurrent ? WinampColors.lcdText : WinampColors.textSecondary),
                                   maxLines: 1, overflow: TextOverflow.ellipsis)),
                                 if (dur.isNotEmpty)
-                                  Text(dur, style: lcdStyle(size: 10, color: WinampColors.textMuted)),
+                                  Text(dur, style: lcdStyle(size: 12, color: WinampColors.textMuted)),
                               ]),
                             ),
                           );

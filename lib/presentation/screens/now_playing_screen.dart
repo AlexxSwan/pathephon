@@ -869,18 +869,104 @@ class _CpuAreaChartPainter extends CustomPainter {
       (old.history.isNotEmpty && history.isNotEmpty && old.history.last != history.last);
 }
 
-class _ArtworkImage extends ConsumerStatefulWidget {
+
+/// Show track info dialog (long-press on playlist item).
+/// Calls readTags for year, genre, artwork.
+void _showTrackInfo(Track track) async {
+    if (!mounted) return;
+    final _tagChannel = const MethodChannel('pathephon/tag_reader');
+    Map<String, dynamic>? tags;
+    Uint8List? artBytes;
+    try {
+      final result = await _tagChannel.invokeMethod<Map>('readTags', {'path': track.filePath});
+      if (result != null) {
+        tags = Map<String, dynamic>.from(result);
+        artBytes = tags['artBytes'] as Uint8List?;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+
+    final p = Preset.of(context);
+    final year = tags?['year'] as String? ?? '';
+    final genre = tags?['genre'] as String? ?? '';
+    final bitrate = tags?['bitrate'] as String? ?? '';
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surfaceVariant,
+        title: Text('\u0418\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u044F', style: TextStyle(color: p.accent, fontSize: 16)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Artwork
+                if (artBytes != null)
+                  Center(child: Container(
+                    width: 100, height: 100,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Image.memory(artBytes, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
+                  ))
+                else if (track.artUri.isNotEmpty)
+                  Center(child: Container(
+                    width: 100, height: 100,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Image.file(File(Uri.parse(track.artUri).toFilePath()), fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
+                  )),
+                _retroInfoLine(p, '\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435', track.title),
+                if (track.artist.isNotEmpty)
+                  _retroInfoLine(p, '\u0410\u0440\u0442\u0438\u0441\u0442', track.artist),
+                if (track.album.isNotEmpty)
+                  _retroInfoLine(p, '\u0410\u043B\u044C\u0431\u043E\u043C', track.album),
+                if (year.isNotEmpty)
+                  _retroInfoLine(p, '\u0413\u043E\u0434', year),
+                if (genre.isNotEmpty)
+                  _retroInfoLine(p, '\u0416\u0430\u043D\u0440', genre),
+                if (bitrate.isNotEmpty && bitrate != '0')
+                  _retroInfoLine(p, '\u0411\u0438\u0442\u0440\u0435\u0439\u0442', '$bitrate kbps'),
+                if (track.durationMs > 0)
+                  _retroInfoLine(p, '\u0414\u043B\u0438\u0442.', formatDuration(Duration(milliseconds: track.durationMs))),
+                const SizedBox(height: 8),
+                Text('\u0424\u0430\u0439\u043B:', style: TextStyle(color: p.textMuted, fontSize: 11)),
+                Text(track.filePath.isNotEmpty ? track.filePath : track.uri,
+                  style: TextStyle(color: p.textMuted, fontSize: 10),
+                  maxLines: 3, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(),
+            child: Text('\u0417\u0430\u043A\u0440\u044B\u0442\u044C', style: TextStyle(color: p.brass))),
+        ],
+      ),
+    );
+  }
+
+  Widget _retroInfoLine(ThemePreset p, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: RichText(
+        text: TextSpan(
+          children: [
+            TextSpan(text: '$label: ', style: TextStyle(color: p.textSecondary, fontSize: 12)),
+            TextSpan(text: value, style: TextStyle(color: p.textPrimary, fontSize: 12)),
+          ],
+        ),
+      ),
+    );
+  }
+
+class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
 
-  @override
-  ConsumerState<_ArtworkImage> createState() => _ArtworkImageState();
-}
-
-class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
   static final Map<String, String?> _coverCache = {};
-  static final Map<String, Uint8List?> _embeddedArtCache = {};
-  static const _tagChannel = MethodChannel('pathephon/tag_reader');
 
   Future<String?> _findCoverInDir(String? filePath) async {
     if (filePath == null || filePath.isEmpty) return null;
@@ -907,64 +993,34 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
     return result;
   }
 
-  /// Load embedded artwork from audio file via native tag reader.
-  void _loadEmbeddedArt(String filePath) {
-    if (_embeddedArtCache.containsKey(filePath)) return;
-    _embeddedArtCache[filePath] = null; // mark as loading
-    _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': filePath}).then((bytes) {
-      _embeddedArtCache[filePath] = bytes;
-      if (mounted) setState(() {});
-    }).catchError((_) {
-      _embeddedArtCache[filePath] = null;
-      if (mounted) setState(() {});
-    });
-  }
-
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final p = Preset.of(context);
-    final t = widget.track;
+    final t = track;
     if (t == null) return _appIconFallback(p);
     String? artUri = t.artUri;
-
-    // 1. Try artUri (cover.jpg from folder scan or MediaStore)
-    if (artUri.isNotEmpty) {
-      final ms = ref.read(mediaStoreSourceProvider);
-      final cachedBytes = ms.getCoverBytes(artUri);
-      if (cachedBytes != null) {
-        return Image.memory(cachedBytes, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+    if (artUri.isEmpty) {
+      final fp = t.filePath.isNotEmpty ? t.filePath : null;
+      if (fp != null && _coverCache.containsKey(fp)) {
+        final cached = _coverCache[fp];
+        if (cached != null && cached.isNotEmpty) {
+          return Image.file(File(Uri.parse(cached).toFilePath()),
+              fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+        }
+        return _appIconFallback(p);
       }
-      if (artUri.startsWith('file://')) {
-        return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-      }
-      return Image.network(artUri, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-    }
-
-    // artUri is empty — try embedded art and cover.jpg
-    final fp = t.filePath.isNotEmpty ? t.filePath : null;
-
-    // 2. Try embedded artwork from audio file tags (via readArtwork) — NEW
-    if (fp != null && _embeddedArtCache.containsKey(fp)) {
-      final embeddedArt = _embeddedArtCache[fp];
-      if (embeddedArt != null) {
-        return Image.memory(embeddedArt, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-      }
-      // cached null = no embedded art (or still loading), try cover.jpg next
-    } else if (fp != null) {
-      _loadEmbeddedArt(fp);
-    }
-
-    // 3. Try cover.jpg / folder.jpg in same directory
-    if (fp != null && _coverCache.containsKey(fp)) {
-      final cached = _coverCache[fp];
-      if (cached != null && cached.isNotEmpty) {
-        return Image.file(File(Uri.parse(cached).toFilePath()),
-            fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-      }
+      _findCoverInDir(fp);
       return _appIconFallback(p);
     }
-    if (fp != null) _findCoverInDir(fp);
-    return _appIconFallback(p);
+    final ms = ref.read(mediaStoreSourceProvider);
+    final cachedBytes = ms.getCoverBytes(artUri);
+    if (cachedBytes != null) {
+      return Image.memory(cachedBytes, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+    }
+    if (artUri.startsWith('file://')) {
+      return Image.file(File(Uri.parse(artUri).toFilePath()), fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+    }
+    return Image.network(artUri, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
   }
 
   Widget _appIconFallback(ThemePreset p) {

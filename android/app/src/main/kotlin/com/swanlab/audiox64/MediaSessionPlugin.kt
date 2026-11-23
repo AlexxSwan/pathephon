@@ -68,8 +68,9 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     val album = getString(call, "album")
                     val durationMs = getInt(call, "durationMs")
                     val artUri = getString(call, "artUri")
-                    Log.i(TAG, ">>> setMediaItem: title='$title' artist='$artist' dur=$durationMs artUri='$artUri'")
-                    updateMetadata(title, artist, album, durationMs, artUri)
+                    val artBytes = call.argument<ByteArray>("artBytes")
+                    Log.i(TAG, ">>> setMediaItem: title='$title' artist='$artist' dur=$durationMs artUri='$artUri' hasArtBytes=${artBytes != null}")
+                    updateMetadata(title, artist, album, durationMs, artUri, artBytes)
                     result.success(null)
                 }
                 "setPlaybackState" -> {
@@ -169,7 +170,7 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         else -> "UNKNOWN($code)"
     }
 
-    private fun updateMetadata(title: String, artist: String, album: String, durationMs: Long, artUri: String) {
+    private fun updateMetadata(title: String, artist: String, album: String, durationMs: Long, artUri: String, artBytes: ByteArray? = null) {
         val s = mediaSession ?: return
         try {
             val b = MediaMetadata.Builder()
@@ -191,6 +192,22 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                         s.setMetadata(b.build())
                     } catch (e: Exception) {
                         Log.e(TAG, ">>> metadata bitmap failed: ${e.message}")
+                        s.setMetadata(b.build())
+                    }
+                }
+            } else if (artBytes != null) {
+                // Embedded artwork from audio file tags (ID3 APIC / FLAC picture)
+                executor.execute {
+                    try {
+                        val bmp = BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                        if (bmp != null) {
+                            b.putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
+                            b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
+                            Log.i(TAG, ">>> metadata set WITH embedded art: $title")
+                        }
+                        s.setMetadata(b.build())
+                    } catch (e: Exception) {
+                        Log.e(TAG, ">>> embedded art decode failed: ${e.message}")
                         s.setMetadata(b.build())
                     }
                 }

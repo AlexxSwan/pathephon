@@ -311,6 +311,82 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
   }
 
+  static const _tagChannel = MethodChannel('pathephon/tag_reader');
+
+  void _showTrackInfo(Track track) async {
+    if (!mounted) return;
+    Map<String, dynamic>? tags;
+    Uint8List? artBytes;
+    try {
+      final result = await _tagChannel.invokeMethod<Map>('readTags', {'path': track.filePath});
+      if (result != null) {
+        tags = Map<String, dynamic>.from(result);
+        artBytes = tags['artBytes'] as Uint8List?;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    final p = Preset.of(context);
+    final year = tags?['year'] as String? ?? '';
+    final genre = tags?['genre'] as String? ?? '';
+    final bitrate = tags?['bitrate'] as String? ?? '';
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: p.surfaceVariant,
+        title: Text('Info', style: TextStyle(color: p.accent, fontSize: 16)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (artBytes != null)
+                  Center(child: Container(
+                    width: 100, height: 100,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Image.memory(artBytes, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
+                  ))
+                else if (track.artUri.isNotEmpty)
+                  Center(child: Container(
+                    width: 100, height: 100,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    child: Image.file(File(Uri.parse(track.artUri).toFilePath()), fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
+                  )),
+                _retroInfoLine(p, 'Title', track.title),
+                if (track.artist.isNotEmpty) _retroInfoLine(p, 'Artist', track.artist),
+                if (track.album.isNotEmpty) _retroInfoLine(p, 'Album', track.album),
+                if (year.isNotEmpty) _retroInfoLine(p, 'Year', year),
+                if (genre.isNotEmpty) _retroInfoLine(p, 'Genre', genre),
+                if (bitrate.isNotEmpty && bitrate != '0') _retroInfoLine(p, 'Bitrate', '${bitrate} kbps'),
+                if (track.durationMs > 0) _retroInfoLine(p, 'Duration', formatDuration(Duration(milliseconds: track.durationMs))),
+                const SizedBox(height: 8),
+                Text('File:', style: TextStyle(color: p.textMuted, fontSize: 11)),
+                Text(track.filePath.isNotEmpty ? track.filePath : track.uri,
+                  style: TextStyle(color: p.textMuted, fontSize: 10),
+                  maxLines: 3, overflow: TextOverflow.ellipsis),
+              ],
+            ),
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
+          child: Text('Close', style: TextStyle(color: p.brass)))],
+      ),
+    );
+  }
+
+  Widget _retroInfoLine(ThemePreset p, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 3),
+      child: RichText(text: TextSpan(children: [
+        TextSpan(text: '$label: ', style: TextStyle(color: p.textSecondary, fontSize: 12)),
+        TextSpan(text: value, style: TextStyle(color: p.textPrimary, fontSize: 12)),
+      ])),
+    );
+  }
+
   Widget _buildPlaylist(List<Track> queue, int currentIndex, PlaybackService playback, ThemePreset p) {
     if (queue.isEmpty) {
       return Center(child: Text('\u041E\u0447\u0435\u0440\u0435\u0434\u044C \u043F\u0443\u0441\u0442\u0430', style: TextStyle(color: p.textMuted)));
@@ -352,6 +428,7 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
                 playback.playQueue(tracks: queue, startIndex: i);
               }
             },
+            onLongPress: () => _showTrackInfo(t),
             child: Container(
               color: isCurrent ? p.accentHot.withOpacity(0.15) : Colors.transparent,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -868,99 +945,6 @@ class _CpuAreaChartPainter extends CustomPainter {
       old.history.length != history.length ||
       (old.history.isNotEmpty && history.isNotEmpty && old.history.last != history.last);
 }
-
-
-/// Show track info dialog (long-press on playlist item).
-/// Calls readTags for year, genre, artwork.
-void _showTrackInfo(Track track) async {
-    if (!mounted) return;
-    final _tagChannel = const MethodChannel('pathephon/tag_reader');
-    Map<String, dynamic>? tags;
-    Uint8List? artBytes;
-    try {
-      final result = await _tagChannel.invokeMethod<Map>('readTags', {'path': track.filePath});
-      if (result != null) {
-        tags = Map<String, dynamic>.from(result);
-        artBytes = tags['artBytes'] as Uint8List?;
-      }
-    } catch (_) {}
-    if (!mounted) return;
-
-    final p = Preset.of(context);
-    final year = tags?['year'] as String? ?? '';
-    final genre = tags?['genre'] as String? ?? '';
-    final bitrate = tags?['bitrate'] as String? ?? '';
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: p.surfaceVariant,
-        title: Text('\u0418\u043D\u0444\u043E\u0440\u043C\u0430\u0446\u0438\u044F', style: TextStyle(color: p.accent, fontSize: 16)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Artwork
-                if (artBytes != null)
-                  Center(child: Container(
-                    width: 100, height: 100,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Image.memory(artBytes, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
-                  ))
-                else if (track.artUri.isNotEmpty)
-                  Center(child: Container(
-                    width: 100, height: 100,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Image.file(File(Uri.parse(track.artUri).toFilePath()), fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
-                  )),
-                _retroInfoLine(p, '\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435', track.title),
-                if (track.artist.isNotEmpty)
-                  _retroInfoLine(p, '\u0410\u0440\u0442\u0438\u0441\u0442', track.artist),
-                if (track.album.isNotEmpty)
-                  _retroInfoLine(p, '\u0410\u043B\u044C\u0431\u043E\u043C', track.album),
-                if (year.isNotEmpty)
-                  _retroInfoLine(p, '\u0413\u043E\u0434', year),
-                if (genre.isNotEmpty)
-                  _retroInfoLine(p, '\u0416\u0430\u043D\u0440', genre),
-                if (bitrate.isNotEmpty && bitrate != '0')
-                  _retroInfoLine(p, '\u0411\u0438\u0442\u0440\u0435\u0439\u0442', '$bitrate kbps'),
-                if (track.durationMs > 0)
-                  _retroInfoLine(p, '\u0414\u043B\u0438\u0442.', formatDuration(Duration(milliseconds: track.durationMs))),
-                const SizedBox(height: 8),
-                Text('\u0424\u0430\u0439\u043B:', style: TextStyle(color: p.textMuted, fontSize: 11)),
-                Text(track.filePath.isNotEmpty ? track.filePath : track.uri,
-                  style: TextStyle(color: p.textMuted, fontSize: 10),
-                  maxLines: 3, overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(),
-            child: Text('\u0417\u0430\u043A\u0440\u044B\u0442\u044C', style: TextStyle(color: p.brass))),
-        ],
-      ),
-    );
-  }
-
-  Widget _retroInfoLine(ThemePreset p, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
-      child: RichText(
-        text: TextSpan(
-          children: [
-            TextSpan(text: '$label: ', style: TextStyle(color: p.textSecondary, fontSize: 12)),
-            TextSpan(text: value, style: TextStyle(color: p.textPrimary, fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
 
 class _ArtworkImage extends ConsumerWidget {
   const _ArtworkImage({required this.track});

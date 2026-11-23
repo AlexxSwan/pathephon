@@ -196,7 +196,6 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     }
                 }
             } else if (artBytes != null) {
-                // Embedded artwork from audio file tags (ID3 APIC / FLAC picture)
                 executor.execute {
                     try {
                         val bmp = BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)

@@ -315,7 +315,6 @@ class JustAudioPlaybackService implements PlaybackService {
         'durationMs': durationMs,
         'artUri': artUri,
       };
-      // If no cover.jpg (artUri empty), try embedded artwork from tags
       if (artUri.isEmpty) {
         final artBytes = tags['artBytes'];
         if (artBytes != null) {

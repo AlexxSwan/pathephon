@@ -242,16 +242,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
                   decoration: BoxDecoration(
                     border: Border.all(color: WinampColors.metalMid, width: 1),
                   ),
-                  child: artBytes != null
-                    ? Image.memory(artBytes, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(Icons.music_note,
-                            size: 48, color: WinampColors.lcdDim))
-                    : (track.artUri.isNotEmpty
-                      ? Image.file(File(Uri.parse(track.artUri).toFilePath()),
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => Icon(Icons.music_note,
-                              size: 48, color: WinampColors.lcdDim)))
-                      : Icon(Icons.music_note, size: 48, color: WinampColors.lcdDim),
+                  child: _buildDialogArtwork(track, artBytes),
                 ),
               ),
               _infoLine('\u041D\u0430\u0437\u0432\u0430\u043D\u0438\u0435', track.title),
@@ -286,6 +277,21 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
         ],
       ),
     );
+  }
+
+  Widget _buildDialogArtwork(Track track, Uint8List? artBytes) {
+    if (artBytes != null) {
+      return Image.memory(artBytes, fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(Icons.music_note,
+              size: 48, color: WinampColors.lcdDim));
+    }
+    if (track.artUri.isNotEmpty) {
+      return Image.file(File(Uri.parse(track.artUri).toFilePath()),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(Icons.music_note,
+              size: 48, color: WinampColors.lcdDim));
+    }
+    return Icon(Icons.music_note, size: 48, color: WinampColors.lcdDim);
   }
 
   Widget _infoLine(String label, String value) {

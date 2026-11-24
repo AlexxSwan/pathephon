@@ -315,7 +315,10 @@ class JustAudioPlaybackService implements PlaybackService {
         'durationMs': durationMs,
         'artUri': artUri,
       };
-      if (artUri.isEmpty) { final ab = tags['artBytes']; if (ab != null) mediaItem['artBytes'] = ab; }
+      if (artUri.isEmpty) {
+        final ab = tags['artBytes'];
+        if (ab != null) mediaItem['artBytes'] = ab;
+      }
       _nativeChannel.invokeMethod('setMediaItem', mediaItem);
     } catch (e, st) {
       crashLogger.error('_readTagsAndUpdate failed', e, st);

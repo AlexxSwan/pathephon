@@ -258,12 +258,19 @@ class JustAudioPlaybackService implements PlaybackService {
   static final Map<String, Uint8List?> _widgetArtCache = {};
   static final Map<String, String> _widgetCoverCache = {};
 
+  /// Find cover.jpg/folder.jpg in the same directory as filePath.
+  /// IMPORTANT: Only caches POSITIVE results (cover found).
+  /// Negative results are NOT cached — so if cover.jpg is added later,
+  /// the next call will find it.
   Future<String> _findCoverForWidget(String filePath) async {
     try {
       final dir = File(filePath).parent;
       final dirPath = dir.path;
-      if (_widgetCoverCache.containsKey(dirPath)) return _widgetCoverCache[dirPath]!;
-      if (!dir.existsSync()) { _widgetCoverCache[dirPath] = ''; return ''; }
+      // Only use cache if it has a POSITIVE result
+      final cached = _widgetCoverCache[dirPath];
+      if (cached != null && cached.isNotEmpty) return cached;
+      // Scan directory (even if previously scanned with no result)
+      if (!dir.existsSync()) return '';
       final entities = await dir.list().toList();
       for (final e in entities) {
         final name = e.uri.pathSegments.last.toLowerCase();
@@ -275,7 +282,7 @@ class JustAudioPlaybackService implements PlaybackService {
           return cover;
         }
       }
-      _widgetCoverCache[dirPath] = '';
+      // Do NOT cache negative result — next call will scan again
     } catch (_) {}
     return '';
   }

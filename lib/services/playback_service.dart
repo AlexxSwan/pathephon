@@ -255,7 +255,9 @@ class JustAudioPlaybackService implements PlaybackService {
     }
   }
 
-  void _updateMediaItem() {
+  static final Map<String, Uint8List?> _widgetArtCache = {};
+
+  void _updateMediaItem() async {
     if (_queue.isEmpty) return;
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
@@ -267,13 +269,33 @@ class JustAudioPlaybackService implements PlaybackService {
       _readTagsAndUpdate(t.filePath);
     }
     try {
-      _nativeChannel.invokeMethod('setMediaItem', {
+      final artUri = t.artUri;
+      final mediaItem = <String, dynamic>{
         'title': t.title,
         'artist': t.artist.isNotEmpty ? t.artist : 'Pathephon',
         'album': t.album,
         'durationMs': durationMs,
-        'artUri': t.artUri,
-      });
+        'artUri': artUri,
+      };
+      // If no cover.jpg (artUri empty), try embedded artwork for widget
+      if (artUri.isEmpty && t.filePath.isNotEmpty) {
+        Uint8List? artBytes;
+        // Check cache first
+        if (_widgetArtCache.containsKey(t.filePath)) {
+          artBytes = _widgetArtCache[t.filePath];
+        } else {
+          try {
+            artBytes = await _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': t.filePath});
+            _widgetArtCache[t.filePath] = artBytes;
+          } catch (_) {
+            _widgetArtCache[t.filePath] = null;
+          }
+        }
+        if (artBytes != null) {
+          mediaItem['artBytes'] = artBytes;
+        }
+      }
+      _nativeChannel.invokeMethod('setMediaItem', mediaItem);
     } catch (_) {}
   }
 

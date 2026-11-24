@@ -969,14 +969,13 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final p = Preset.of(context);
     final t = widget.track;
     if (t == null) return _appIconFallback(p);
     String? artUri = t.artUri;
     if (artUri.isEmpty) {
       final fp = t.filePath.isNotEmpty ? t.filePath : null;
-      // 2. Try embedded artwork from audio file tags
       if (fp != null && _embeddedArtCache.containsKey(fp)) {
         final embeddedArt = _embeddedArtCache[fp];
         if (embeddedArt != null) {
@@ -985,7 +984,6 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       } else if (fp != null) {
         _loadEmbeddedArt(fp);
       }
-      // 3. Try cover.jpg / folder.jpg
       if (fp != null && _coverCache.containsKey(fp)) {
         final cached = _coverCache[fp];
         if (cached != null && cached.isNotEmpty) {
@@ -994,7 +992,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
         }
         return _appIconFallback(p);
       }
-      if (fp != null) _findCoverInDir(fp);
+      _findCoverInDir(fp);
       return _appIconFallback(p);
     }
     final ms = ref.read(mediaStoreSourceProvider);

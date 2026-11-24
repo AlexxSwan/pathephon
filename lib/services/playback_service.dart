@@ -8,7 +8,7 @@ import 'dart:io';
 
 import 'package:audio_session/audio_session.dart';
 import 'package:flutter/foundation.dart' show debugPrint;
-import 'package:flutter/services.dart' show MethodChannel, SystemNavigator;
+import 'package:flutter/services.dart' show MethodChannel, SystemNavigator, Uint8List;
 import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -277,10 +277,8 @@ class JustAudioPlaybackService implements PlaybackService {
         'durationMs': durationMs,
         'artUri': artUri,
       };
-      // If no cover.jpg (artUri empty), try embedded artwork for widget
       if (artUri.isEmpty && t.filePath.isNotEmpty) {
         Uint8List? artBytes;
-        // Check cache first
         if (_widgetArtCache.containsKey(t.filePath)) {
           artBytes = _widgetArtCache[t.filePath];
         } else {

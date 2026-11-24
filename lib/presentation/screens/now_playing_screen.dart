@@ -921,16 +921,13 @@ class _CpuAreaChartPainter extends CustomPainter {
 class _ArtworkImage extends ConsumerStatefulWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
-
   @override
   ConsumerState<_ArtworkImage> createState() => _ArtworkImageState();
 }
-
 class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
   static final Map<String, String?> _coverCache = {};
   static final Map<String, Uint8List?> _embeddedArtCache = {};
   static const _tagChannel = MethodChannel('pathephon/tag_reader');
-
   void _loadEmbeddedArt(String filePath) {
     if (_embeddedArtCache.containsKey(filePath)) return;
     _embeddedArtCache[filePath] = null;

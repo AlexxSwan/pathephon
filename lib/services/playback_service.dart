@@ -83,7 +83,6 @@ class JustAudioPlaybackService implements PlaybackService {
   RepeatMode _repeat = RepeatMode.off;
   ReplayGainMode _rg = ReplayGainMode.off;
 
-  bool _isReadingTags = false;
   Timer? _idleExitTimer;
   static const _idleExitThreshold = Duration(minutes: 10);
   int? _lastDurationMs;
@@ -258,18 +257,12 @@ class JustAudioPlaybackService implements PlaybackService {
   static final Map<String, Uint8List?> _widgetArtCache = {};
   static final Map<String, String> _widgetCoverCache = {};
 
-  /// Find cover.jpg/folder.jpg in the same directory as filePath.
-  /// IMPORTANT: Only caches POSITIVE results (cover found).
-  /// Negative results are NOT cached — so if cover.jpg is added later,
-  /// the next call will find it.
   Future<String> _findCoverForWidget(String filePath) async {
     try {
       final dir = File(filePath).parent;
       final dirPath = dir.path;
-      // Only use cache if it has a POSITIVE result
       final cached = _widgetCoverCache[dirPath];
       if (cached != null && cached.isNotEmpty) return cached;
-      // Scan directory (even if previously scanned with no result)
       if (!dir.existsSync()) return '';
       final entities = await dir.list().toList();
       for (final e in entities) {
@@ -282,7 +275,6 @@ class JustAudioPlaybackService implements PlaybackService {
           return cover;
         }
       }
-      // Do NOT cache negative result — next call will scan again
     } catch (_) {}
     return '';
   }
@@ -292,14 +284,17 @@ class JustAudioPlaybackService implements PlaybackService {
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
     final t = _queue[idx];
+
+    if (t.artist.isEmpty && t.filePath.isNotEmpty) {
+      _readTagsAndUpdate(t.filePath);
+      return;
+    }
+
     final durationMs = (t.durationMs > 0)
         ? t.durationMs
         : (_player.duration?.inMilliseconds ?? 0);
-    if (t.artist.isEmpty && t.filePath.isNotEmpty && !_isReadingTags) {
-      _readTagsAndUpdate(t.filePath);
-    }
     try {
-      var artUri = t.artUri;
+      final artUri = t.artUri;
       final mediaItem = <String, dynamic>{
         'title': t.title,
         'artist': t.artist.isNotEmpty ? t.artist : 'Pathephon',
@@ -323,9 +318,7 @@ class JustAudioPlaybackService implements PlaybackService {
           mediaItem['artBytes'] = artBytes;
         } else {
           final cover = await _findCoverForWidget(t.filePath);
-          if (cover.isNotEmpty) {
-            mediaItem['artUri'] = cover;
-          }
+          if (cover.isNotEmpty) mediaItem['artUri'] = cover;
         }
       }
       _nativeChannel.invokeMethod('setMediaItem', mediaItem);
@@ -333,52 +326,55 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   Future<void> _readTagsAndUpdate(String filePath) async {
-    if (_isReadingTags) {
-      crashLogger.log('_readTagsAndUpdate: already in progress, skipping');
-      return;
-    }
-    _isReadingTags = true;
     try {
       final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
       if (tags == null) return;
+
+      final currentIdx = _player.currentIndex ?? _index;
+      if (currentIdx < 0 || currentIdx >= _queue.length) return;
+      if (_queue[currentIdx].filePath != filePath) {
+        crashLogger.log('_readTagsAndUpdate: track changed during read, discarding');
+        return;
+      }
+
       final title = tags['title'] as String? ?? '';
       final artist = tags['artist'] as String? ?? '';
       final album = tags['album'] as String? ?? '';
       final durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
       crashLogger.log('tags loaded: title="$title" artist="$artist" dur=$durationMs');
-      final idx = _player.currentIndex ?? _index;
-      if (idx >= 0 && idx < _queue.length) {
-        final old = _queue[idx];
-        if (old.artist.isEmpty) {
-          final newList = List<Track>.from(_queue);
-          newList[idx] = old.copyWith(
-            title: title.isNotEmpty ? title : old.title,
-            artist: artist,
-            album: album,
-            albumArtist: tags['albumArtist'] as String? ?? '',
-            durationMs: durationMs > 0 ? durationMs : old.durationMs,
-          );
-          _queue = List.unmodifiable(newList);
-          _emitState(_player.playerState);
+
+      final old = _queue[currentIdx];
+      final newList = List<Track>.from(_queue);
+      newList[currentIdx] = old.copyWith(
+        title: title.isNotEmpty ? title : old.title,
+        artist: artist.isNotEmpty ? artist : old.artist,
+        album: album.isNotEmpty ? album : old.album,
+        albumArtist: tags['albumArtist'] as String? ?? old.albumArtist,
+        durationMs: durationMs > 0 ? durationMs : old.durationMs,
+      );
+      _queue = List.unmodifiable(newList);
+      _emitState(_player.playerState);
+
+      final artUri = newList[currentIdx].artUri;
+      final mediaItem = <String, dynamic>{
+        'title': title.isNotEmpty ? title : old.title,
+        'artist': artist.isNotEmpty ? artist : 'Pathephon',
+        'album': album.isNotEmpty ? album : old.album,
+        'durationMs': durationMs > 0 ? durationMs : old.durationMs,
+        'artUri': artUri,
+      };
+      if (artUri.isEmpty) {
+        final ab = tags['artBytes'];
+        if (ab != null) {
+          mediaItem['artBytes'] = ab;
+        } else {
+          final cover = await _findCoverForWidget(filePath);
+          if (cover.isNotEmpty) mediaItem['artUri'] = cover;
         }
       }
-      final artUri2 = _queue[idx].artUri;
-      final mediaItem2 = <String, dynamic>{
-        'title': title.isNotEmpty ? title : '',
-        'artist': artist.isNotEmpty ? artist : 'Pathephon',
-        'album': album,
-        'durationMs': durationMs,
-        'artUri': artUri2,
-      };
-      if (artUri2.isEmpty) {
-        final ab = tags['artBytes'];
-        if (ab != null) mediaItem2['artBytes'] = ab;
-      }
-      _nativeChannel.invokeMethod('setMediaItem', mediaItem2);
+      _nativeChannel.invokeMethod('setMediaItem', mediaItem);
     } catch (e, st) {
       crashLogger.error('_readTagsAndUpdate failed', e, st);
-    } finally {
-      _isReadingTags = false;
     }
   }
 

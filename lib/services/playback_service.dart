@@ -150,6 +150,8 @@ class JustAudioPlaybackService implements PlaybackService {
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
         _updateMediaItem();
+        // Update playback state for widget (hasNext/hasPrev) on EVERY track change
+        _notifyNativePlaybackState(_player.playing);
       }
     });
 
@@ -322,6 +324,8 @@ class JustAudioPlaybackService implements PlaybackService {
         }
       }
       _nativeChannel.invokeMethod('setMediaItem', mediaItem);
+      // Also update playback state (hasNext/hasPrev) for BT controls
+      _notifyNativePlaybackState(_player.playing);
     } catch (_) {}
   }
 
@@ -373,6 +377,8 @@ class JustAudioPlaybackService implements PlaybackService {
         }
       }
       _nativeChannel.invokeMethod('setMediaItem', mediaItem);
+      // Also update playback state (hasNext/hasPrev) for BT controls
+      _notifyNativePlaybackState(_player.playing);
     } catch (e, st) {
       crashLogger.error('_readTagsAndUpdate failed', e, st);
     }

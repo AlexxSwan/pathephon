@@ -398,7 +398,7 @@ class _NowPlayingWinampState extends ConsumerState<NowPlayingWinamp> {
       _lastScrolledIndex = currentIndex;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_playlistScrollController.hasClients) {
-          final rowH = 16.0; // must match itemExtent
+          final rowH = 19.0; // must match itemExtent
           final target = currentIndex * rowH;
           final viewport = _playlistScrollController.position.viewportDimension;
           // ALWAYS center current track, not just when out of view

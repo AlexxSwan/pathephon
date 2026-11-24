@@ -256,15 +256,13 @@ class JustAudioPlaybackService implements PlaybackService {
   }
 
   static final Map<String, Uint8List?> _widgetArtCache = {};
-  static final Map<String, String?> _widgetCoverCache = {};
+  static final Map<String, String> _widgetCoverCache = {};
 
-  /// Find cover.jpg/folder.jpg in the same directory as filePath.
-  /// Cached by directory path. Used by _updateMediaItem for widget artwork.
-  Future<String?> _findCoverForWidget(String filePath) async {
+  Future<String> _findCoverForWidget(String filePath) async {
     try {
       final dir = File(filePath).parent;
       final dirPath = dir.path;
-      if (_widgetCoverCache.containsKey(dirPath)) return _widgetCoverCache[dirPath];
+      if (_widgetCoverCache.containsKey(dirPath)) return _widgetCoverCache[dirPath]!;
       if (!dir.existsSync()) { _widgetCoverCache[dirPath] = ''; return ''; }
       final entities = await dir.list().toList();
       for (final e in entities) {
@@ -302,9 +300,7 @@ class JustAudioPlaybackService implements PlaybackService {
         'durationMs': durationMs,
         'artUri': artUri,
       };
-      // If no artUri, try embedded art AND cover.jpg in directory
       if (artUri.isEmpty && t.filePath.isNotEmpty) {
-        // Try embedded artwork first
         Uint8List? artBytes;
         if (_widgetArtCache.containsKey(t.filePath)) {
           artBytes = _widgetArtCache[t.filePath];
@@ -319,7 +315,6 @@ class JustAudioPlaybackService implements PlaybackService {
         if (artBytes != null) {
           mediaItem['artBytes'] = artBytes;
         } else {
-          // No embedded art — try cover.jpg in directory
           final cover = await _findCoverForWidget(t.filePath);
           if (cover.isNotEmpty) {
             mediaItem['artUri'] = cover;

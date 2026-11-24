@@ -150,7 +150,6 @@ class JustAudioPlaybackService implements PlaybackService {
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
         _updateMediaItem();
-        // Update playback state for widget (hasNext/hasPrev) on EVERY track change
         _notifyNativePlaybackState(_player.playing);
       }
     });
@@ -286,12 +285,10 @@ class JustAudioPlaybackService implements PlaybackService {
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
     final t = _queue[idx];
-
     if (t.artist.isEmpty && t.filePath.isNotEmpty) {
       _readTagsAndUpdate(t.filePath);
       return;
     }
-
     final durationMs = (t.durationMs > 0)
         ? t.durationMs
         : (_player.duration?.inMilliseconds ?? 0);
@@ -312,19 +309,12 @@ class JustAudioPlaybackService implements PlaybackService {
           try {
             artBytes = await _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': t.filePath});
             _widgetArtCache[t.filePath] = artBytes;
-          } catch (_) {
-            _widgetArtCache[t.filePath] = null;
-          }
+          } catch (_) { _widgetArtCache[t.filePath] = null; }
         }
-        if (artBytes != null) {
-          mediaItem['artBytes'] = artBytes;
-        } else {
-          final cover = await _findCoverForWidget(t.filePath);
-          if (cover.isNotEmpty) mediaItem['artUri'] = cover;
-        }
+        if (artBytes != null) { mediaItem['artBytes'] = artBytes; }
+        else { final cover = await _findCoverForWidget(t.filePath); if (cover.isNotEmpty) mediaItem['artUri'] = cover; }
       }
       _nativeChannel.invokeMethod('setMediaItem', mediaItem);
-      // Also update playback state (hasNext/hasPrev) for BT controls
       _notifyNativePlaybackState(_player.playing);
     } catch (_) {}
   }
@@ -333,20 +323,17 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       final tags = await _tagChannel.invokeMethod<Map>('readTags', {'path': filePath});
       if (tags == null) return;
-
       final currentIdx = _player.currentIndex ?? _index;
       if (currentIdx < 0 || currentIdx >= _queue.length) return;
       if (_queue[currentIdx].filePath != filePath) {
-        crashLogger.log('_readTagsAndUpdate: track changed during read, discarding');
+        crashLogger.log('_readTagsAndUpdate: track changed, discarding');
         return;
       }
-
       final title = tags['title'] as String? ?? '';
       final artist = tags['artist'] as String? ?? '';
       final album = tags['album'] as String? ?? '';
       final durationMs = int.tryParse(tags['durationMs'] as String? ?? '0') ?? 0;
       crashLogger.log('tags loaded: title="$title" artist="$artist" dur=$durationMs');
-
       final old = _queue[currentIdx];
       final newList = List<Track>.from(_queue);
       newList[currentIdx] = old.copyWith(
@@ -358,7 +345,6 @@ class JustAudioPlaybackService implements PlaybackService {
       );
       _queue = List.unmodifiable(newList);
       _emitState(_player.playerState);
-
       final artUri = newList[currentIdx].artUri;
       final mediaItem = <String, dynamic>{
         'title': title.isNotEmpty ? title : old.title,
@@ -369,15 +355,10 @@ class JustAudioPlaybackService implements PlaybackService {
       };
       if (artUri.isEmpty) {
         final ab = tags['artBytes'];
-        if (ab != null) {
-          mediaItem['artBytes'] = ab;
-        } else {
-          final cover = await _findCoverForWidget(filePath);
-          if (cover.isNotEmpty) mediaItem['artUri'] = cover;
-        }
+        if (ab != null) { mediaItem['artBytes'] = ab; }
+        else { final cover = await _findCoverForWidget(filePath); if (cover.isNotEmpty) mediaItem['artUri'] = cover; }
       }
       _nativeChannel.invokeMethod('setMediaItem', mediaItem);
-      // Also update playback state (hasNext/hasPrev) for BT controls
       _notifyNativePlaybackState(_player.playing);
     } catch (e, st) {
       crashLogger.error('_readTagsAndUpdate failed', e, st);

@@ -102,10 +102,15 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
             )
             s.setCallback(object : MediaSession.Callback() {
                 override fun onMediaButtonEvent(mediaButtonIntent: android.content.Intent): Boolean {
-                    val ke = mediaButtonIntent.getParcelableExtra<KeyEvent>(android.content.Intent.EXTRA_KEY_EVENT)
+                    val ke: KeyEvent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    mediaButtonIntent.getParcelableExtra(android.content.Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    mediaButtonIntent.getParcelableExtra(android.content.Intent.EXTRA_KEY_EVENT)
+                }
                     if (ke == null) return false
                     Log.i(TAG, ">>> onMediaButtonEvent: keyCode=${ke.keyCode} action=${ke.action} name=${keyCodeToString(ke.keyCode)}")
-                    if (ke.action != KeyEvent.ACTION_UP) return true
+                    if (ke.action != KeyEvent.ACTION_DOWN) return true  // smartwatches send ACTION_DOWN
                     handleKeyCode(ke.keyCode)
                     return true
                 }

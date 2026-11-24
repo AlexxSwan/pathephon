@@ -199,21 +199,14 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 executor.execute {
                     try {
                         val bmp = BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
-                        if (bmp != null) {
-                            b.putBitmap(MediaMetadata.METADATA_KEY_ART, bmp)
-                            b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp)
-                            Log.i(TAG, ">>> metadata set WITH embedded art: $title")
-                        }
+                        if (bmp != null) { b.putBitmap(MediaMetadata.METADATA_KEY_ART, bmp); b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, bmp); Log.i(TAG, ">>> metadata set WITH embedded art: $title") }
                         s.setMetadata(b.build())
-                    } catch (e: Exception) {
-                        Log.e(TAG, ">>> embedded art decode failed: ${e.message}")
-                        s.setMetadata(b.build())
-                    }
+                    } catch (e: Exception) { Log.e(TAG, ">>> embedded art decode failed: ${e.message}"); s.setMetadata(b.build()) }
                 }
             } else {
                 executor.execute {
                     try {
-                        val gifBmp = loadAssetBitmap("pathephon.gif")
+                        val gifBmp = loadAssetBitmap("pathephon_fallback.png")
                         if (gifBmp != null) {
                             b.putBitmap(MediaMetadata.METADATA_KEY_ART, gifBmp)
                             b.putBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART, gifBmp)

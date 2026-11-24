@@ -957,7 +957,7 @@ class _WinampPresetButton extends StatelessWidget {
 ///   1. track.artUri (cover.jpg path from folder scan or MediaStore)
 ///   2. Embedded artwork in the audio file (via native tag reader readArtwork)
 ///   3. cover.jpg / folder.jpg / album.jpg in same directory
-///   4. Fallback (pathephon.gif or graphic_eq icon)
+///   4. Fallback (pathephon_fallback.png or graphic_eq icon)
 class _WinampArtwork extends StatefulWidget {
   const _WinampArtwork({required this.track});
   final Track? track;
@@ -1053,7 +1053,7 @@ class _WinampArtworkState extends State<_WinampArtwork> {
     return Container(
       color: WinampColors.bgPanel,
       width: 64, height: 64,
-      child: Image.asset('assets/pathephon.gif',
+      child: Image.asset('assets/pathephon_fallback.png',
           fit: BoxFit.cover, width: 64, height: 64,
           errorBuilder: (_, __, ___) => Icon(Icons.graphic_eq,
               size: 24, color: WinampColors.lcdDim)),

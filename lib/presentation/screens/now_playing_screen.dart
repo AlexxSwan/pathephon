@@ -311,81 +311,52 @@ class _NowPlayingScreenState extends ConsumerState<NowPlayingScreen> {
     );
   }
 
-  static const _tagChannel = MethodChannel('pathephon/tag_reader');
+  static const _infoChannel = MethodChannel('pathephon/tag_reader');
 
   void _showTrackInfo(Track track) async {
     if (!mounted) return;
     Map<String, dynamic>? tags;
     Uint8List? artBytes;
     try {
-      final result = await _tagChannel.invokeMethod<Map>('readTags', {'path': track.filePath});
-      if (result != null) {
-        tags = Map<String, dynamic>.from(result);
-        artBytes = tags['artBytes'] as Uint8List?;
-      }
+      final result = await _infoChannel.invokeMethod<Map>('readTags', {'path': track.filePath});
+      if (result != null) { tags = Map<String, dynamic>.from(result); artBytes = tags['artBytes'] as Uint8List?; }
     } catch (_) {}
     if (!mounted) return;
     final p = Preset.of(context);
     final year = tags?['year'] as String? ?? '';
     final genre = tags?['genre'] as String? ?? '';
-    final bitrateRaw = int.tryParse(tags?['bitrate'] as String? ?? '0') ?? 0;
-    final bitrateKbps = bitrateRaw > 0 ? '${bitrateRaw ~/ 1000} kbps' : '';
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: p.surfaceVariant,
-        title: Text('Info', style: TextStyle(color: p.accent, fontSize: 16)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (artBytes != null)
-                  Center(child: Container(
-                    width: 100, height: 100,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Image.memory(artBytes, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
-                  ))
-                else if (track.artUri.isNotEmpty)
-                  Center(child: Container(
-                    width: 100, height: 100,
-                    margin: const EdgeInsets.only(bottom: 12),
-                    child: Image.file(File(Uri.parse(track.artUri).toFilePath()), fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)),
-                  )),
-                _retroInfoLine(p, 'Title', track.title),
-                if (track.artist.isNotEmpty) _retroInfoLine(p, 'Artist', track.artist),
-                if (track.album.isNotEmpty) _retroInfoLine(p, 'Album', track.album),
-                if (year.isNotEmpty) _retroInfoLine(p, 'Year', year),
-                if (genre.isNotEmpty) _retroInfoLine(p, 'Genre', genre),
-                if (bitrateKbps.isNotEmpty) _retroInfoLine(p, 'Bitrate', bitrateKbps),
-                if (track.durationMs > 0) _retroInfoLine(p, 'Duration', formatDuration(Duration(milliseconds: track.durationMs))),
-                const SizedBox(height: 8),
-                Text('File:', style: TextStyle(color: p.textMuted, fontSize: 11)),
-                Text(track.filePath.isNotEmpty ? track.filePath : track.uri,
-                  style: TextStyle(color: p.textMuted, fontSize: 10),
-                  maxLines: 3, overflow: TextOverflow.ellipsis),
-              ],
-            ),
-          ),
-        ),
-        actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(),
-          child: Text('Close', style: TextStyle(color: p.brass)))],
-      ),
-    );
+    final br = int.tryParse(tags?['bitrate'] as String? ?? '0') ?? 0;
+    final brStr = br > 0 ? '${br ~/ 1000} kbps' : '';
+    showDialog<void>(context: context, builder: (ctx) => AlertDialog(
+      backgroundColor: p.surfaceVariant,
+      title: Text('Info', style: TextStyle(color: p.accent, fontSize: 16)),
+      content: SizedBox(width: double.maxFinite, child: SingleChildScrollView(child: Column(
+        mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          if (artBytes != null) Center(child: Container(width: 100, height: 100, margin: EdgeInsets.only(bottom: 12),
+            child: Image.memory(artBytes, fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass))))
+          else if (track.artUri.isNotEmpty) Center(child: Container(width: 100, height: 100, margin: EdgeInsets.only(bottom: 12),
+            child: Image.file(File(Uri.parse(track.artUri).toFilePath()), fit: BoxFit.cover, errorBuilder: (_, __, ___) => Icon(Icons.music_note, size: 48, color: p.brass)))),
+          _rl(p, 'Title', track.title),
+          if (track.artist.isNotEmpty) _rl(p, 'Artist', track.artist),
+          if (track.album.isNotEmpty) _rl(p, 'Album', track.album),
+          if (year.isNotEmpty) _rl(p, 'Year', year),
+          if (genre.isNotEmpty) _rl(p, 'Genre', genre),
+          if (brStr.isNotEmpty) _rl(p, 'Bitrate', brStr),
+          if (track.durationMs > 0) _rl(p, 'Duration', formatDuration(Duration(milliseconds: track.durationMs))),
+          SizedBox(height: 8),
+          Text('File:', style: TextStyle(color: p.textMuted, fontSize: 11)),
+          Text(track.filePath.isNotEmpty ? track.filePath : track.uri, style: TextStyle(color: p.textMuted, fontSize: 10), maxLines: 3, overflow: TextOverflow.ellipsis),
+        ]))),
+      actions: [TextButton(onPressed: () => Navigator.of(ctx).pop(), child: Text('Close', style: TextStyle(color: p.brass)))],
+    ));
   }
 
-  Widget _retroInfoLine(ThemePreset p, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 3),
+  Widget _rl(ThemePreset p, String label, String value) {
+    return Padding(padding: EdgeInsets.only(bottom: 3),
       child: RichText(text: TextSpan(children: [
         TextSpan(text: '$label: ', style: TextStyle(color: p.textSecondary, fontSize: 12)),
         TextSpan(text: value, style: TextStyle(color: p.textPrimary, fontSize: 12)),
-      ])),
-    );
+      ])));
   }
 
   Widget _buildPlaylist(List<Track> queue, int currentIndex, PlaybackService playback, ThemePreset p) {
@@ -947,11 +918,30 @@ class _CpuAreaChartPainter extends CustomPainter {
       (old.history.isNotEmpty && history.isNotEmpty && old.history.last != history.last);
 }
 
-class _ArtworkImage extends ConsumerWidget {
+class _ArtworkImage extends ConsumerStatefulWidget {
   const _ArtworkImage({required this.track});
   final Track? track;
 
+  @override
+  ConsumerState<_ArtworkImage> createState() => _ArtworkImageState();
+}
+
+class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
   static final Map<String, String?> _coverCache = {};
+  static final Map<String, Uint8List?> _embeddedArtCache = {};
+  static const _tagChannel = MethodChannel('pathephon/tag_reader');
+
+  void _loadEmbeddedArt(String filePath) {
+    if (_embeddedArtCache.containsKey(filePath)) return;
+    _embeddedArtCache[filePath] = null;
+    _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': filePath}).then((bytes) {
+      _embeddedArtCache[filePath] = bytes;
+      if (mounted) setState(() {});
+    }).catchError((_) {
+      _embeddedArtCache[filePath] = null;
+      if (mounted) setState(() {});
+    });
+  }
 
   Future<String?> _findCoverInDir(String? filePath) async {
     if (filePath == null || filePath.isEmpty) return null;
@@ -981,11 +971,21 @@ class _ArtworkImage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final p = Preset.of(context);
-    final t = track;
+    final t = widget.track;
     if (t == null) return _appIconFallback(p);
     String? artUri = t.artUri;
     if (artUri.isEmpty) {
       final fp = t.filePath.isNotEmpty ? t.filePath : null;
+      // 2. Try embedded artwork from audio file tags
+      if (fp != null && _embeddedArtCache.containsKey(fp)) {
+        final embeddedArt = _embeddedArtCache[fp];
+        if (embeddedArt != null) {
+          return Image.memory(embeddedArt, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
+        }
+      } else if (fp != null) {
+        _loadEmbeddedArt(fp);
+      }
+      // 3. Try cover.jpg / folder.jpg
       if (fp != null && _coverCache.containsKey(fp)) {
         final cached = _coverCache[fp];
         if (cached != null && cached.isNotEmpty) {
@@ -994,7 +994,7 @@ class _ArtworkImage extends ConsumerWidget {
         }
         return _appIconFallback(p);
       }
-      _findCoverInDir(fp);
+      if (fp != null) _findCoverInDir(fp);
       return _appIconFallback(p);
     }
     final ms = ref.read(mediaStoreSourceProvider);

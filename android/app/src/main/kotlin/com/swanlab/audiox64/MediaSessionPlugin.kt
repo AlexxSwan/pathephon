@@ -5,6 +5,7 @@ import android.graphics.BitmapFactory
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
+import android.os.Build
 import android.os.SystemClock
 import android.util.Log
 import android.view.KeyEvent
@@ -110,7 +111,7 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
                     if (ke == null) return false
                     Log.i(TAG, ">>> onMediaButtonEvent: keyCode=${ke.keyCode} action=${ke.action} name=${keyCodeToString(ke.keyCode)}")
-                    if (ke.action != KeyEvent.ACTION_DOWN) return true  // smartwatches send ACTION_DOWN
+                    if (ke.action != KeyEvent.ACTION_DOWN) return true
                     handleKeyCode(ke.keyCode)
                     return true
                 }

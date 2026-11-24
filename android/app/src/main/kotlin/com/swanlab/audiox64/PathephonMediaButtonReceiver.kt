@@ -23,7 +23,6 @@ class PathephonMediaButtonReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_MEDIA_BUTTON) return
 
-        // Fix: getParcelableExtra deprecated on API 33+
         val event: KeyEvent? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             intent.getParcelableExtra(Intent.EXTRA_KEY_EVENT, KeyEvent::class.java)
         } else {
@@ -37,7 +36,6 @@ class PathephonMediaButtonReceiver : BroadcastReceiver() {
 
         Log.i(TAG, ">>> onReceive: keyCode=${event.keyCode} action=${event.action}")
 
-        // Process ACTION_DOWN (many smartwatches send ONLY ACTION_DOWN)
         if (event.action != KeyEvent.ACTION_DOWN) return
 
         val ch = channel ?: run {

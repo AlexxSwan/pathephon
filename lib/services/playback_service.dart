@@ -285,32 +285,18 @@ class JustAudioPlaybackService implements PlaybackService {
     final idx = _player.currentIndex ?? _index;
     if (idx < 0 || idx >= _queue.length) return;
     final t = _queue[idx];
-    if (t.artist.isEmpty && t.filePath.isNotEmpty) {
-      _readTagsAndUpdate(t.filePath);
-      return;
-    }
-    final durationMs = (t.durationMs > 0)
-        ? t.durationMs
-        : (_player.duration?.inMilliseconds ?? 0);
+    if (t.artist.isEmpty && t.filePath.isNotEmpty) { _readTagsAndUpdate(t.filePath); return; }
+    final durationMs = (t.durationMs > 0) ? t.durationMs : (_player.duration?.inMilliseconds ?? 0);
     try {
       final artUri = t.artUri;
       final mediaItem = <String, dynamic>{
-        'title': t.title,
-        'artist': t.artist.isNotEmpty ? t.artist : 'Pathephon',
-        'album': t.album,
-        'durationMs': durationMs,
-        'artUri': artUri,
+        'title': t.title, 'artist': t.artist.isNotEmpty ? t.artist : 'Pathephon',
+        'album': t.album, 'durationMs': durationMs, 'artUri': artUri,
       };
       if (artUri.isEmpty && t.filePath.isNotEmpty) {
         Uint8List? artBytes;
-        if (_widgetArtCache.containsKey(t.filePath)) {
-          artBytes = _widgetArtCache[t.filePath];
-        } else {
-          try {
-            artBytes = await _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': t.filePath});
-            _widgetArtCache[t.filePath] = artBytes;
-          } catch (_) { _widgetArtCache[t.filePath] = null; }
-        }
+        if (_widgetArtCache.containsKey(t.filePath)) { artBytes = _widgetArtCache[t.filePath]; }
+        else { try { artBytes = await _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': t.filePath}); _widgetArtCache[t.filePath] = artBytes; } catch (_) { _widgetArtCache[t.filePath] = null; } }
         if (artBytes != null) { mediaItem['artBytes'] = artBytes; }
         else { final cover = await _findCoverForWidget(t.filePath); if (cover.isNotEmpty) mediaItem['artUri'] = cover; }
       }
@@ -325,10 +311,7 @@ class JustAudioPlaybackService implements PlaybackService {
       if (tags == null) return;
       final currentIdx = _player.currentIndex ?? _index;
       if (currentIdx < 0 || currentIdx >= _queue.length) return;
-      if (_queue[currentIdx].filePath != filePath) {
-        crashLogger.log('_readTagsAndUpdate: track changed, discarding');
-        return;
-      }
+      if (_queue[currentIdx].filePath != filePath) { crashLogger.log('_readTagsAndUpdate: track changed, discarding'); return; }
       final title = tags['title'] as String? ?? '';
       final artist = tags['artist'] as String? ?? '';
       final album = tags['album'] as String? ?? '';
@@ -360,9 +343,7 @@ class JustAudioPlaybackService implements PlaybackService {
       }
       _nativeChannel.invokeMethod('setMediaItem', mediaItem);
       _notifyNativePlaybackState(_player.playing);
-    } catch (e, st) {
-      crashLogger.error('_readTagsAndUpdate failed', e, st);
-    }
+    } catch (e, st) { crashLogger.error('_readTagsAndUpdate failed', e, st); }
   }
 
   void _emitState(PlayerState st) {

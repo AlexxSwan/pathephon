@@ -934,10 +934,7 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
     _tagChannel.invokeMethod<Uint8List>('readArtwork', {'path': filePath}).then((bytes) {
       _embeddedArtCache[filePath] = bytes;
       if (mounted) setState(() {});
-    }).catchError((_) {
-      _embeddedArtCache[filePath] = null;
-      if (mounted) setState(() {});
-    });
+    }).catchError((_) { _embeddedArtCache[filePath] = null; if (mounted) setState(() {}); });
   }
 
   Future<String?> _findCoverInDir(String? filePath) async {
@@ -975,12 +972,8 @@ class _ArtworkImageState extends ConsumerState<_ArtworkImage> {
       final fp = t.filePath.isNotEmpty ? t.filePath : null;
       if (fp != null && _embeddedArtCache.containsKey(fp)) {
         final embeddedArt = _embeddedArtCache[fp];
-        if (embeddedArt != null) {
-          return Image.memory(embeddedArt, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p));
-        }
-      } else if (fp != null) {
-        _loadEmbeddedArt(fp);
-      }
+        if (embeddedArt != null) { return Image.memory(embeddedArt, fit: BoxFit.cover, cacheWidth: 600, cacheHeight: 600, errorBuilder: (_, e, __) => _appIconFallback(p)); }
+      } else if (fp != null) { _loadEmbeddedArt(fp); }
       if (fp != null && _coverCache.containsKey(fp)) {
         final cached = _coverCache[fp];
         if (cached != null && cached.isNotEmpty) {

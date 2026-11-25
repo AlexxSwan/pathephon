@@ -1,6 +1,8 @@
 package com.swanlab.audiox64
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.graphics.BitmapFactory
 import android.media.MediaMetadata
 import android.media.session.MediaSession
@@ -113,6 +115,22 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                 }
             })
             s.isActive = true
+            // Phase 41: setMediaButtonReceiver — Tells the system to route
+            // media-button events to PathephonMediaButtonReceiver when this
+            // session is the priority one. Needed so that smartwatch / HID
+            // button broadcasts wake Pathephon instead of going to MAX (ru.oneme.app).
+            try {
+                val mbIntent = Intent(Intent.ACTION_MEDIA_BUTTON)
+                mbIntent.setClass(ctx, PathephonMediaButtonReceiver::class.java)
+                val pi = PendingIntent.getBroadcast(
+                    ctx, 0, mbIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                s.setMediaButtonReceiver(pi)
+                Log.i(TAG, ">>> setMediaButtonReceiver OK")
+            } catch (e: Exception) {
+                Log.w(TAG, ">>> setMediaButtonReceiver failed: ${e.message}")
+            }
             mediaSession = s
             Log.i(TAG, ">>> MediaSession 'Pathephon' ACTIVE")
             // Пушим начальный пустой state чтобы система увидела сессию готовой
@@ -265,6 +283,14 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
     private fun updatePlaybackState(playing: Boolean, posMs: Long, hasNext: Boolean, hasPrev: Boolean) {
         val s = mediaSession ?: return
         try {
+            // Phase 41: Re-claim media-session priority on every playing=true
+            // state push. Without this, MAX (ru.oneme.app) steals priority
+            // when it receives a message and the smartwatch buttons stop
+            // controlling Pathephon. Calling setActive(true) again puts
+            // Pathephon back at the top of the priority stack.
+            if (playing) {
+                try { s.isActive = true } catch (_: Exception) {}
+            }
             val state = if (playing) PlaybackState.STATE_PLAYING else PlaybackState.STATE_PAUSED
             val actions = (
                 PlaybackState.ACTION_PLAY or

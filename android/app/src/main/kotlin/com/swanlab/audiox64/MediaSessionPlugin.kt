@@ -85,6 +85,12 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
                     updatePlaybackState(playing, pos, hasNext, hasPrev)
                     result.success(null)
                 }
+                "reclaimPriority" -> {
+                    // Phase 42: called from Dart on every track change.
+                    // Aggressively re-claims MediaSession priority from MAX.
+                    reclaimPriority()
+                    result.success(null)
+                }
                 else -> result.notImplemented()
             }
         } catch (e: Exception) {
@@ -277,6 +283,41 @@ class MediaSessionPlugin : FlutterPlugin, MethodChannel.MethodCallHandler {
         } catch (e: Exception) {
             Log.e(TAG, ">>> loadBitmap FAILED: ${e.message}", e)
             null
+        }
+    }
+
+    /// Phase 42: Aggressively re-claim MediaSession priority.
+    /// Called from Dart on every track change (auto-advance or manual next/prev).
+    /// Does MORE than just setActive(true):
+    ///   1. Toggle isActive false -> true (forces system to re-evaluate)
+    ///   2. Re-set flags (in case they were cleared by the system)
+    ///   3. Re-set MediaButtonReceiver PendingIntent (in case it was dropped)
+    /// This is needed because on ColorOS, MAX (ru.oneme.app) steals priority
+    /// when it receives a message, and a simple setActive(true) doesn't override it.
+    private fun reclaimPriority() {
+        val s = mediaSession ?: return
+        val ctx = context ?: return
+        try {
+            try { s.isActive = false } catch (_: Exception) {}
+            try { s.isActive = true } catch (_: Exception) {}
+            try {
+                s.setFlags(
+                    MediaSession.FLAG_HANDLES_MEDIA_BUTTONS or
+                    MediaSession.FLAG_HANDLES_TRANSPORT_CONTROLS
+                )
+            } catch (_: Exception) {}
+            try {
+                val mbIntent = Intent(Intent.ACTION_MEDIA_BUTTON)
+                mbIntent.setClass(ctx, PathephonMediaButtonReceiver::class.java)
+                val pi = PendingIntent.getBroadcast(
+                    ctx, 0, mbIntent,
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+                )
+                s.setMediaButtonReceiver(pi)
+            } catch (_: Exception) {}
+            Log.i(TAG, ">>> reclaimPriority: toggled isActive + re-set flags + re-set MediaButtonReceiver")
+        } catch (e: Exception) {
+            Log.e(TAG, ">>> reclaimPriority FAILED: ${e.message}", e)
         }
     }
 

@@ -146,7 +146,17 @@ class JustAudioPlaybackService implements PlaybackService {
 
     _player.sequenceStateStream.listen((seqState) {
       if (seqState != null && seqState.currentIndex >= 0) {
-        if (seqState.currentIndex != _index) { _sessionTracksPlayed++; _saveQueue(); }
+        if (seqState.currentIndex != _index) {
+          _sessionTracksPlayed++;
+          _saveQueue();
+          // Phase 42: aggressively re-claim MediaSession priority from MAX
+          // (ru.oneme.app) on every track change — auto-advance or manual
+          // next/prev. The native side toggles isActive false->true, re-sets
+          // flags, and re-sets MediaButtonReceiver PendingIntent.
+          try {
+            _nativeChannel.invokeMethod('reclaimPriority');
+          } catch (_) {}
+        }
         _index = seqState.currentIndex;
         _emitState(_player.playerState);
         _updateMediaItem();

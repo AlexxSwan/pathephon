@@ -96,6 +96,11 @@ class JustAudioPlaybackService implements PlaybackService {
   // When playback starts/resumes, we call reclaimPriority() to steal
   // MediaSession priority back from MAX (ru.oneme.app).
   bool _wasPlaying = false;
+  // Phase 44: RMS-based loudness normalization.
+  // Tracks the last filePath we normalized for, to avoid redundant scans.
+  String? _lastLoudnessFilePath;
+  static const _loudnessKeyPrefix = 'pathephon.loudness.';
+  static const _loudnessTargetDb = -16.0;
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
@@ -172,6 +177,8 @@ class JustAudioPlaybackService implements PlaybackService {
           } catch (_) {}
         }
         _index = seqState.currentIndex;
+        // Phase 44: apply RMS-based loudness normalization on every track.
+        _applyLoudnessNormalization();
         _emitState(_player.playerState);
         _updateMediaItem();
         _notifyNativePlaybackState(_player.playing);
@@ -653,6 +660,72 @@ class JustAudioPlaybackService implements PlaybackService {
     try {
       await _player.setSpeed(speed.clamp(0.5, 3.0));
     } catch (e, st) { crashLogger.error('setSpeed($speed) failed', e, st); }
+  }
+
+  // ===========================================================================
+  // Phase 44: RMS-based loudness normalization (automatic, no user intervention)
+  // ===========================================================================
+  //
+  // On every track change:
+  //   1. Check SharedPreferences cache for 'pathephon.loudness.<filePath>'.
+  //   2. If cached: apply volume correction immediately via _player.setVolume().
+  //   3. If not cached: play at volume=1.0 while async-scanning (MediaCodec
+  //      decode of ~3 sec from the middle of the track, ~1-2 sec). Store
+  //      result. Apply correction.
+  //   4. Target RMS = -16 dB. Gain clamped to [-12, +6] dB. Volume clamped
+  //      to [0.0, 1.0] (ExoPlayer limit — can't boost above 1.0, so quiet
+  //      tracks play at full volume, loud tracks are reduced).
+  //
+  // Works for ALL files regardless of tags. Works with both skins (retro +
+  // Легенда) since it's in the service layer.
+
+  void _applyLoudnessNormalization() {
+    if (_queue.isEmpty) return;
+    final idx = _player.currentIndex ?? _index;
+    if (idx < 0 || idx >= _queue.length) return;
+    final filePath = _queue[idx].filePath;
+    if (filePath.isEmpty) return;
+    if (filePath == _lastLoudnessFilePath) return; // already handling this track
+    _lastLoudnessFilePath = filePath;
+    _doLoudnessNormalization(filePath);
+  }
+
+  Future<void> _doLoudnessNormalization(String filePath) async {
+    try {
+      final cacheKey = '$_loudnessKeyPrefix$filePath';
+      double? rmsDb = _prefs.getDouble(cacheKey);
+      if (rmsDb == null) {
+        // Not cached — play at default volume while scanning.
+        await _player.setVolume(1.0);
+        crashLogger.log('Loudness: scanning "$filePath"...');
+        try {
+          rmsDb = await _tagChannel.invokeMethod<double>('scanLoudness', {'path': filePath});
+        } catch (e) {
+          crashLogger.log('Loudness: scan failed for "$filePath": $e');
+          rmsDb = null;
+        }
+        if (rmsDb != null) {
+          await _prefs.setDouble(cacheKey, rmsDb);
+          crashLogger.log('Loudness: cached "$filePath" -> ${rmsDb.toStringAsFixed(1)} dB');
+        } else {
+          // Store a sentinel so we don't retry on every play.
+          await _prefs.setDouble(cacheKey, -20.0);
+          rmsDb = -20.0;
+        }
+      }
+      // Check if we're still on the same track (might have changed during scan).
+      final currentIdx = _player.currentIndex ?? _index;
+      if (currentIdx < 0 || currentIdx >= _queue.length) return;
+      if (_queue[currentIdx].filePath != filePath) {
+        crashLogger.log('Loudness: track changed during scan, skipping apply');
+        return;
+      }
+      final volume = ReplayGainApplier.rmsToVolume(rmsDb, targetDb: _loudnessTargetDb);
+      await _player.setVolume(volume);
+      crashLogger.log('Loudness: "$filePath" rmsDb=${rmsDb.toStringAsFixed(1)} -> volume=${volume.toStringAsFixed(2)}');
+    } catch (e, st) {
+      crashLogger.error('Loudness normalization failed for "$filePath"', e, st);
+    }
   }
 
   @override

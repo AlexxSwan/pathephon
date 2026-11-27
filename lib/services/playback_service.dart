@@ -92,6 +92,10 @@ class JustAudioPlaybackService implements PlaybackService {
   DateTime? _playStartTime;
   int _allTimePlayMs = 0;
   int _allTimeTracks = 0;
+  // Phase 43: track previous playing state to detect false->true transitions.
+  // When playback starts/resumes, we call reclaimPriority() to steal
+  // MediaSession priority back from MAX (ru.oneme.app).
+  bool _wasPlaying = false;
 
   final _stateController = StreamController<PlaybackSnapshot>.broadcast();
   final _sessionIdController = StreamController<int>.broadcast();
@@ -142,6 +146,16 @@ class JustAudioPlaybackService implements PlaybackService {
       _emitState(st);
       _savePosition();
       _notifyNativePlaybackState(st.playing);
+      // Phase 43: re-claim MediaSession priority when playback starts/resumes.
+      // Covers: app start + play, pause -> resume, BT headphone play button.
+      // (Track changes are already handled in sequenceStateStream listener.)
+      if (st.playing && !_wasPlaying) {
+        try {
+          _nativeChannel.invokeMethod('reclaimPriority');
+          crashLogger.log('reclaimPriority invoked (playback started)');
+        } catch (_) {}
+      }
+      _wasPlaying = st.playing;
     });
 
     _player.sequenceStateStream.listen((seqState) {
